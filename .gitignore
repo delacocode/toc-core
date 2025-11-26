@@ -1,0 +1,11 @@
+node_modules/
+artifacts/
+cache/
+.idea/
+*.log
+.env
+.env.local
+coverage/
+coverage.json
+typechain/
+typechain-types/
