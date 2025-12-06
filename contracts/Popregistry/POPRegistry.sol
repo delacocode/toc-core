@@ -51,12 +51,27 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     mapping(uint256 => bytes) private _genericResults;
     uint256 private _nextPopId;
 
+    // Corrected results storage (for post-resolution disputes)
+    mapping(uint256 => bool) private _correctedBooleanResults;
+    mapping(uint256 => int256) private _correctedNumericResults;
+    mapping(uint256 => bytes) private _correctedGenericResults;
+    mapping(uint256 => bool) private _hasCorrectedResult;
+
     // Bond configuration
     BondRequirement[] private _acceptableResolutionBonds;
     BondRequirement[] private _acceptableDisputeBonds;
+    BondRequirement[] private _acceptableEscalationBonds;
 
     // Settings
     uint256 private _defaultDisputeWindow;
+
+    // TruthKeeper registry
+    EnumerableSet.AddressSet private _whitelistedTruthKeepers;
+    EnumerableSet.AddressSet private _whitelistedResolvers;
+    mapping(address => EnumerableSet.AddressSet) private _tkGuaranteedResolvers;
+
+    // Escalation info storage
+    mapping(uint256 => EscalationInfo) private _escalations;
 
     // ============ Errors ============
 
@@ -77,6 +92,23 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     error InvalidResolverType(ResolverType resolverType);
     error ResolverIsDeprecated(address resolver);
     error CannotRestoreActiveResolver(address resolver);
+    error NoCorrectedAnswerProvided(uint256 popId);
+    error DisputeAlreadyResolved(uint256 popId);
+    error NoDisputeExists(uint256 popId);
+    error CannotDisputeInCurrentState(POPState currentState);
+    error NotTruthKeeper(address caller, address expected);
+    error TruthKeeperNotWhitelisted(address tk);
+    error TruthKeeperAlreadyWhitelisted(address tk);
+    error ResolverNotWhitelistedForSystem(address resolver);
+    error TruthKeeperWindowNotPassed(uint256 deadline, uint256 current);
+    error EscalationWindowNotPassed(uint256 deadline, uint256 current);
+    error EscalationWindowPassed(uint256 deadline, uint256 current);
+    error NotInDisputedRound1State(POPState currentState);
+    error NotInDisputedRound2State(POPState currentState);
+    error TruthKeeperAlreadyDecided(uint256 popId);
+    error TruthKeeperNotYetDecided(uint256 popId);
+    error AlreadyEscalated(uint256 popId);
+    error InvalidTruthKeeper(address tk);
 
     // ============ Constructor ============
 
@@ -108,6 +140,14 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         POPState current = _pops[popId].state;
         if (current != expected) {
             revert InvalidState(current, expected);
+        }
+        _;
+    }
+
+    modifier onlyTruthKeeper(uint256 popId) {
+        POP storage pop = _pops[popId];
+        if (msg.sender != pop.truthKeeper) {
+            revert NotTruthKeeper(msg.sender, pop.truthKeeper);
         }
         _;
     }
@@ -288,31 +328,132 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         _defaultDisputeWindow = duration;
     }
 
+    /// @inheritdoc IPOPRegistry
+    function addWhitelistedTruthKeeper(address tk) external onlyOwner {
+        if (tk == address(0)) revert InvalidTruthKeeper(tk);
+        if (_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperAlreadyWhitelisted(tk);
+        _whitelistedTruthKeepers.add(tk);
+        emit TruthKeeperWhitelisted(tk);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function removeWhitelistedTruthKeeper(address tk) external onlyOwner {
+        if (!_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperNotWhitelisted(tk);
+        _whitelistedTruthKeepers.remove(tk);
+        emit TruthKeeperRemovedFromWhitelist(tk);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function addWhitelistedResolver(address resolver) external onlyOwner {
+        if (resolver == address(0)) revert ResolverNotRegistered(resolver);
+        _whitelistedResolvers.add(resolver);
+        emit ResolverAddedToWhitelist(resolver);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function removeWhitelistedResolver(address resolver) external onlyOwner {
+        _whitelistedResolvers.remove(resolver);
+        emit ResolverRemovedFromWhitelist(resolver);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function addAcceptableEscalationBond(address token, uint256 minAmount) external onlyOwner {
+        _acceptableEscalationBonds.push(BondRequirement({
+            token: token,
+            minAmount: minAmount
+        }));
+    }
+
+    // ============ TruthKeeper Functions ============
+
+    /// @inheritdoc IPOPRegistry
+    function addGuaranteedResolver(address resolver) external {
+        _tkGuaranteedResolvers[msg.sender].add(resolver);
+        emit TruthKeeperGuaranteeAdded(msg.sender, resolver);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function removeGuaranteedResolver(address resolver) external {
+        _tkGuaranteedResolvers[msg.sender].remove(resolver);
+        emit TruthKeeperGuaranteeRemoved(msg.sender, resolver);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function resolveTruthKeeperDispute(
+        uint256 popId,
+        DisputeResolution resolution,
+        bool correctedBooleanResult,
+        int256 correctedNumericResult,
+        bytes calldata correctedGenericResult
+    ) external nonReentrant validPopId(popId) onlyTruthKeeper(popId) {
+        POP storage pop = _pops[popId];
+
+        if (pop.state != POPState.DISPUTED_ROUND_1) {
+            revert NotInDisputedRound1State(pop.state);
+        }
+
+        DisputeInfo storage disputeInfo = _disputes[popId];
+
+        if (disputeInfo.tkDecidedAt != 0) {
+            revert TruthKeeperAlreadyDecided(popId);
+        }
+
+        // Record TK decision
+        disputeInfo.tkDecision = resolution;
+        disputeInfo.tkDecidedAt = block.timestamp;
+
+        // Set escalation deadline
+        pop.escalationDeadline = block.timestamp + pop.escalationWindow;
+
+        // Handle TOO_EARLY specially - immediately return to ACTIVE
+        if (resolution == DisputeResolution.TOO_EARLY) {
+            _handleTooEarlyResolution(popId, pop, disputeInfo);
+        }
+        // Other resolutions wait for escalation window
+
+        emit TruthKeeperDisputeResolved(popId, msg.sender, resolution);
+    }
+
     // ============ POP Lifecycle ============
 
     /// @inheritdoc IPOPRegistry
     function createPOPWithSystemResolver(
         uint256 resolverId,
         uint32 templateId,
-        bytes calldata payload
+        bytes calldata payload,
+        uint256 disputeWindow,
+        uint256 truthKeeperWindow,
+        uint256 escalationWindow,
+        uint256 postResolutionWindow,
+        address truthKeeper
     ) external returns (uint256 popId) {
-        return _createPOP(ResolverType.SYSTEM, resolverId, templateId, payload);
+        return _createPOP(ResolverType.SYSTEM, resolverId, templateId, payload, disputeWindow, truthKeeperWindow, escalationWindow, postResolutionWindow, truthKeeper);
     }
 
     /// @inheritdoc IPOPRegistry
     function createPOPWithPublicResolver(
         uint256 resolverId,
         uint32 templateId,
-        bytes calldata payload
+        bytes calldata payload,
+        uint256 disputeWindow,
+        uint256 truthKeeperWindow,
+        uint256 escalationWindow,
+        uint256 postResolutionWindow,
+        address truthKeeper
     ) external returns (uint256 popId) {
-        return _createPOP(ResolverType.PUBLIC, resolverId, templateId, payload);
+        return _createPOP(ResolverType.PUBLIC, resolverId, templateId, payload, disputeWindow, truthKeeperWindow, escalationWindow, postResolutionWindow, truthKeeper);
     }
 
     function _createPOP(
         ResolverType resolverType,
         uint256 resolverId,
         uint32 templateId,
-        bytes calldata payload
+        bytes calldata payload,
+        uint256 disputeWindow,
+        uint256 truthKeeperWindow,
+        uint256 escalationWindow,
+        uint256 postResolutionWindow,
+        address truthKeeper
     ) internal returns (uint256 popId) {
         address resolver;
         bool isActive;
@@ -350,22 +491,34 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         // Get the answer type for this template
         AnswerType answerType = IPopResolver(resolver).getTemplateAnswerType(templateId);
 
+        // Calculate accountability tier (snapshot at creation)
+        AccountabilityTier tier = _calculateAccountabilityTier(resolver, truthKeeper);
+
         // Generate POP ID
         popId = _nextPopId++;
 
         // Call resolver to create POP
         POPState initialState = IPopResolver(resolver).onPopCreated(popId, templateId, payload);
 
-        // Store POP
+        // Store POP with user-specified dispute windows
         _pops[popId] = POP({
             resolver: resolver,
             state: initialState,
             answerType: answerType,
             resolutionTime: 0,
-            disputeDeadline: 0
+            disputeWindow: disputeWindow,
+            truthKeeperWindow: truthKeeperWindow,
+            escalationWindow: escalationWindow,
+            postResolutionWindow: postResolutionWindow,
+            disputeDeadline: 0,
+            truthKeeperDeadline: 0,
+            escalationDeadline: 0,
+            postDisputeDeadline: 0,
+            truthKeeper: truthKeeper,
+            tierAtCreation: tier
         });
 
-        emit POPCreated(popId, resolverType, resolverId, resolver, templateId, answerType, initialState);
+        emit POPCreated(popId, resolverType, resolverId, resolver, templateId, answerType, initialState, truthKeeper, tier);
     }
 
     /// @inheritdoc IPOPRegistry
@@ -375,21 +528,41 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         uint256 bondAmount,
         bytes calldata payload
     ) external payable nonReentrant validPopId(popId) inState(popId, POPState.ACTIVE) {
-        // Validate bond
-        if (!_isAcceptableResolutionBond(bondToken, bondAmount)) {
-            revert InvalidBond(bondToken, bondAmount);
-        }
-
-        // Transfer bond in
-        _transferBondIn(bondToken, bondAmount);
-
         POP storage pop = _pops[popId];
 
-        // Call resolver to get typed outcome
-        (bool boolResult, int256 numResult, bytes memory genResult) =
-            IPopResolver(pop.resolver).resolvePop(popId, msg.sender, payload);
+        // Bond is required only if any dispute window > 0
+        bool requiresBond = pop.disputeWindow > 0 || pop.postResolutionWindow > 0;
+        if (requiresBond) {
+            if (!_isAcceptableResolutionBond(bondToken, bondAmount)) {
+                revert InvalidBond(bondToken, bondAmount);
+            }
+            _transferBondIn(bondToken, bondAmount);
+        }
 
-        // Store resolution info with typed outcome
+        // Call resolver to get typed outcome and store resolution
+        _storeResolutionInfo(popId, pop.resolver, bondToken, bondAmount, payload);
+
+        pop.resolutionTime = block.timestamp;
+
+        // If disputeWindow == 0, immediately transition to RESOLVED
+        if (pop.disputeWindow == 0) {
+            _handleImmediateResolution(popId, pop, requiresBond, bondToken, bondAmount);
+        } else {
+            _handleStandardResolution(popId, pop, bondToken, bondAmount);
+        }
+    }
+
+    /// @notice Internal helper to store resolution info
+    function _storeResolutionInfo(
+        uint256 popId,
+        address resolver,
+        address bondToken,
+        uint256 bondAmount,
+        bytes calldata payload
+    ) internal {
+        (bool boolResult, int256 numResult, bytes memory genResult) =
+            IPopResolver(resolver).resolvePop(popId, msg.sender, payload);
+
         _resolutions[popId] = ResolutionInfo({
             proposer: msg.sender,
             bondToken: bondToken,
@@ -398,11 +571,45 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             proposedNumericOutcome: numResult,
             proposedGenericOutcome: genResult
         });
+    }
 
-        // Update POP state
+    /// @notice Handle immediate resolution (disputeWindow == 0)
+    function _handleImmediateResolution(
+        uint256 popId,
+        POP storage pop,
+        bool requiresBond,
+        address bondToken,
+        uint256 bondAmount
+    ) internal {
+        ResolutionInfo storage resolution = _resolutions[popId];
+
+        pop.state = POPState.RESOLVED;
+        pop.disputeDeadline = 0;
+        pop.postDisputeDeadline = pop.postResolutionWindow > 0
+            ? block.timestamp + pop.postResolutionWindow
+            : 0;
+
+        // Store result immediately
+        _storeResult(popId, pop.answerType, resolution.proposedBooleanOutcome, resolution.proposedNumericOutcome, resolution.proposedGenericOutcome);
+
+        // Return bond if it was posted (for undisputable POPs with postResolutionWindow == 0)
+        if (requiresBond && pop.postResolutionWindow == 0) {
+            _transferBondOut(msg.sender, bondToken, bondAmount);
+            emit ResolutionBondReturned(popId, msg.sender, bondToken, bondAmount);
+        }
+
+        emit POPFinalized(popId, pop.answerType);
+    }
+
+    /// @notice Handle standard resolution (disputeWindow > 0)
+    function _handleStandardResolution(
+        uint256 popId,
+        POP storage pop,
+        address bondToken,
+        uint256 bondAmount
+    ) internal {
         pop.state = POPState.RESOLVING;
-        pop.resolutionTime = block.timestamp;
-        pop.disputeDeadline = block.timestamp + _getDisputeWindow(pop.resolver);
+        pop.disputeDeadline = block.timestamp + pop.disputeWindow;
 
         emit ResolutionBondDeposited(popId, msg.sender, bondToken, bondAmount);
         emit POPResolutionProposed(popId, msg.sender, pop.answerType, pop.disputeDeadline);
@@ -417,25 +624,31 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             revert DisputeWindowNotPassed(pop.disputeDeadline, block.timestamp);
         }
 
+        // Check not already disputed
+        if (_disputes[popId].disputer != address(0)) {
+            revert AlreadyDisputed(popId);
+        }
+
         // Get resolution info
         ResolutionInfo storage resolution = _resolutions[popId];
 
         // Finalize the POP
         pop.state = POPState.RESOLVED;
 
-        // Store the final result in the appropriate mapping
-        if (pop.answerType == AnswerType.BOOLEAN) {
-            _booleanResults[popId] = resolution.proposedBooleanOutcome;
-        } else if (pop.answerType == AnswerType.NUMERIC) {
-            _numericResults[popId] = resolution.proposedNumericOutcome;
-        } else if (pop.answerType == AnswerType.GENERIC) {
-            _genericResults[popId] = resolution.proposedGenericOutcome;
+        // Set post-resolution dispute deadline
+        pop.postDisputeDeadline = pop.postResolutionWindow > 0
+            ? block.timestamp + pop.postResolutionWindow
+            : 0;
+
+        // Store the final result
+        _storeResult(popId, pop.answerType, resolution.proposedBooleanOutcome, resolution.proposedNumericOutcome, resolution.proposedGenericOutcome);
+
+        // Return resolution bond to proposer (unless there's a post-resolution window)
+        if (pop.postResolutionWindow == 0) {
+            _transferBondOut(resolution.proposer, resolution.bondToken, resolution.bondAmount);
+            emit ResolutionBondReturned(popId, resolution.proposer, resolution.bondToken, resolution.bondAmount);
         }
 
-        // Return resolution bond to proposer
-        _transferBondOut(resolution.proposer, resolution.bondToken, resolution.bondAmount);
-
-        emit ResolutionBondReturned(popId, resolution.proposer, resolution.bondToken, resolution.bondAmount);
         emit POPFinalized(popId, pop.answerType);
     }
 
@@ -446,105 +659,333 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         uint256 popId,
         address bondToken,
         uint256 bondAmount,
-        string calldata reason
-    ) external payable nonReentrant validPopId(popId) inState(popId, POPState.RESOLVING) {
+        string calldata reason,
+        string calldata evidenceURI,
+        bool proposedBooleanResult,
+        int256 proposedNumericResult,
+        bytes calldata proposedGenericResult
+    ) external payable nonReentrant validPopId(popId) {
         POP storage pop = _pops[popId];
-
-        // Check we're still in dispute window
-        if (block.timestamp >= pop.disputeDeadline) {
-            revert DisputeWindowPassed(pop.disputeDeadline, block.timestamp);
-        }
 
         // Check not already disputed
         if (_disputes[popId].disputer != address(0)) {
             revert AlreadyDisputed(popId);
         }
 
-        // Validate bond
+        DisputePhase phase;
+
+        if (pop.state == POPState.RESOLVING) {
+            // Pre-resolution dispute
+            if (block.timestamp >= pop.disputeDeadline) {
+                revert DisputeWindowPassed(pop.disputeDeadline, block.timestamp);
+            }
+            phase = DisputePhase.PRE_RESOLUTION;
+            pop.state = POPState.DISPUTED_ROUND_1;
+            // Set TruthKeeper deadline
+            pop.truthKeeperDeadline = block.timestamp + pop.truthKeeperWindow;
+
+        } else if (pop.state == POPState.RESOLVED) {
+            // Post-resolution dispute
+            if (pop.postDisputeDeadline == 0) {
+                revert DisputeWindowPassed(0, block.timestamp);
+            }
+            if (block.timestamp >= pop.postDisputeDeadline) {
+                revert DisputeWindowPassed(pop.postDisputeDeadline, block.timestamp);
+            }
+            phase = DisputePhase.POST_RESOLUTION;
+            // State stays RESOLVED for post-resolution disputes
+
+        } else {
+            revert CannotDisputeInCurrentState(pop.state);
+        }
+
+        // Validate and transfer bond
         if (!_isAcceptableDisputeBond(bondToken, bondAmount)) {
             revert InvalidBond(bondToken, bondAmount);
         }
-
-        // Transfer bond in
         _transferBondIn(bondToken, bondAmount);
 
-        // Store dispute info
+        // Store dispute info with proposed answer
         _disputes[popId] = DisputeInfo({
+            phase: phase,
             disputer: msg.sender,
             bondToken: bondToken,
             bondAmount: bondAmount,
-            reason: reason
+            reason: reason,
+            evidenceURI: evidenceURI,
+            filedAt: block.timestamp,
+            resolvedAt: 0,
+            resultCorrected: false,
+            proposedBooleanResult: proposedBooleanResult,
+            proposedNumericResult: proposedNumericResult,
+            proposedGenericResult: proposedGenericResult,
+            tkDecision: DisputeResolution.UPHOLD_DISPUTE, // Default, will be set by TK
+            tkDecidedAt: 0
         });
 
-        // Update POP state
-        pop.state = POPState.DISPUTED;
-
         emit DisputeBondDeposited(popId, msg.sender, bondToken, bondAmount);
-        emit POPDisputed(popId, msg.sender, reason);
+
+        if (phase == DisputePhase.PRE_RESOLUTION) {
+            emit POPDisputed(popId, msg.sender, reason);
+        } else {
+            emit PostResolutionDisputeFiled(popId, msg.sender, reason);
+        }
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function challengeTruthKeeperDecision(
+        uint256 popId,
+        address bondToken,
+        uint256 bondAmount,
+        string calldata reason,
+        string calldata evidenceURI,
+        bool proposedBooleanResult,
+        int256 proposedNumericResult,
+        bytes calldata proposedGenericResult
+    ) external payable nonReentrant validPopId(popId) {
+        POP storage pop = _pops[popId];
+        DisputeInfo storage disputeInfo = _disputes[popId];
+
+        // Must be in DISPUTED_ROUND_1 with TK decision made
+        if (pop.state != POPState.DISPUTED_ROUND_1) {
+            revert NotInDisputedRound1State(pop.state);
+        }
+        if (disputeInfo.tkDecidedAt == 0) {
+            revert TruthKeeperNotYetDecided(popId);
+        }
+
+        // Check escalation window
+        if (block.timestamp >= pop.escalationDeadline) {
+            revert EscalationWindowPassed(pop.escalationDeadline, block.timestamp);
+        }
+
+        // Check not already escalated
+        if (_escalations[popId].challenger != address(0)) {
+            revert AlreadyEscalated(popId);
+        }
+
+        // Validate escalation bond (higher than dispute bond)
+        if (!_isAcceptableEscalationBond(bondToken, bondAmount)) {
+            revert InvalidBond(bondToken, bondAmount);
+        }
+        _transferBondIn(bondToken, bondAmount);
+
+        // Store escalation info
+        _escalations[popId] = EscalationInfo({
+            challenger: msg.sender,
+            bondToken: bondToken,
+            bondAmount: bondAmount,
+            reason: reason,
+            evidenceURI: evidenceURI,
+            filedAt: block.timestamp,
+            resolvedAt: 0,
+            proposedBooleanResult: proposedBooleanResult,
+            proposedNumericResult: proposedNumericResult,
+            proposedGenericResult: proposedGenericResult
+        });
+
+        // Move to Round 2
+        pop.state = POPState.DISPUTED_ROUND_2;
+
+        emit TruthKeeperDecisionChallenged(popId, msg.sender, reason);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function finalizeAfterTruthKeeper(uint256 popId) external nonReentrant validPopId(popId) {
+        POP storage pop = _pops[popId];
+        DisputeInfo storage disputeInfo = _disputes[popId];
+
+        if (pop.state != POPState.DISPUTED_ROUND_1) {
+            revert NotInDisputedRound1State(pop.state);
+        }
+
+        // TK must have decided
+        if (disputeInfo.tkDecidedAt == 0) {
+            revert TruthKeeperNotYetDecided(popId);
+        }
+
+        // Escalation window must have passed
+        if (block.timestamp < pop.escalationDeadline) {
+            revert EscalationWindowNotPassed(pop.escalationDeadline, block.timestamp);
+        }
+
+        // Must not have been escalated
+        if (_escalations[popId].challenger != address(0)) {
+            revert AlreadyEscalated(popId);
+        }
+
+        // Apply TK's decision
+        _applyTruthKeeperDecision(popId, pop, disputeInfo);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function escalateTruthKeeperTimeout(uint256 popId) external nonReentrant validPopId(popId) {
+        POP storage pop = _pops[popId];
+        DisputeInfo storage disputeInfo = _disputes[popId];
+
+        if (pop.state != POPState.DISPUTED_ROUND_1) {
+            revert NotInDisputedRound1State(pop.state);
+        }
+
+        // TK must NOT have decided
+        if (disputeInfo.tkDecidedAt != 0) {
+            revert TruthKeeperAlreadyDecided(popId);
+        }
+
+        // TK window must have passed
+        if (block.timestamp < pop.truthKeeperDeadline) {
+            revert TruthKeeperWindowNotPassed(pop.truthKeeperDeadline, block.timestamp);
+        }
+
+        // Auto-escalate to Round 2
+        pop.state = POPState.DISPUTED_ROUND_2;
+
+        emit TruthKeeperTimedOut(popId, pop.truthKeeper);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function resolveEscalation(
+        uint256 popId,
+        DisputeResolution resolution,
+        bool correctedBooleanResult,
+        int256 correctedNumericResult,
+        bytes calldata correctedGenericResult
+    ) external onlyOwner nonReentrant validPopId(popId) {
+        POP storage pop = _pops[popId];
+
+        if (pop.state != POPState.DISPUTED_ROUND_2) {
+            revert NotInDisputedRound2State(pop.state);
+        }
+
+        EscalationInfo storage escalationInfo = _escalations[popId];
+        DisputeInfo storage disputeInfo = _disputes[popId];
+        ResolutionInfo storage resolutionInfo = _resolutions[popId];
+
+        escalationInfo.resolvedAt = block.timestamp;
+        disputeInfo.resolvedAt = block.timestamp;
+
+        if (resolution == DisputeResolution.TOO_EARLY) {
+            _handleTooEarlyResolution(popId, pop, disputeInfo);
+        } else if (resolution == DisputeResolution.CANCEL_POP) {
+            // Return all bonds
+            _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+            _transferBondOut(escalationInfo.challenger, escalationInfo.bondToken, escalationInfo.bondAmount);
+            pop.state = POPState.CANCELLED;
+            emit POPCancelled(popId, "Escalation cancelled");
+        } else if (resolution == DisputeResolution.UPHOLD_DISPUTE) {
+            // Challenger wins - disputer was right all along
+            disputeInfo.resultCorrected = true;
+
+            // Set corrected result
+            _storeResult(popId, pop.answerType, correctedBooleanResult, correctedNumericResult, correctedGenericResult);
+
+            // Bond economics: challenger gets back + 50% of TK-side bond
+            // Original disputer also gets rewarded
+            _transferBondOut(escalationInfo.challenger, escalationInfo.bondToken, escalationInfo.bondAmount);
+            _slashBondWithReward(popId, disputeInfo.disputer, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+
+            pop.state = POPState.RESOLVED;
+            pop.resolutionTime = block.timestamp;
+            if (pop.postResolutionWindow > 0) {
+                pop.postDisputeDeadline = block.timestamp + pop.postResolutionWindow;
+            }
+        } else {
+            // REJECT_DISPUTE - TK was right
+            // Return proposer bond, slash challenger, reward TK-side winner
+            _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            _slashBondWithReward(popId, escalationInfo.challenger, disputeInfo.disputer, escalationInfo.bondToken, escalationInfo.bondAmount);
+            _slashBondWithReward(popId, disputeInfo.disputer, resolutionInfo.proposer, disputeInfo.bondToken, disputeInfo.bondAmount);
+
+            pop.state = POPState.RESOLVED;
+            pop.resolutionTime = block.timestamp;
+            if (pop.postResolutionWindow > 0) {
+                pop.postDisputeDeadline = block.timestamp + pop.postResolutionWindow;
+            }
+        }
+
+        emit EscalationResolved(popId, resolution, msg.sender);
     }
 
     /// @inheritdoc IPOPRegistry
     function resolveDispute(
         uint256 popId,
-        DisputeResolution resolution
-    ) external onlyOwner nonReentrant validPopId(popId) inState(popId, POPState.DISPUTED) {
-        POP storage pop = _pops[popId];
+        DisputeResolution resolution,
+        bool correctedBooleanResult,
+        int256 correctedNumericResult,
+        bytes calldata correctedGenericResult
+    ) external onlyOwner nonReentrant validPopId(popId) {
         DisputeInfo storage disputeInfo = _disputes[popId];
+
+        // Validate dispute exists
+        if (disputeInfo.disputer == address(0)) {
+            revert NoDisputeExists(popId);
+        }
+        // Validate dispute not already resolved
+        if (disputeInfo.resolvedAt != 0) {
+            revert DisputeAlreadyResolved(popId);
+        }
+
+        POP storage pop = _pops[popId];
         ResolutionInfo storage resolutionInfo = _resolutions[popId];
 
+        // For pre-resolution disputes, use resolveEscalation (Round 2) instead
+        // This function now only handles post-resolution disputes
+        if (disputeInfo.phase == DisputePhase.PRE_RESOLUTION) {
+            revert NotInDisputedRound2State(pop.state);
+        }
+
+        disputeInfo.resolvedAt = block.timestamp;
+
+        // Post-resolution dispute handling only
         if (resolution == DisputeResolution.UPHOLD_DISPUTE) {
-            // Disputer was right - flip outcome (for boolean) or invalidate
-            pop.state = POPState.RESOLVED;
+            disputeInfo.resultCorrected = true;
 
-            // For boolean, flip the outcome
-            if (pop.answerType == AnswerType.BOOLEAN) {
-                _booleanResults[popId] = !resolutionInfo.proposedBooleanOutcome;
-            }
-            // For numeric/generic, admin must provide correct answer via separate mechanism
-            // For now, we don't set a result for disputed numeric/generic POPs
+            // Post-resolution: store corrected result in separate mappings
+            _storePostResolutionCorrectedResult(popId, pop.answerType, correctedBooleanResult, correctedNumericResult, correctedGenericResult, disputeInfo);
 
-            // Slash resolution bond (stays in contract for admin to withdraw later)
-            emit BondSlashed(popId, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            // Slash resolution bond with 50/50 split
+            _slashBondWithReward(popId, disputeInfo.disputer, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
 
             // Return dispute bond to disputer
             _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
             emit DisputeBondReturned(popId, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
 
-            emit POPResolved(popId, pop.answerType);
+            emit PostResolutionDisputeResolved(popId, true);
 
         } else if (resolution == DisputeResolution.REJECT_DISPUTE) {
-            // Original outcome stands - slash dispute bond, return resolution bond
-            pop.state = POPState.RESOLVED;
-            if (pop.answerType == AnswerType.BOOLEAN) {
-                _booleanResults[popId] = resolutionInfo.proposedBooleanOutcome;
-            } else if (pop.answerType == AnswerType.NUMERIC) {
-                _numericResults[popId] = resolutionInfo.proposedNumericOutcome;
-            } else if (pop.answerType == AnswerType.GENERIC) {
-                _genericResults[popId] = resolutionInfo.proposedGenericOutcome;
-            }
+            disputeInfo.resultCorrected = false;
 
-            // Slash dispute bond (stays in contract for admin to withdraw later)
-            emit BondSlashed(popId, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+            // Post-resolution: original result stands, nothing changes
+            // Slash dispute bond with 50/50 split
+            _slashBondWithReward(popId, resolutionInfo.proposer, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
 
             // Return resolution bond to proposer
             _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
             emit ResolutionBondReturned(popId, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
 
-            emit POPResolved(popId, pop.answerType);
+            emit PostResolutionDisputeResolved(popId, false);
 
-        } else {
-            // CANCEL_POP - entire POP invalid, return both bonds
+        } else if (resolution == DisputeResolution.CANCEL_POP) {
+            // Cancel - set state and return both bonds
             pop.state = POPState.CANCELLED;
 
-            // Return resolution bond
             _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
             emit ResolutionBondReturned(popId, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
 
-            // Return dispute bond
             _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
             emit DisputeBondReturned(popId, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
 
-            emit POPCancelled(popId, "Admin cancelled during dispute resolution");
+            emit POPCancelled(popId, "Admin cancelled during post-resolution dispute");
+
+        } else if (resolution == DisputeResolution.TOO_EARLY) {
+            // TOO_EARLY doesn't make sense for post-resolution, treat as cancel
+            pop.state = POPState.CANCELLED;
+
+            _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+            emit POPCancelled(popId, "Invalid resolution for post-resolution dispute");
         }
 
         emit DisputeResolved(popId, resolution, msg.sender);
@@ -577,21 +1018,16 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         ResolverType resolverType = _resolverTypes[pop.resolver];
 
         uint256 resolverId;
-        uint256 disputeWindow;
         bool resolverIsActive;
 
         // Handle deprecated resolvers - check which set they belong to
         if (resolverType == ResolverType.SYSTEM ||
             (resolverType == ResolverType.DEPRECATED && _systemResolvers.contains(pop.resolver))) {
             resolverId = _systemResolverToId[pop.resolver];
-            SystemResolverConfig storage config = _systemResolverConfigs[pop.resolver];
-            disputeWindow = config.disputeWindow > 0 ? config.disputeWindow : _defaultDisputeWindow;
-            resolverIsActive = config.isActive;
+            resolverIsActive = _systemResolverConfigs[pop.resolver].isActive;
         } else {
             resolverId = _publicResolverToId[pop.resolver];
-            PublicResolverConfig storage config = _publicResolverConfigs[pop.resolver];
-            disputeWindow = config.disputeWindow > 0 ? config.disputeWindow : _defaultDisputeWindow;
-            resolverIsActive = config.isActive;
+            resolverIsActive = _publicResolverConfigs[pop.resolver].isActive;
         }
 
         info = POPInfo({
@@ -599,14 +1035,26 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             state: pop.state,
             answerType: pop.answerType,
             resolutionTime: pop.resolutionTime,
+            disputeWindow: pop.disputeWindow,
+            truthKeeperWindow: pop.truthKeeperWindow,
+            escalationWindow: pop.escalationWindow,
+            postResolutionWindow: pop.postResolutionWindow,
             disputeDeadline: pop.disputeDeadline,
+            truthKeeperDeadline: pop.truthKeeperDeadline,
+            escalationDeadline: pop.escalationDeadline,
+            postDisputeDeadline: pop.postDisputeDeadline,
+            truthKeeper: pop.truthKeeper,
+            tierAtCreation: pop.tierAtCreation,
             isResolved: pop.state == POPState.RESOLVED,
-            booleanResult: _booleanResults[popId],
-            numericResult: _numericResults[popId],
-            genericResult: _genericResults[popId],
+            booleanResult: _hasCorrectedResult[popId] ? _correctedBooleanResults[popId] : _booleanResults[popId],
+            numericResult: _hasCorrectedResult[popId] ? _correctedNumericResults[popId] : _numericResults[popId],
+            genericResult: _hasCorrectedResult[popId] ? _correctedGenericResults[popId] : _genericResults[popId],
+            hasCorrectedResult: _hasCorrectedResult[popId],
+            correctedBooleanResult: _correctedBooleanResults[popId],
+            correctedNumericResult: _correctedNumericResults[popId],
+            correctedGenericResult: _correctedGenericResults[popId],
             resolverType: resolverType,
             resolverId: resolverId,
-            disputeWindow: disputeWindow,
             resolverIsActive: resolverIsActive
         });
     }
@@ -684,16 +1132,25 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
 
     /// @inheritdoc IPOPRegistry
     function getBooleanResult(uint256 popId) external view validPopId(popId) returns (bool result) {
+        if (_hasCorrectedResult[popId]) {
+            return _correctedBooleanResults[popId];
+        }
         return _booleanResults[popId];
     }
 
     /// @inheritdoc IPOPRegistry
     function getNumericResult(uint256 popId) external view validPopId(popId) returns (int256 result) {
+        if (_hasCorrectedResult[popId]) {
+            return _correctedNumericResults[popId];
+        }
         return _numericResults[popId];
     }
 
     /// @inheritdoc IPOPRegistry
     function getGenericResult(uint256 popId) external view validPopId(popId) returns (bytes memory result) {
+        if (_hasCorrectedResult[popId]) {
+            return _correctedGenericResults[popId];
+        }
         return _genericResults[popId];
     }
 
@@ -762,6 +1219,94 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         }
     }
 
+    // ============ Flexible Dispute Window View Functions ============
+
+    /// @inheritdoc IPOPRegistry
+    function isFullyFinalized(uint256 popId) external view validPopId(popId) returns (bool) {
+        POP storage pop = _pops[popId];
+
+        if (pop.state != POPState.RESOLVED) {
+            return false;
+        }
+
+        // Check if post-resolution dispute window is still open
+        if (pop.postDisputeDeadline > 0 && block.timestamp < pop.postDisputeDeadline) {
+            // Window still open, check if already disputed
+            if (_disputes[popId].disputer == address(0)) {
+                return false; // Can still be disputed
+            }
+            // Disputed but not yet resolved
+            if (_disputes[popId].resolvedAt == 0) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function isContested(uint256 popId) external view validPopId(popId) returns (bool) {
+        DisputeInfo storage disputeInfo = _disputes[popId];
+        return disputeInfo.phase == DisputePhase.POST_RESOLUTION && disputeInfo.disputer != address(0);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function hasCorrectedResult(uint256 popId) external view validPopId(popId) returns (bool) {
+        return _hasCorrectedResult[popId];
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function getCorrectedBooleanResult(uint256 popId) external view validPopId(popId) returns (bool result) {
+        return _correctedBooleanResults[popId];
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function getCorrectedNumericResult(uint256 popId) external view validPopId(popId) returns (int256 result) {
+        return _correctedNumericResults[popId];
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function getCorrectedGenericResult(uint256 popId) external view validPopId(popId) returns (bytes memory result) {
+        return _correctedGenericResults[popId];
+    }
+
+    // ============ TruthKeeper View Functions ============
+
+    /// @inheritdoc IPOPRegistry
+    function isWhitelistedTruthKeeper(address tk) external view returns (bool) {
+        return _whitelistedTruthKeepers.contains(tk);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function isWhitelistedResolver(address resolver) external view returns (bool) {
+        return _whitelistedResolvers.contains(resolver);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function getTruthKeeperGuaranteedResolvers(address tk) external view returns (address[] memory) {
+        return _tkGuaranteedResolvers[tk].values();
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function isTruthKeeperGuaranteedResolver(address tk, address resolver) external view returns (bool) {
+        return _tkGuaranteedResolvers[tk].contains(resolver);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function getEscalationInfo(uint256 popId) external view validPopId(popId) returns (EscalationInfo memory) {
+        return _escalations[popId];
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function calculateAccountabilityTier(address resolver, address tk) external view returns (AccountabilityTier) {
+        return _calculateAccountabilityTier(resolver, tk);
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function isAcceptableEscalationBond(address token, uint256 amount) external view returns (bool) {
+        return _isAcceptableEscalationBond(token, amount);
+    }
+
     // ============ Internal Functions ============
 
     /// @notice Check if a bond is acceptable for resolution
@@ -823,6 +1368,126 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         }
     }
 
+    /// @notice Slash bond with 50% to winner, 50% to contract
+    function _slashBondWithReward(
+        uint256 popId,
+        address winner,
+        address loser,
+        address token,
+        uint256 amount
+    ) internal {
+        uint256 winnerShare = amount / 2;
+        uint256 contractShare = amount - winnerShare; // Handles odd amounts
+
+        // Transfer winner's share
+        _transferBondOut(winner, token, winnerShare);
+
+        // Contract keeps the rest
+        emit BondSlashed(popId, loser, token, contractShare);
+    }
+
+    /// @notice Check if bond is acceptable for escalation
+    function _isAcceptableEscalationBond(address token, uint256 amount) internal view returns (bool) {
+        for (uint256 i = 0; i < _acceptableEscalationBonds.length; i++) {
+            if (_acceptableEscalationBonds[i].token == token &&
+                amount >= _acceptableEscalationBonds[i].minAmount) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// @notice Calculate accountability tier for resolver + TK combination
+    function _calculateAccountabilityTier(address resolver, address tk) internal view returns (AccountabilityTier) {
+        if (_whitelistedResolvers.contains(resolver) && _whitelistedTruthKeepers.contains(tk)) {
+            return AccountabilityTier.SYSTEM;
+        }
+        if (_tkGuaranteedResolvers[tk].contains(resolver)) {
+            return AccountabilityTier.TK_GUARANTEED;
+        }
+        return AccountabilityTier.PERMISSIONLESS;
+    }
+
+    /// @notice Handle TOO_EARLY resolution - return to ACTIVE
+    function _handleTooEarlyResolution(
+        uint256 popId,
+        POP storage pop,
+        DisputeInfo storage disputeInfo
+    ) internal {
+        ResolutionInfo storage resolutionInfo = _resolutions[popId];
+
+        // Slash proposer bond: 50% to disputer, 50% to contract
+        _slashBondWithReward(popId, disputeInfo.disputer, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+
+        // Return disputer bond
+        _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+
+        // Clear resolution info
+        delete _resolutions[popId];
+
+        // Reset dispute info
+        disputeInfo.resolvedAt = block.timestamp;
+
+        // Return to ACTIVE state
+        pop.state = POPState.ACTIVE;
+        pop.disputeDeadline = 0;
+        pop.truthKeeperDeadline = 0;
+        pop.escalationDeadline = 0;
+    }
+
+    /// @notice Apply TruthKeeper's decision after escalation window passes
+    function _applyTruthKeeperDecision(
+        uint256 popId,
+        POP storage pop,
+        DisputeInfo storage disputeInfo
+    ) internal {
+        ResolutionInfo storage resolutionInfo = _resolutions[popId];
+        DisputeResolution decision = disputeInfo.tkDecision;
+
+        disputeInfo.resolvedAt = block.timestamp;
+
+        if (decision == DisputeResolution.TOO_EARLY) {
+            // Already handled in resolveTruthKeeperDispute
+            return;
+        } else if (decision == DisputeResolution.CANCEL_POP) {
+            // Return all bonds
+            _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+            pop.state = POPState.CANCELLED;
+            emit POPCancelled(popId, "Cancelled by TruthKeeper");
+        } else if (decision == DisputeResolution.UPHOLD_DISPUTE) {
+            // Disputer wins
+            disputeInfo.resultCorrected = true;
+
+            // Set the disputer's proposed result
+            _storeResult(popId, pop.answerType, disputeInfo.proposedBooleanResult, disputeInfo.proposedNumericResult, disputeInfo.proposedGenericResult);
+
+            // Bond economics: disputer gets back + 50% of proposer bond
+            _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+            _slashBondWithReward(popId, disputeInfo.disputer, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+
+            pop.state = POPState.RESOLVED;
+            pop.resolutionTime = block.timestamp;
+            if (pop.postResolutionWindow > 0) {
+                pop.postDisputeDeadline = block.timestamp + pop.postResolutionWindow;
+            }
+
+            emit DisputeResolved(popId, decision, pop.truthKeeper);
+        } else {
+            // REJECT_DISPUTE - proposer was right
+            _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            _slashBondWithReward(popId, resolutionInfo.proposer, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+
+            pop.state = POPState.RESOLVED;
+            pop.resolutionTime = block.timestamp;
+            if (pop.postResolutionWindow > 0) {
+                pop.postDisputeDeadline = block.timestamp + pop.postResolutionWindow;
+            }
+
+            emit DisputeResolved(popId, decision, pop.truthKeeper);
+        }
+    }
+
     /// @notice Get the dispute window for a resolver
     function _getDisputeWindow(address resolver) internal view returns (uint256) {
         ResolverType resolverType = _resolverTypes[resolver];
@@ -836,5 +1501,116 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         }
 
         return window > 0 ? window : _defaultDisputeWindow;
+    }
+
+    /// @notice Store result in the appropriate mapping
+    function _storeResult(
+        uint256 popId,
+        AnswerType answerType,
+        bool boolResult,
+        int256 numResult,
+        bytes memory genResult
+    ) internal {
+        if (answerType == AnswerType.BOOLEAN) {
+            _booleanResults[popId] = boolResult;
+        } else if (answerType == AnswerType.NUMERIC) {
+            _numericResults[popId] = numResult;
+        } else if (answerType == AnswerType.GENERIC) {
+            _genericResults[popId] = genResult;
+        }
+    }
+
+    /// @notice Store corrected result for pre-resolution dispute upheld
+    /// @dev Priority: admin's answer > disputer's proposed > flip (for boolean)
+    function _storeCorrectedResult(
+        uint256 popId,
+        AnswerType answerType,
+        bool correctedBooleanResult,
+        int256 correctedNumericResult,
+        bytes calldata correctedGenericResult,
+        DisputeInfo storage disputeInfo,
+        ResolutionInfo storage resolutionInfo
+    ) internal {
+        if (answerType == AnswerType.BOOLEAN) {
+            // For boolean: admin's if different from original, else disputer's, else flip
+            bool result;
+            if (correctedBooleanResult != resolutionInfo.proposedBooleanOutcome) {
+                result = correctedBooleanResult;
+            } else if (disputeInfo.proposedBooleanResult != resolutionInfo.proposedBooleanOutcome) {
+                result = disputeInfo.proposedBooleanResult;
+            } else {
+                result = !resolutionInfo.proposedBooleanOutcome;
+            }
+            _booleanResults[popId] = result;
+        } else if (answerType == AnswerType.NUMERIC) {
+            // Use admin's if provided (non-zero or different from proposed), else disputer's
+            int256 result;
+            if (correctedNumericResult != 0 || correctedNumericResult != resolutionInfo.proposedNumericOutcome) {
+                result = correctedNumericResult;
+            } else if (disputeInfo.proposedNumericResult != 0) {
+                result = disputeInfo.proposedNumericResult;
+            } else {
+                revert NoCorrectedAnswerProvided(popId);
+            }
+            _numericResults[popId] = result;
+        } else if (answerType == AnswerType.GENERIC) {
+            bytes memory result;
+            if (correctedGenericResult.length > 0) {
+                result = correctedGenericResult;
+            } else if (disputeInfo.proposedGenericResult.length > 0) {
+                result = disputeInfo.proposedGenericResult;
+            } else {
+                revert NoCorrectedAnswerProvided(popId);
+            }
+            _genericResults[popId] = result;
+        }
+    }
+
+    /// @notice Store corrected result for post-resolution dispute upheld
+    function _storePostResolutionCorrectedResult(
+        uint256 popId,
+        AnswerType answerType,
+        bool correctedBooleanResult,
+        int256 correctedNumericResult,
+        bytes calldata correctedGenericResult,
+        DisputeInfo storage disputeInfo
+    ) internal {
+        if (answerType == AnswerType.BOOLEAN) {
+            // For boolean: admin's if different from original, else disputer's, else flip
+            bool originalResult = _booleanResults[popId];
+            bool result;
+            if (correctedBooleanResult != originalResult) {
+                result = correctedBooleanResult;
+            } else if (disputeInfo.proposedBooleanResult != originalResult) {
+                result = disputeInfo.proposedBooleanResult;
+            } else {
+                result = !originalResult;
+            }
+            _correctedBooleanResults[popId] = result;
+            _hasCorrectedResult[popId] = true;
+        } else if (answerType == AnswerType.NUMERIC) {
+            int256 originalResult = _numericResults[popId];
+            int256 result;
+            if (correctedNumericResult != originalResult) {
+                result = correctedNumericResult;
+            } else if (disputeInfo.proposedNumericResult != originalResult) {
+                result = disputeInfo.proposedNumericResult;
+            } else {
+                revert NoCorrectedAnswerProvided(popId);
+            }
+            _correctedNumericResults[popId] = result;
+            _hasCorrectedResult[popId] = true;
+        } else if (answerType == AnswerType.GENERIC) {
+            bytes memory result;
+            if (correctedGenericResult.length > 0) {
+                result = correctedGenericResult;
+            } else if (disputeInfo.proposedGenericResult.length > 0) {
+                result = disputeInfo.proposedGenericResult;
+            } else {
+                revert NoCorrectedAnswerProvided(popId);
+            }
+            _correctedGenericResults[popId] = result;
+            _hasCorrectedResult[popId] = true;
+        }
     }
 }
