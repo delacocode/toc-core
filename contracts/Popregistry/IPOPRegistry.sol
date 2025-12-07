@@ -10,30 +10,24 @@ interface IPOPRegistry {
     // ============ Events ============
 
     // Resolver management
-    event ResolverRegistered(address indexed resolver, ResolverType indexed resolverType, uint256 resolverId);
-    event ResolverDeprecated(address indexed resolver, ResolverType indexed resolverType);
-    event ResolverRestored(address indexed resolver, ResolverType indexed fromType, ResolverType newType);
-    event SystemResolverConfigUpdated(address indexed resolver, SystemResolverConfig config);
-    event PublicResolverConfigUpdated(address indexed resolver, PublicResolverConfig config);
+    event ResolverRegistered(address indexed resolver, ResolverTrust trust, address indexed registeredBy);
+    event ResolverTrustChanged(address indexed resolver, ResolverTrust oldTrust, ResolverTrust newTrust);
 
     // TruthKeeper registry
     event TruthKeeperWhitelisted(address indexed tk);
     event TruthKeeperRemovedFromWhitelist(address indexed tk);
-    event ResolverAddedToWhitelist(address indexed resolver);
-    event ResolverRemovedFromWhitelist(address indexed resolver);
     event TruthKeeperGuaranteeAdded(address indexed tk, address indexed resolver);
     event TruthKeeperGuaranteeRemoved(address indexed tk, address indexed resolver);
 
     // POP lifecycle
     event POPCreated(
         uint256 indexed popId,
-        ResolverType indexed resolverType,
-        uint256 indexed resolverId,
-        address resolver,
+        address indexed resolver,
+        ResolverTrust trust,
         uint32 templateId,
         AnswerType answerType,
         POPState initialState,
-        address truthKeeper,
+        address indexed truthKeeper,
         AccountabilityTier tier
     );
     event POPApproved(uint256 indexed popId);
@@ -99,32 +93,18 @@ interface IPOPRegistry {
     event DisputeBondReturned(uint256 indexed popId, address indexed to, address token, uint256 amount);
     event BondSlashed(uint256 indexed popId, address indexed from, address token, uint256 amount);
 
-    // ============ Admin Functions ============
+    // ============ Resolver Registration ============
 
-    /// @notice Register a new resolver
-    /// @param resolverType Type of resolver (SYSTEM or PUBLIC)
+    /// @notice Register a resolver (permissionless, must be contract)
     /// @param resolver Address of the resolver contract
-    function registerResolver(ResolverType resolverType, address resolver) external;
+    function registerResolver(address resolver) external;
 
-    /// @notice Deprecate a resolver (cannot create new POPs, existing ones still work)
-    /// @param resolverType Type of resolver being deprecated
-    /// @param resolver Address of the resolver to deprecate
-    function deprecateResolver(ResolverType resolverType, address resolver) external;
-
-    /// @notice Restore a deprecated resolver
-    /// @param resolver Address of the resolver to restore
-    /// @param newType Type to restore as (can change from original)
-    function restoreResolver(address resolver, ResolverType newType) external;
-
-    /// @notice Update system resolver configuration
+    /// @notice Set resolver trust level (admin only)
     /// @param resolver Address of the resolver
-    /// @param config New configuration
-    function updateSystemResolverConfig(address resolver, SystemResolverConfig calldata config) external;
+    /// @param trust New trust level
+    function setResolverTrust(address resolver, ResolverTrust trust) external;
 
-    /// @notice Update public resolver configuration
-    /// @param resolver Address of the resolver
-    /// @param config New configuration
-    function updatePublicResolverConfig(address resolver, PublicResolverConfig calldata config) external;
+    // ============ Admin Functions ============
 
     /// @notice Add an acceptable bond token/amount for resolutions
     /// @param token Token address (address(0) for native)
@@ -147,14 +127,6 @@ interface IPOPRegistry {
     /// @notice Remove a TruthKeeper from the system whitelist
     /// @param tk Address of the TruthKeeper
     function removeWhitelistedTruthKeeper(address tk) external;
-
-    /// @notice Add a resolver to the system whitelist (for SYSTEM tier)
-    /// @param resolver Address of the resolver
-    function addWhitelistedResolver(address resolver) external;
-
-    /// @notice Remove a resolver from the system whitelist
-    /// @param resolver Address of the resolver
-    function removeWhitelistedResolver(address resolver) external;
 
     /// @notice Add an acceptable bond token/amount for escalations (Round 2)
     /// @param token Token address (address(0) for native)
@@ -187,8 +159,8 @@ interface IPOPRegistry {
 
     // ============ POP Lifecycle ============
 
-    /// @notice Create a new POP using a system resolver
-    /// @param resolverId ID of the system resolver to use
+    /// @notice Create a new POP
+    /// @param resolver Address of the resolver contract
     /// @param templateId Template ID within the resolver
     /// @param payload Creation parameters encoded for the template
     /// @param disputeWindow Pre-resolution dispute window duration in seconds (0 for immediate resolution)
@@ -197,29 +169,8 @@ interface IPOPRegistry {
     /// @param postResolutionWindow Post-resolution dispute window duration in seconds (0 for no post-resolution disputes)
     /// @param truthKeeper Address of the TruthKeeper for this POP
     /// @return popId The unique identifier for the new POP
-    function createPOPWithSystemResolver(
-        uint256 resolverId,
-        uint32 templateId,
-        bytes calldata payload,
-        uint256 disputeWindow,
-        uint256 truthKeeperWindow,
-        uint256 escalationWindow,
-        uint256 postResolutionWindow,
-        address truthKeeper
-    ) external returns (uint256 popId);
-
-    /// @notice Create a new POP using a public resolver
-    /// @param resolverId ID of the public resolver to use
-    /// @param templateId Template ID within the resolver
-    /// @param payload Creation parameters encoded for the template
-    /// @param disputeWindow Pre-resolution dispute window duration in seconds (0 for immediate resolution)
-    /// @param truthKeeperWindow Time for TruthKeeper to decide Round 1 disputes
-    /// @param escalationWindow Time to challenge TruthKeeper decision
-    /// @param postResolutionWindow Post-resolution dispute window duration in seconds (0 for no post-resolution disputes)
-    /// @param truthKeeper Address of the TruthKeeper for this POP
-    /// @return popId The unique identifier for the new POP
-    function createPOPWithPublicResolver(
-        uint256 resolverId,
+    function createPOP(
+        address resolver,
         uint32 templateId,
         bytes calldata payload,
         uint256 disputeWindow,
@@ -363,26 +314,28 @@ interface IPOPRegistry {
         view
         returns (string memory question);
 
-    /// @notice Check if a resolver is approved
-    /// @param resolverType Type of resolver to check
+    /// @notice Get resolver trust level
     /// @param resolver Address to check
-    /// @return True if approved and active
-    function isApprovedResolver(ResolverType resolverType, address resolver) external view returns (bool);
+    /// @return trust The resolver trust level (NONE if not registered)
+    function getResolverTrust(address resolver) external view returns (ResolverTrust trust);
 
-    /// @notice Get resolver type for an address
+    /// @notice Check if resolver is registered (trust > NONE)
     /// @param resolver Address to check
-    /// @return The resolver type (NONE if not registered)
-    function getResolverType(address resolver) external view returns (ResolverType);
+    /// @return True if registered
+    function isRegisteredResolver(address resolver) external view returns (bool);
 
-    /// @notice Get system resolver configuration
+    /// @notice Get resolver configuration
     /// @param resolver Address of resolver
     /// @return config The resolver configuration
-    function getSystemResolverConfig(address resolver) external view returns (SystemResolverConfig memory config);
+    function getResolverConfig(address resolver) external view returns (ResolverConfig memory config);
 
-    /// @notice Get public resolver configuration
-    /// @param resolver Address of resolver
-    /// @return config The resolver configuration
-    function getPublicResolverConfig(address resolver) external view returns (PublicResolverConfig memory config);
+    /// @notice Get all registered resolvers
+    /// @return Array of resolver addresses
+    function getRegisteredResolvers() external view returns (address[] memory);
+
+    /// @notice Get count of registered resolvers
+    /// @return count Number of resolvers
+    function getResolverCount() external view returns (uint256 count);
 
     /// @notice Get dispute info for a POP
     /// @param popId The POP identifier
@@ -434,23 +387,6 @@ interface IPOPRegistry {
     /// @return Duration in seconds
     function defaultDisputeWindow() external view returns (uint256);
 
-    /// @notice Get resolver address by type and ID
-    /// @param resolverType The resolver type
-    /// @param resolverId The resolver ID
-    /// @return resolver The resolver address
-    function getResolverAddress(ResolverType resolverType, uint256 resolverId) external view returns (address resolver);
-
-    /// @notice Get resolver ID by type and address
-    /// @param resolverType The resolver type
-    /// @param resolver The resolver address
-    /// @return resolverId The resolver ID (reverts if not registered)
-    function getResolverId(ResolverType resolverType, address resolver) external view returns (uint256 resolverId);
-
-    /// @notice Get total number of registered resolvers of a type
-    /// @param resolverType The resolver type
-    /// @return count Number of resolvers
-    function getResolverCount(ResolverType resolverType) external view returns (uint256 count);
-
     // ============ Flexible Dispute Window View Functions ============
 
     /// @notice Check if a POP is fully finalized (resolved and all dispute windows closed)
@@ -490,11 +426,6 @@ interface IPOPRegistry {
     /// @return True if whitelisted
     function isWhitelistedTruthKeeper(address tk) external view returns (bool);
 
-    /// @notice Check if a resolver is whitelisted for SYSTEM tier
-    /// @param resolver Address to check
-    /// @return True if whitelisted
-    function isWhitelistedResolver(address resolver) external view returns (bool);
-
     /// @notice Get list of resolvers a TruthKeeper guarantees
     /// @param tk TruthKeeper address
     /// @return Array of resolver addresses
@@ -522,4 +453,16 @@ interface IPOPRegistry {
     /// @param amount Amount
     /// @return True if acceptable
     function isAcceptableEscalationBond(address token, uint256 amount) external view returns (bool);
+
+    // ============ Consumer Result Functions ============
+
+    /// @notice Get result with full resolution context
+    /// @param popId The POP identifier
+    /// @return result The extensive result with context
+    function getExtensiveResult(uint256 popId) external view returns (ExtensiveResult memory result);
+
+    /// @notice Get result only if fully finalized (reverts otherwise)
+    /// @param popId The POP identifier
+    /// @return result The extensive result with context
+    function getExtensiveResultStrict(uint256 popId) external view returns (ExtensiveResult memory result);
 }

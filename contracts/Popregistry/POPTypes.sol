@@ -33,12 +33,12 @@ enum DisputeResolution {
     TOO_EARLY        // Event hasn't occurred yet, return to ACTIVE
 }
 
-/// @notice Types of resolvers in the system
-enum ResolverType {
-    NONE,       // Default/unregistered
-    SYSTEM,     // Official ecosystem resolvers
-    PUBLIC,     // Third-party resolvers
-    DEPRECATED  // Deactivated resolvers (soft deprecation)
+/// @notice Trust level for resolvers
+enum ResolverTrust {
+    NONE,           // Not registered (default)
+    PERMISSIONLESS, // Registered, no system guarantees
+    VERIFIED,       // Admin reviewed, some assurance
+    SYSTEM          // Full system backing
 }
 
 /// @notice Accountability tier for a POP (snapshot at creation)
@@ -139,18 +139,9 @@ struct ResolutionInfo {
     bytes proposedGenericOutcome;
 }
 
-/// @notice Configuration for system resolvers
-struct SystemResolverConfig {
-    uint256 disputeWindow;      // Seconds for dispute period (0 = use default)
-    bool isActive;              // Whether resolver is active
-    uint256 registeredAt;       // Timestamp when registered
-    address registeredBy;       // Who registered it
-}
-
-/// @notice Configuration for public resolvers
-struct PublicResolverConfig {
-    uint256 disputeWindow;      // Seconds for dispute period (0 = use default)
-    bool isActive;              // Whether resolver is active
+/// @notice Configuration for a resolver
+struct ResolverConfig {
+    ResolverTrust trust;        // Trust level
     uint256 registeredAt;       // Timestamp when registered
     address registeredBy;       // Who registered it
 }
@@ -192,13 +183,28 @@ struct POPInfo {
     bytes correctedGenericResult;
 
     // Resolver context
-    ResolverType resolverType;
-    uint256 resolverId;
-    bool resolverIsActive;
+    ResolverTrust resolverTrust;
 }
 
 /// @notice Bond requirement for resolution or dispute
 struct BondRequirement {
     address token;              // address(0) = native ETH
     uint256 minAmount;          // Minimum amount required
+}
+
+/// @notice Result with full resolution context for consumers
+struct ExtensiveResult {
+    // The answer
+    AnswerType answerType;
+    bool booleanResult;
+    int256 numericResult;
+    bytes genericResult;
+
+    // Resolution context
+    bool isFinalized;           // State == RESOLVED
+    bool wasDisputed;           // Had a dispute filed
+    bool wasCorrected;          // Dispute upheld, result changed
+    uint256 resolvedAt;         // Timestamp of resolution
+    AccountabilityTier tier;    // SYSTEM/TK_GUARANTEED/PERMISSIONLESS
+    ResolverTrust resolverTrust; // Trust level of resolver
 }

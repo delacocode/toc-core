@@ -59,44 +59,46 @@ contract POPRegistryTest {
 
     // ============ Resolver Registration Tests ============
 
-    function test_RegisterSystemResolver() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
+    function test_RegisterResolver() public {
+        registry.registerResolver(address(resolver));
 
-        ResolverType resolverType = registry.getResolverType(address(resolver));
-        require(resolverType == ResolverType.SYSTEM, "Resolver type should be SYSTEM");
+        ResolverTrust trust = registry.getResolverTrust(address(resolver));
+        require(trust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
 
-        bool isApproved = registry.isApprovedResolver(ResolverType.SYSTEM, address(resolver));
-        require(isApproved, "Resolver should be approved");
+        bool isRegistered = registry.isRegisteredResolver(address(resolver));
+        require(isRegistered, "Resolver should be registered");
 
-        uint256 count = registry.getResolverCount(ResolverType.SYSTEM);
-        require(count == 1, "Should have 1 system resolver");
+        uint256 count = registry.getResolverCount();
+        require(count == 1, "Should have 1 resolver");
     }
 
-    function test_RegisterPublicResolver() public {
-        registry.registerResolver(ResolverType.PUBLIC, address(resolver));
+    function test_SetResolverTrust() public {
+        registry.registerResolver(address(resolver));
 
-        ResolverType resolverType = registry.getResolverType(address(resolver));
-        require(resolverType == ResolverType.PUBLIC, "Resolver type should be PUBLIC");
+        // Upgrade to VERIFIED
+        registry.setResolverTrust(address(resolver), ResolverTrust.VERIFIED);
+        require(registry.getResolverTrust(address(resolver)) == ResolverTrust.VERIFIED, "Should be VERIFIED");
 
-        bool isApproved = registry.isApprovedResolver(ResolverType.PUBLIC, address(resolver));
-        require(isApproved, "Resolver should be approved");
+        // Upgrade to SYSTEM
+        registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
+        require(registry.getResolverTrust(address(resolver)) == ResolverTrust.SYSTEM, "Should be SYSTEM");
     }
 
-    function test_RevertRegisterZeroAddress() public {
+    function test_RevertRegisterNonContract() public {
         bool reverted = false;
-        try registry.registerResolver(ResolverType.SYSTEM, address(0)) {
-            // Should not reach here
+        try registry.registerResolver(address(0x123)) {
+            // Should not reach here - not a contract
         } catch {
             reverted = true;
         }
-        require(reverted, "Should revert on zero address");
+        require(reverted, "Should revert on non-contract address");
     }
 
     function test_RevertRegisterDuplicateResolver() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         bool reverted = false;
-        try registry.registerResolver(ResolverType.PUBLIC, address(resolver)) {
+        try registry.registerResolver(address(resolver)) {
             // Should not reach here
         } catch {
             reverted = true;
@@ -104,28 +106,24 @@ contract POPRegistryTest {
         require(reverted, "Should revert on duplicate registration");
     }
 
-    function test_DeprecateAndRestoreResolver() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
+    function test_GetResolverConfig() public {
+        registry.registerResolver(address(resolver));
 
-        // Deprecate
-        registry.deprecateResolver(ResolverType.SYSTEM, address(resolver));
-        require(registry.getResolverType(address(resolver)) == ResolverType.DEPRECATED, "Should be deprecated");
-
-        // Restore as PUBLIC
-        registry.restoreResolver(address(resolver), ResolverType.PUBLIC);
-        require(registry.getResolverType(address(resolver)) == ResolverType.PUBLIC, "Should be restored as PUBLIC");
+        ResolverConfig memory config = registry.getResolverConfig(address(resolver));
+        require(config.trust == ResolverTrust.PERMISSIONLESS, "Trust should be PERMISSIONLESS");
+        require(config.registeredAt > 0, "RegisteredAt should be set");
+        require(config.registeredBy == address(this), "RegisteredBy should be test contract");
     }
 
     // ============ POP Creation Tests ============
 
-    function test_CreatePOPWithSystemResolver() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
+    function test_CreatePOP() public {
+        registry.registerResolver(address(resolver));
 
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
         bytes memory payload = abi.encode("test payload");
 
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             payload,
             DEFAULT_DISPUTE_WINDOW,
@@ -145,14 +143,14 @@ contract POPRegistryTest {
         require(pop.truthKeeper == truthKeeper, "TruthKeeper should be set");
     }
 
-    function test_CreatePOPWithPublicResolver() public {
-        registry.registerResolver(ResolverType.PUBLIC, address(resolver));
+    function test_CreatePOPWithSystemResolver() public {
+        registry.registerResolver(address(resolver));
+        registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
 
-        uint256 resolverId = registry.getResolverId(ResolverType.PUBLIC, address(resolver));
         bytes memory payload = abi.encode("test payload");
 
-        uint256 popId = registry.createPOPWithPublicResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             payload,
             DEFAULT_DISPUTE_WINDOW,
@@ -161,16 +159,17 @@ contract POPRegistryTest {
             DEFAULT_POST_RESOLUTION_WINDOW,
             truthKeeper
         );
-        require(popId == 1, "First POP should have ID 1");
+
+        POP memory pop = registry.getPOP(popId);
+        require(pop.tierAtCreation == AccountabilityTier.SYSTEM, "Tier should be SYSTEM for system resolver + whitelisted TK");
     }
 
     function test_CreatePOPWithPendingState() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
         resolver.setDefaultInitialState(POPState.PENDING);
 
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -185,13 +184,11 @@ contract POPRegistryTest {
     }
 
     function test_RevertCreatePOPWithInvalidTemplate() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         bool reverted = false;
-        try registry.createPOPWithSystemResolver(
-            resolverId,
+        try registry.createPOP(
+            address(resolver),
             99,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -207,15 +204,13 @@ contract POPRegistryTest {
         require(reverted, "Should revert on invalid template");
     }
 
-    function test_RevertCreatePOPWithDeprecatedResolver() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-
-        registry.deprecateResolver(ResolverType.SYSTEM, address(resolver));
+    function test_RevertCreatePOPWithUnregisteredResolver() public {
+        // Create another mock resolver but don't register it
+        MockResolver unregisteredResolver = new MockResolver(address(registry));
 
         bool reverted = false;
-        try registry.createPOPWithSystemResolver(
-            resolverId,
+        try registry.createPOP(
+            address(unregisteredResolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -228,18 +223,17 @@ contract POPRegistryTest {
         } catch {
             reverted = true;
         }
-        require(reverted, "Should revert on deprecated resolver");
+        require(reverted, "Should revert on unregistered resolver");
     }
 
     // ============ POP Approval/Rejection Tests ============
 
     function test_ApproveAndRejectPOP() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
         resolver.setDefaultInitialState(POPState.PENDING);
 
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -248,6 +242,9 @@ contract POPRegistryTest {
             DEFAULT_POST_RESOLUTION_WINDOW,
             truthKeeper
         );
+
+        POP memory pop = registry.getPOP(popId);
+        require(pop.state == POPState.PENDING, "State should be PENDING");
 
         // Resolver approves (we call from test contract, which is registry for mock)
         // Need to call from resolver - set test contract as registry temporarily
@@ -259,10 +256,9 @@ contract POPRegistryTest {
     // ============ Resolution Tests ============
 
     function test_ResolvePOPWithETHBond() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -290,10 +286,9 @@ contract POPRegistryTest {
     }
 
     function test_RevertResolveWithInsufficientBond() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -313,12 +308,11 @@ contract POPRegistryTest {
     }
 
     function test_RevertResolveNonActivePOP() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
         resolver.setDefaultInitialState(POPState.PENDING);
 
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -340,10 +334,9 @@ contract POPRegistryTest {
     // ============ Finalization Tests ============
 
     function test_RevertFinalizeBeforeDisputeWindow() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -368,10 +361,9 @@ contract POPRegistryTest {
     // ============ Dispute Tests ============
 
     function test_DisputePOP() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -405,10 +397,9 @@ contract POPRegistryTest {
     }
 
     function test_RevertDisputeAlreadyDisputed() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -446,12 +437,11 @@ contract POPRegistryTest {
     // ============ Dispute Resolution Tests ============
 
     function test_ResolveDisputeUphold() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
         // Create POP with no pre-resolution dispute window, only post-resolution
         // This allows immediate resolution, then post-resolution dispute goes to admin
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0,     // no pre-resolution dispute window
@@ -492,11 +482,10 @@ contract POPRegistryTest {
     }
 
     function test_ResolveDisputeReject() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
         // Create POP with no pre-resolution dispute window, only post-resolution
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0,     // no pre-resolution dispute
@@ -532,11 +521,10 @@ contract POPRegistryTest {
     }
 
     function test_ResolveDisputeCancel() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
         // Create POP with no pre-resolution dispute window, only post-resolution
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0,     // no pre-resolution dispute
@@ -573,10 +561,9 @@ contract POPRegistryTest {
         resolver.setTemplateAnswerType(0, AnswerType.NUMERIC);
         resolver.setDefaultNumericResult(42);
 
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -594,10 +581,9 @@ contract POPRegistryTest {
         resolver.setTemplateAnswerType(0, AnswerType.GENERIC);
         resolver.setDefaultGenericResult(abi.encode("custom result"));
 
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -614,10 +600,9 @@ contract POPRegistryTest {
     // ============ View Function Tests ============
 
     function test_GetPOPInfo() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             abi.encode("test"),
             DEFAULT_DISPUTE_WINDOW,
@@ -630,17 +615,15 @@ contract POPRegistryTest {
         POPInfo memory info = registry.getPOPInfo(popId);
         require(info.resolver == address(resolver), "Resolver should match");
         require(info.state == POPState.ACTIVE, "State should be ACTIVE");
-        require(info.resolverType == ResolverType.SYSTEM, "Resolver type should be SYSTEM");
-        require(info.resolverId == resolverId, "Resolver ID should match");
+        require(info.resolverTrust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
         require(info.disputeWindow == DEFAULT_DISPUTE_WINDOW, "Dispute window should match");
         require(info.postResolutionWindow == DEFAULT_POST_RESOLUTION_WINDOW, "Post resolution window should match");
     }
 
     function test_GetPopQuestion() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        registry.registerResolver(address(resolver));
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             DEFAULT_DISPUTE_WINDOW,
@@ -657,13 +640,12 @@ contract POPRegistryTest {
     function test_NextPopId() public {
         require(registry.nextPopId() == 1, "Initial nextPopId should be 1");
 
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
-        registry.createPOPWithSystemResolver(resolverId, 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        registry.createPOP(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
         require(registry.nextPopId() == 2, "nextPopId should be 2 after creating one POP");
 
-        registry.createPOPWithSystemResolver(resolverId, 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        registry.createPOP(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
         require(registry.nextPopId() == 3, "nextPopId should be 3 after creating two POPs");
     }
 
@@ -694,40 +676,6 @@ contract POPRegistryTest {
         require(!unknownToken, "Unknown token should not be acceptable");
     }
 
-    // ============ Resolver Config Tests ============
-
-    function test_UpdateSystemResolverConfig() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-
-        SystemResolverConfig memory newConfig = SystemResolverConfig({
-            disputeWindow: 48 hours,
-            isActive: true,
-            registeredAt: block.timestamp,
-            registeredBy: address(this)
-        });
-
-        registry.updateSystemResolverConfig(address(resolver), newConfig);
-
-        SystemResolverConfig memory config = registry.getSystemResolverConfig(address(resolver));
-        require(config.disputeWindow == 48 hours, "Dispute window should be updated");
-    }
-
-    function test_UpdatePublicResolverConfig() public {
-        registry.registerResolver(ResolverType.PUBLIC, address(resolver));
-
-        PublicResolverConfig memory newConfig = PublicResolverConfig({
-            disputeWindow: 72 hours,
-            isActive: true,
-            registeredAt: block.timestamp,
-            registeredBy: address(this)
-        });
-
-        registry.updatePublicResolverConfig(address(resolver), newConfig);
-
-        PublicResolverConfig memory config = registry.getPublicResolverConfig(address(resolver));
-        require(config.disputeWindow == 72 hours, "Dispute window should be updated");
-    }
-
     // ============ Edge Cases ============
 
     function test_RevertInvalidPopId() public {
@@ -748,26 +696,15 @@ contract POPRegistryTest {
         require(reverted, "Should revert on non-existent popId");
     }
 
-    function test_RevertInvalidResolverId() public {
-        bool reverted = false;
-        try registry.getResolverAddress(ResolverType.SYSTEM, 999) {
-            // Should not reach here
-        } catch {
-            reverted = true;
-        }
-        require(reverted, "Should revert on invalid resolver ID");
-    }
-
     // ============ Multiple POPs Test ============
 
     function test_MultiplePOPs() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Create multiple POPs
-        uint256 pop1 = registry.createPOPWithSystemResolver(resolverId, 0, abi.encode("pop1"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
-        uint256 pop2 = registry.createPOPWithSystemResolver(resolverId, 1, abi.encode("pop2"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
-        uint256 pop3 = registry.createPOPWithSystemResolver(resolverId, 2, abi.encode("pop3"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 pop1 = registry.createPOP(address(resolver), 0, abi.encode("pop1"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 pop2 = registry.createPOP(address(resolver), 1, abi.encode("pop2"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 pop3 = registry.createPOP(address(resolver), 2, abi.encode("pop3"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
 
         require(pop1 == 1, "First POP should be ID 1");
         require(pop2 == 2, "Second POP should be ID 2");
@@ -786,14 +723,13 @@ contract POPRegistryTest {
     // ============ Flexible Dispute Windows Tests ============
 
     function test_CreatePOPWithCustomDisputeWindows() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         uint256 customDisputeWindow = 12 hours;
         uint256 customPostResolutionWindow = 48 hours;
 
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             customDisputeWindow,
@@ -809,12 +745,11 @@ contract POPRegistryTest {
     }
 
     function test_CreateUndisputablePOP() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Create POP with both windows = 0 (undisputable)
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0,  // no pre-resolution dispute
@@ -831,12 +766,11 @@ contract POPRegistryTest {
     }
 
     function test_ImmediateResolutionNoBond() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Create undisputable POP
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0, 0, 0, 0,  // all windows = 0
@@ -857,12 +791,11 @@ contract POPRegistryTest {
     }
 
     function test_ImmediateResolutionWithPostResolutionWindow() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Create POP with no pre-resolution dispute but has post-resolution window
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0,           // no pre-resolution dispute
@@ -888,12 +821,11 @@ contract POPRegistryTest {
     }
 
     function test_FullyFinalizedWithoutPostResolutionWindow() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Create undisputable POP
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0, 0, 0, 0,  // all windows = 0
@@ -910,12 +842,11 @@ contract POPRegistryTest {
 
     function test_IsContestedAndHasCorrectedResult() public {
         // Create POP with post-resolution window
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Pre-resolution = 0, post-resolution = 24h (immediate resolve, then can dispute)
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0,           // immediate resolution
@@ -960,12 +891,11 @@ contract POPRegistryTest {
     }
 
     function test_DisputeOnlyIfDisputeWindowGtZero() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Create undisputable POP (both windows = 0)
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId,
+        uint256 popId = registry.createPOP(
+            address(resolver),
             0,
             "",
             0, 0, 0, 0,  // all windows = 0
@@ -992,12 +922,11 @@ contract POPRegistryTest {
     }
 
     function test_DisputeInfoPhaseTracking() public {
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Test pre-resolution dispute phase
-        uint256 popId1 = registry.createPOPWithSystemResolver(
-            resolverId, 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper
+        uint256 popId1 = registry.createPOP(
+            address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper
         );
         registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId1, address(0), MIN_RESOLUTION_BOND, "");
         registry.dispute{value: MIN_DISPUTE_BOND}(popId1, address(0), MIN_DISPUTE_BOND, "Pre-res dispute", "", false, 0, "");
@@ -1006,8 +935,8 @@ contract POPRegistryTest {
         require(info1.phase == DisputePhase.PRE_RESOLUTION, "Should be pre-resolution phase");
 
         // Test post-resolution dispute phase
-        uint256 popId2 = registry.createPOPWithSystemResolver(
-            resolverId, 0, "", 0, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper  // immediate resolution, post-res window
+        uint256 popId2 = registry.createPOP(
+            address(resolver), 0, "", 0, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper  // immediate resolution, post-res window
         );
         registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId2, address(0), MIN_RESOLUTION_BOND, "");
         registry.dispute{value: MIN_DISPUTE_BOND}(popId2, address(0), MIN_DISPUTE_BOND, "Post-res dispute", "", false, 0, "");
@@ -1020,12 +949,11 @@ contract POPRegistryTest {
         resolver.setTemplateAnswerType(0, AnswerType.NUMERIC);
         resolver.setDefaultNumericResult(100);
 
-        registry.registerResolver(ResolverType.SYSTEM, address(resolver));
-        uint256 resolverId = registry.getResolverId(ResolverType.SYSTEM, address(resolver));
+        registry.registerResolver(address(resolver));
 
         // Create POP with no pre-resolution dispute window, only post-resolution
-        uint256 popId = registry.createPOPWithSystemResolver(
-            resolverId, 0, "",
+        uint256 popId = registry.createPOP(
+            address(resolver), 0, "",
             0,     // no pre-resolution dispute
             0,     // no TK window
             0,     // no escalation window
@@ -1058,6 +986,90 @@ contract POPRegistryTest {
 
         int256 result = registry.getNumericResult(popId);
         require(result == 75, "Result should be admin's corrected value (75)");
+    }
+
+    // ============ ExtensiveResult Tests ============
+
+    function test_GetExtensiveResult() public {
+        registry.registerResolver(address(resolver));
+
+        uint256 popId = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            0, 0, 0, 0,  // undisputable for simplicity
+            truthKeeper
+        );
+
+        registry.resolvePOP(popId, address(0), 0, "");
+
+        ExtensiveResult memory result = registry.getExtensiveResult(popId);
+        require(result.answerType == AnswerType.BOOLEAN, "Answer type should be BOOLEAN");
+        require(result.booleanResult == true, "Boolean result should be true (mock default)");
+        require(result.isFinalized == true, "Should be finalized");
+        require(result.wasDisputed == false, "Should not be disputed");
+        require(result.wasCorrected == false, "Should not be corrected");
+        require(result.tier == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS");
+        require(result.resolverTrust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
+    }
+
+    function test_GetExtensiveResultStrict() public {
+        registry.registerResolver(address(resolver));
+
+        // Create undisputable POP
+        uint256 popId = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            0, 0, 0, 0,  // all windows = 0
+            truthKeeper
+        );
+
+        registry.resolvePOP(popId, address(0), 0, "");
+
+        // Should work for fully finalized POP
+        ExtensiveResult memory result = registry.getExtensiveResultStrict(popId);
+        require(result.isFinalized == true, "Should be finalized");
+    }
+
+    function test_GetExtensiveResultStrictReverts() public {
+        registry.registerResolver(address(resolver));
+
+        // Create POP with post-resolution window (not immediately fully finalized)
+        uint256 popId = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            0,           // no pre-resolution dispute
+            0,           // no TK window
+            0,           // no escalation window
+            24 hours,    // post-resolution window - not fully finalized until this passes
+            truthKeeper
+        );
+
+        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+
+        // Should revert - post-resolution window still open
+        bool reverted = false;
+        try registry.getExtensiveResultStrict(popId) {
+            // Should not reach here
+        } catch {
+            reverted = true;
+        }
+        require(reverted, "Should revert when post-resolution window is still open");
+    }
+
+    function test_GetRegisteredResolvers() public {
+        // Initially empty
+        address[] memory resolvers = registry.getRegisteredResolvers();
+        require(resolvers.length == 0, "Should have no resolvers initially");
+
+        // Register resolver
+        registry.registerResolver(address(resolver));
+
+        resolvers = registry.getRegisteredResolvers();
+        require(resolvers.length == 1, "Should have 1 resolver");
+        require(resolvers[0] == address(resolver), "Resolver address should match");
     }
 
     // ============ Helpers ============

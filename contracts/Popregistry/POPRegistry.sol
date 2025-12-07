@@ -13,7 +13,7 @@ import "./IPopResolver.sol";
 
 /// @title POPRegistry
 /// @notice Central registry managing POP lifecycle, resolvers, and disputes
-/// @dev Implementation of IPOPRegistry with dual resolver system (System vs Public)
+/// @dev Implementation of IPOPRegistry with unified resolver trust system
 contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
     using SafeERC20 for IERC20;
@@ -25,22 +25,9 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
 
     // ============ State Variables ============
 
-    // System resolver storage
-    EnumerableSet.AddressSet private _systemResolvers;
-    mapping(address => uint256) private _systemResolverToId;
-    mapping(uint256 => address) private _systemIdToResolver;
-    uint256 private _nextSystemResolverId;
-    mapping(address => SystemResolverConfig) private _systemResolverConfigs;
-
-    // Public resolver storage
-    EnumerableSet.AddressSet private _publicResolvers;
-    mapping(address => uint256) private _publicResolverToId;
-    mapping(uint256 => address) private _publicIdToResolver;
-    uint256 private _nextPublicResolverId;
-    mapping(address => PublicResolverConfig) private _publicResolverConfigs;
-
-    // Unified resolver type lookup
-    mapping(address => ResolverType) private _resolverTypes;
+    // Resolver storage (unified trust-based system)
+    EnumerableSet.AddressSet private _registeredResolvers;
+    mapping(address => ResolverConfig) private _resolverConfigs;
 
     // POP storage
     mapping(uint256 => POP) private _pops;
@@ -67,7 +54,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
 
     // TruthKeeper registry
     EnumerableSet.AddressSet private _whitelistedTruthKeepers;
-    EnumerableSet.AddressSet private _whitelistedResolvers;
     mapping(address => EnumerableSet.AddressSet) private _tkGuaranteedResolvers;
 
     // Escalation info storage
@@ -75,10 +61,9 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
 
     // ============ Errors ============
 
-    error ResolverNotApproved(address resolver);
-    error ResolverAlreadyRegistered(address resolver);
     error ResolverNotRegistered(address resolver);
-    error InvalidResolverId(uint256 resolverId);
+    error ResolverAlreadyRegistered(address resolver);
+    error ResolverMustBeContract(address resolver);
     error InvalidTemplateId(uint32 templateId);
     error InvalidPopId(uint256 popId);
     error InvalidState(POPState current, POPState expected);
@@ -89,9 +74,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     error NotResolver(address caller, address expected);
     error TransferFailed();
     error InsufficientValue(uint256 sent, uint256 required);
-    error InvalidResolverType(ResolverType resolverType);
-    error ResolverIsDeprecated(address resolver);
-    error CannotRestoreActiveResolver(address resolver);
     error NoCorrectedAnswerProvided(uint256 popId);
     error DisputeAlreadyResolved(uint256 popId);
     error NoDisputeExists(uint256 popId);
@@ -99,7 +81,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     error NotTruthKeeper(address caller, address expected);
     error TruthKeeperNotWhitelisted(address tk);
     error TruthKeeperAlreadyWhitelisted(address tk);
-    error ResolverNotWhitelistedForSystem(address resolver);
     error TruthKeeperWindowNotPassed(uint256 deadline, uint256 current);
     error EscalationWindowNotPassed(uint256 deadline, uint256 current);
     error EscalationWindowPassed(uint256 deadline, uint256 current);
@@ -109,13 +90,12 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     error TruthKeeperNotYetDecided(uint256 popId);
     error AlreadyEscalated(uint256 popId);
     error InvalidTruthKeeper(address tk);
+    error NotFullyFinalized(uint256 popId);
 
     // ============ Constructor ============
 
     constructor() Ownable(msg.sender) {
         _defaultDisputeWindow = DEFAULT_DISPUTE_WINDOW_DURATION;
-        _nextSystemResolverId = 1; // Start from 1, 0 means invalid
-        _nextPublicResolverId = 1; // Start from 1, 0 means invalid
         _nextPopId = 1; // Start from 1, 0 means invalid
     }
 
@@ -152,154 +132,40 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         _;
     }
 
-    // ============ Admin Functions ============
+    // ============ Resolver Registration ============
 
     /// @inheritdoc IPOPRegistry
-    function registerResolver(ResolverType resolverType, address resolver) external onlyOwner {
-        if (resolver == address(0)) {
-            revert ResolverNotRegistered(resolver);
+    function registerResolver(address resolver) external {
+        if (resolver.code.length == 0) {
+            revert ResolverMustBeContract(resolver);
         }
-        if (resolverType != ResolverType.SYSTEM && resolverType != ResolverType.PUBLIC) {
-            revert InvalidResolverType(resolverType);
-        }
-        if (_resolverTypes[resolver] != ResolverType.NONE) {
+        if (_resolverConfigs[resolver].trust != ResolverTrust.NONE) {
             revert ResolverAlreadyRegistered(resolver);
         }
 
-        _resolverTypes[resolver] = resolverType;
-        uint256 resolverId;
+        _registeredResolvers.add(resolver);
+        _resolverConfigs[resolver] = ResolverConfig({
+            trust: ResolverTrust.PERMISSIONLESS,
+            registeredAt: block.timestamp,
+            registeredBy: msg.sender
+        });
 
-        if (resolverType == ResolverType.SYSTEM) {
-            _systemResolvers.add(resolver);
-            resolverId = _nextSystemResolverId++;
-            _systemResolverToId[resolver] = resolverId;
-            _systemIdToResolver[resolverId] = resolver;
-            _systemResolverConfigs[resolver] = SystemResolverConfig({
-                disputeWindow: 0,
-                isActive: true,
-                registeredAt: block.timestamp,
-                registeredBy: msg.sender
-            });
-        } else {
-            _publicResolvers.add(resolver);
-            resolverId = _nextPublicResolverId++;
-            _publicResolverToId[resolver] = resolverId;
-            _publicIdToResolver[resolverId] = resolver;
-            _publicResolverConfigs[resolver] = PublicResolverConfig({
-                disputeWindow: 0,
-                isActive: true,
-                registeredAt: block.timestamp,
-                registeredBy: msg.sender
-            });
-        }
-
-        emit ResolverRegistered(resolver, resolverType, resolverId);
+        emit ResolverRegistered(resolver, ResolverTrust.PERMISSIONLESS, msg.sender);
     }
 
     /// @inheritdoc IPOPRegistry
-    function deprecateResolver(ResolverType resolverType, address resolver) external onlyOwner {
-        ResolverType currentType = _resolverTypes[resolver];
-        if (currentType == ResolverType.NONE) {
+    function setResolverTrust(address resolver, ResolverTrust trust) external onlyOwner {
+        if (_resolverConfigs[resolver].trust == ResolverTrust.NONE) {
             revert ResolverNotRegistered(resolver);
         }
-        if (currentType == ResolverType.DEPRECATED) {
-            revert ResolverIsDeprecated(resolver);
-        }
-        if (currentType != resolverType) {
-            revert InvalidResolverType(resolverType);
-        }
 
-        // Set type to DEPRECATED but keep in sets for existing POPs
-        _resolverTypes[resolver] = ResolverType.DEPRECATED;
+        ResolverTrust oldTrust = _resolverConfigs[resolver].trust;
+        _resolverConfigs[resolver].trust = trust;
 
-        // Mark as inactive in config
-        if (resolverType == ResolverType.SYSTEM) {
-            _systemResolverConfigs[resolver].isActive = false;
-        } else {
-            _publicResolverConfigs[resolver].isActive = false;
-        }
-
-        emit ResolverDeprecated(resolver, resolverType);
+        emit ResolverTrustChanged(resolver, oldTrust, trust);
     }
 
-    /// @inheritdoc IPOPRegistry
-    function restoreResolver(address resolver, ResolverType newType) external onlyOwner {
-        if (newType != ResolverType.SYSTEM && newType != ResolverType.PUBLIC) {
-            revert InvalidResolverType(newType);
-        }
-        ResolverType currentType = _resolverTypes[resolver];
-        if (currentType != ResolverType.DEPRECATED) {
-            revert CannotRestoreActiveResolver(resolver);
-        }
-
-        // Determine original type from which set contains the resolver
-        bool wasSystem = _systemResolvers.contains(resolver);
-
-        _resolverTypes[resolver] = newType;
-
-        // Reactivate in appropriate config
-        if (newType == ResolverType.SYSTEM) {
-            if (!wasSystem) {
-                // Moving from public to system
-                _publicResolvers.remove(resolver);
-                _systemResolvers.add(resolver);
-                uint256 newId = _nextSystemResolverId++;
-                _systemResolverToId[resolver] = newId;
-                _systemIdToResolver[newId] = resolver;
-                _systemResolverConfigs[resolver] = SystemResolverConfig({
-                    disputeWindow: _publicResolverConfigs[resolver].disputeWindow,
-                    isActive: true,
-                    registeredAt: block.timestamp,
-                    registeredBy: msg.sender
-                });
-            } else {
-                _systemResolverConfigs[resolver].isActive = true;
-            }
-        } else {
-            if (wasSystem) {
-                // Moving from system to public
-                _systemResolvers.remove(resolver);
-                _publicResolvers.add(resolver);
-                uint256 newId = _nextPublicResolverId++;
-                _publicResolverToId[resolver] = newId;
-                _publicIdToResolver[newId] = resolver;
-                _publicResolverConfigs[resolver] = PublicResolverConfig({
-                    disputeWindow: _systemResolverConfigs[resolver].disputeWindow,
-                    isActive: true,
-                    registeredAt: block.timestamp,
-                    registeredBy: msg.sender
-                });
-            } else {
-                _publicResolverConfigs[resolver].isActive = true;
-            }
-        }
-
-        emit ResolverRestored(resolver, ResolverType.DEPRECATED, newType);
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function updateSystemResolverConfig(
-        address resolver,
-        SystemResolverConfig calldata config
-    ) external onlyOwner {
-        if (_resolverTypes[resolver] != ResolverType.SYSTEM) {
-            revert InvalidResolverType(_resolverTypes[resolver]);
-        }
-        _systemResolverConfigs[resolver] = config;
-        emit SystemResolverConfigUpdated(resolver, config);
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function updatePublicResolverConfig(
-        address resolver,
-        PublicResolverConfig calldata config
-    ) external onlyOwner {
-        if (_resolverTypes[resolver] != ResolverType.PUBLIC) {
-            revert InvalidResolverType(_resolverTypes[resolver]);
-        }
-        _publicResolverConfigs[resolver] = config;
-        emit PublicResolverConfigUpdated(resolver, config);
-    }
+    // ============ Admin Functions ============
 
     /// @inheritdoc IPOPRegistry
     function addAcceptableResolutionBond(
@@ -341,19 +207,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         if (!_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperNotWhitelisted(tk);
         _whitelistedTruthKeepers.remove(tk);
         emit TruthKeeperRemovedFromWhitelist(tk);
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function addWhitelistedResolver(address resolver) external onlyOwner {
-        if (resolver == address(0)) revert ResolverNotRegistered(resolver);
-        _whitelistedResolvers.add(resolver);
-        emit ResolverAddedToWhitelist(resolver);
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function removeWhitelistedResolver(address resolver) external onlyOwner {
-        _whitelistedResolvers.remove(resolver);
-        emit ResolverRemovedFromWhitelist(resolver);
     }
 
     /// @inheritdoc IPOPRegistry
@@ -417,8 +270,8 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     // ============ POP Lifecycle ============
 
     /// @inheritdoc IPOPRegistry
-    function createPOPWithSystemResolver(
-        uint256 resolverId,
+    function createPOP(
+        address resolver,
         uint32 templateId,
         bytes calldata payload,
         uint256 disputeWindow,
@@ -427,60 +280,10 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         uint256 postResolutionWindow,
         address truthKeeper
     ) external returns (uint256 popId) {
-        return _createPOP(ResolverType.SYSTEM, resolverId, templateId, payload, disputeWindow, truthKeeperWindow, escalationWindow, postResolutionWindow, truthKeeper);
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function createPOPWithPublicResolver(
-        uint256 resolverId,
-        uint32 templateId,
-        bytes calldata payload,
-        uint256 disputeWindow,
-        uint256 truthKeeperWindow,
-        uint256 escalationWindow,
-        uint256 postResolutionWindow,
-        address truthKeeper
-    ) external returns (uint256 popId) {
-        return _createPOP(ResolverType.PUBLIC, resolverId, templateId, payload, disputeWindow, truthKeeperWindow, escalationWindow, postResolutionWindow, truthKeeper);
-    }
-
-    function _createPOP(
-        ResolverType resolverType,
-        uint256 resolverId,
-        uint32 templateId,
-        bytes calldata payload,
-        uint256 disputeWindow,
-        uint256 truthKeeperWindow,
-        uint256 escalationWindow,
-        uint256 postResolutionWindow,
-        address truthKeeper
-    ) internal returns (uint256 popId) {
-        address resolver;
-        bool isActive;
-
-        if (resolverType == ResolverType.SYSTEM) {
-            resolver = _systemIdToResolver[resolverId];
-            if (resolver == address(0)) {
-                revert InvalidResolverId(resolverId);
-            }
-            isActive = _systemResolverConfigs[resolver].isActive;
-        } else if (resolverType == ResolverType.PUBLIC) {
-            resolver = _publicIdToResolver[resolverId];
-            if (resolver == address(0)) {
-                revert InvalidResolverId(resolverId);
-            }
-            isActive = _publicResolverConfigs[resolver].isActive;
-        } else {
-            revert InvalidResolverType(resolverType);
-        }
-
-        if (!isActive) {
-            revert ResolverNotApproved(resolver);
-        }
-
-        // Check resolver isn't deprecated
-        if (_resolverTypes[resolver] == ResolverType.DEPRECATED) {
-            revert ResolverIsDeprecated(resolver);
+        // Check resolver is registered
+        ResolverTrust trust = _resolverConfigs[resolver].trust;
+        if (trust == ResolverTrust.NONE) {
+            revert ResolverNotRegistered(resolver);
         }
 
         // Validate template exists on resolver
@@ -518,7 +321,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             tierAtCreation: tier
         });
 
-        emit POPCreated(popId, resolverType, resolverId, resolver, templateId, answerType, initialState, truthKeeper, tier);
+        emit POPCreated(popId, resolver, trust, templateId, answerType, initialState, truthKeeper, tier);
     }
 
     /// @inheritdoc IPOPRegistry
@@ -1015,20 +818,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     /// @inheritdoc IPOPRegistry
     function getPOPInfo(uint256 popId) external view validPopId(popId) returns (POPInfo memory info) {
         POP storage pop = _pops[popId];
-        ResolverType resolverType = _resolverTypes[pop.resolver];
-
-        uint256 resolverId;
-        bool resolverIsActive;
-
-        // Handle deprecated resolvers - check which set they belong to
-        if (resolverType == ResolverType.SYSTEM ||
-            (resolverType == ResolverType.DEPRECATED && _systemResolvers.contains(pop.resolver))) {
-            resolverId = _systemResolverToId[pop.resolver];
-            resolverIsActive = _systemResolverConfigs[pop.resolver].isActive;
-        } else {
-            resolverId = _publicResolverToId[pop.resolver];
-            resolverIsActive = _publicResolverConfigs[pop.resolver].isActive;
-        }
 
         info = POPInfo({
             resolver: pop.resolver,
@@ -1053,9 +842,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             correctedBooleanResult: _correctedBooleanResults[popId],
             correctedNumericResult: _correctedNumericResults[popId],
             correctedGenericResult: _correctedGenericResults[popId],
-            resolverType: resolverType,
-            resolverId: resolverId,
-            resolverIsActive: resolverIsActive
+            resolverTrust: _resolverConfigs[pop.resolver].trust
         });
     }
 
@@ -1076,32 +863,28 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc IPOPRegistry
-    function isApprovedResolver(ResolverType resolverType, address resolver) external view returns (bool) {
-        if (resolverType == ResolverType.SYSTEM) {
-            return _systemResolvers.contains(resolver) && _systemResolverConfigs[resolver].isActive;
-        } else if (resolverType == ResolverType.PUBLIC) {
-            return _publicResolvers.contains(resolver) && _publicResolverConfigs[resolver].isActive;
-        }
-        return false;
+    function getResolverTrust(address resolver) external view returns (ResolverTrust) {
+        return _resolverConfigs[resolver].trust;
     }
 
     /// @inheritdoc IPOPRegistry
-    function getResolverType(address resolver) external view returns (ResolverType) {
-        return _resolverTypes[resolver];
+    function isRegisteredResolver(address resolver) external view returns (bool) {
+        return _resolverConfigs[resolver].trust != ResolverTrust.NONE;
     }
 
     /// @inheritdoc IPOPRegistry
-    function getSystemResolverConfig(
-        address resolver
-    ) external view returns (SystemResolverConfig memory) {
-        return _systemResolverConfigs[resolver];
+    function getResolverConfig(address resolver) external view returns (ResolverConfig memory) {
+        return _resolverConfigs[resolver];
     }
 
     /// @inheritdoc IPOPRegistry
-    function getPublicResolverConfig(
-        address resolver
-    ) external view returns (PublicResolverConfig memory) {
-        return _publicResolverConfigs[resolver];
+    function getRegisteredResolvers() external view returns (address[] memory) {
+        return _registeredResolvers.values();
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function getResolverCount() external view returns (uint256) {
+        return _registeredResolvers.length();
     }
 
     /// @inheritdoc IPOPRegistry
@@ -1180,44 +963,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         return _defaultDisputeWindow;
     }
 
-    /// @inheritdoc IPOPRegistry
-    function getResolverAddress(ResolverType resolverType, uint256 resolverId) external view returns (address resolver) {
-        if (resolverType == ResolverType.SYSTEM) {
-            resolver = _systemIdToResolver[resolverId];
-        } else if (resolverType == ResolverType.PUBLIC) {
-            resolver = _publicIdToResolver[resolverId];
-        } else {
-            revert InvalidResolverType(resolverType);
-        }
-        if (resolver == address(0)) {
-            revert InvalidResolverId(resolverId);
-        }
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function getResolverId(ResolverType resolverType, address resolver) external view returns (uint256 resolverId) {
-        if (resolverType == ResolverType.SYSTEM) {
-            resolverId = _systemResolverToId[resolver];
-        } else if (resolverType == ResolverType.PUBLIC) {
-            resolverId = _publicResolverToId[resolver];
-        } else {
-            revert InvalidResolverType(resolverType);
-        }
-        if (resolverId == 0) {
-            revert ResolverNotRegistered(resolver);
-        }
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function getResolverCount(ResolverType resolverType) external view returns (uint256 count) {
-        if (resolverType == ResolverType.SYSTEM) {
-            return _systemResolvers.length();
-        } else if (resolverType == ResolverType.PUBLIC) {
-            return _publicResolvers.length();
-        } else {
-            revert InvalidResolverType(resolverType);
-        }
-    }
 
     // ============ Flexible Dispute Window View Functions ============
 
@@ -1278,11 +1023,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc IPOPRegistry
-    function isWhitelistedResolver(address resolver) external view returns (bool) {
-        return _whitelistedResolvers.contains(resolver);
-    }
-
-    /// @inheritdoc IPOPRegistry
     function getTruthKeeperGuaranteedResolvers(address tk) external view returns (address[] memory) {
         return _tkGuaranteedResolvers[tk].values();
     }
@@ -1305,6 +1045,60 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     /// @inheritdoc IPOPRegistry
     function isAcceptableEscalationBond(address token, uint256 amount) external view returns (bool) {
         return _isAcceptableEscalationBond(token, amount);
+    }
+
+    // ============ Consumer Result Functions ============
+
+    /// @inheritdoc IPOPRegistry
+    function getExtensiveResult(uint256 popId) external view validPopId(popId) returns (ExtensiveResult memory result) {
+        POP storage pop = _pops[popId];
+        DisputeInfo storage disputeInfo = _disputes[popId];
+
+        bool hasCorrected = _hasCorrectedResult[popId];
+
+        result = ExtensiveResult({
+            answerType: pop.answerType,
+            booleanResult: hasCorrected ? _correctedBooleanResults[popId] : _booleanResults[popId],
+            numericResult: hasCorrected ? _correctedNumericResults[popId] : _numericResults[popId],
+            genericResult: hasCorrected ? _correctedGenericResults[popId] : _genericResults[popId],
+            isFinalized: pop.state == POPState.RESOLVED,
+            wasDisputed: disputeInfo.disputer != address(0),
+            wasCorrected: hasCorrected,
+            resolvedAt: pop.resolutionTime,
+            tier: pop.tierAtCreation,
+            resolverTrust: _resolverConfigs[pop.resolver].trust
+        });
+    }
+
+    /// @inheritdoc IPOPRegistry
+    function getExtensiveResultStrict(uint256 popId) external view validPopId(popId) returns (ExtensiveResult memory result) {
+        POP storage pop = _pops[popId];
+
+        // Must be fully finalized
+        if (pop.state != POPState.RESOLVED) {
+            revert NotFullyFinalized(popId);
+        }
+
+        // Post-resolution dispute window must have passed
+        if (pop.postDisputeDeadline > 0 && block.timestamp < pop.postDisputeDeadline) {
+            revert NotFullyFinalized(popId);
+        }
+
+        DisputeInfo storage disputeInfo = _disputes[popId];
+        bool hasCorrected = _hasCorrectedResult[popId];
+
+        result = ExtensiveResult({
+            answerType: pop.answerType,
+            booleanResult: hasCorrected ? _correctedBooleanResults[popId] : _booleanResults[popId],
+            numericResult: hasCorrected ? _correctedNumericResults[popId] : _numericResults[popId],
+            genericResult: hasCorrected ? _correctedGenericResults[popId] : _genericResults[popId],
+            isFinalized: true,
+            wasDisputed: disputeInfo.disputer != address(0),
+            wasCorrected: hasCorrected,
+            resolvedAt: pop.resolutionTime,
+            tier: pop.tierAtCreation,
+            resolverTrust: _resolverConfigs[pop.resolver].trust
+        });
     }
 
     // ============ Internal Functions ============
@@ -1399,9 +1193,11 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
 
     /// @notice Calculate accountability tier for resolver + TK combination
     function _calculateAccountabilityTier(address resolver, address tk) internal view returns (AccountabilityTier) {
-        if (_whitelistedResolvers.contains(resolver) && _whitelistedTruthKeepers.contains(tk)) {
+        // SYSTEM tier: resolver has SYSTEM trust and TK is whitelisted
+        if (_resolverConfigs[resolver].trust == ResolverTrust.SYSTEM && _whitelistedTruthKeepers.contains(tk)) {
             return AccountabilityTier.SYSTEM;
         }
+        // TK_GUARANTEED tier: TK guarantees this resolver
         if (_tkGuaranteedResolvers[tk].contains(resolver)) {
             return AccountabilityTier.TK_GUARANTEED;
         }
@@ -1488,21 +1284,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         }
     }
 
-    /// @notice Get the dispute window for a resolver
-    function _getDisputeWindow(address resolver) internal view returns (uint256) {
-        ResolverType resolverType = _resolverTypes[resolver];
-        uint256 window;
-
-        if (resolverType == ResolverType.SYSTEM ||
-            (resolverType == ResolverType.DEPRECATED && _systemResolvers.contains(resolver))) {
-            window = _systemResolverConfigs[resolver].disputeWindow;
-        } else {
-            window = _publicResolverConfigs[resolver].disputeWindow;
-        }
-
-        return window > 0 ? window : _defaultDisputeWindow;
-    }
-
     /// @notice Store result in the appropriate mapping
     function _storeResult(
         uint256 popId,
@@ -1517,52 +1298,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             _numericResults[popId] = numResult;
         } else if (answerType == AnswerType.GENERIC) {
             _genericResults[popId] = genResult;
-        }
-    }
-
-    /// @notice Store corrected result for pre-resolution dispute upheld
-    /// @dev Priority: admin's answer > disputer's proposed > flip (for boolean)
-    function _storeCorrectedResult(
-        uint256 popId,
-        AnswerType answerType,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult,
-        DisputeInfo storage disputeInfo,
-        ResolutionInfo storage resolutionInfo
-    ) internal {
-        if (answerType == AnswerType.BOOLEAN) {
-            // For boolean: admin's if different from original, else disputer's, else flip
-            bool result;
-            if (correctedBooleanResult != resolutionInfo.proposedBooleanOutcome) {
-                result = correctedBooleanResult;
-            } else if (disputeInfo.proposedBooleanResult != resolutionInfo.proposedBooleanOutcome) {
-                result = disputeInfo.proposedBooleanResult;
-            } else {
-                result = !resolutionInfo.proposedBooleanOutcome;
-            }
-            _booleanResults[popId] = result;
-        } else if (answerType == AnswerType.NUMERIC) {
-            // Use admin's if provided (non-zero or different from proposed), else disputer's
-            int256 result;
-            if (correctedNumericResult != 0 || correctedNumericResult != resolutionInfo.proposedNumericOutcome) {
-                result = correctedNumericResult;
-            } else if (disputeInfo.proposedNumericResult != 0) {
-                result = disputeInfo.proposedNumericResult;
-            } else {
-                revert NoCorrectedAnswerProvided(popId);
-            }
-            _numericResults[popId] = result;
-        } else if (answerType == AnswerType.GENERIC) {
-            bytes memory result;
-            if (correctedGenericResult.length > 0) {
-                result = correctedGenericResult;
-            } else if (disputeInfo.proposedGenericResult.length > 0) {
-                result = disputeInfo.proposedGenericResult;
-            } else {
-                revert NoCorrectedAnswerProvided(popId);
-            }
-            _genericResults[popId] = result;
         }
     }
 
