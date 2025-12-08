@@ -1,6 +1,7 @@
 node_modules/
 artifacts/
 cache/
+out/
 .idea/
 *.log
 .env
