@@ -284,37 +284,25 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             revert InvalidTemplateId(templateId);
         }
 
-        // Get the answer type for this template
-        AnswerType answerType = IPopResolver(resolver).getTemplateAnswerType(templateId);
-
-        // Calculate accountability tier (snapshot at creation)
-        AccountabilityTier tier = _calculateAccountabilityTier(resolver, truthKeeper);
-
         // Generate POP ID
         popId = _nextPopId++;
 
-        // Call resolver to create POP
-        POPState initialState = IPopResolver(resolver).onPopCreated(popId, templateId, payload);
-
         // Store POP with user-specified dispute windows
-        _pops[popId] = POP({
-            resolver: resolver,
-            state: initialState,
-            answerType: answerType,
-            resolutionTime: 0,
-            disputeWindow: disputeWindow,
-            truthKeeperWindow: truthKeeperWindow,
-            escalationWindow: escalationWindow,
-            postResolutionWindow: postResolutionWindow,
-            disputeDeadline: 0,
-            truthKeeperDeadline: 0,
-            escalationDeadline: 0,
-            postDisputeDeadline: 0,
-            truthKeeper: truthKeeper,
-            tierAtCreation: tier
-        });
+        // Note: We inline some calls to avoid stack too deep
+        POP storage pop = _pops[popId];
+        pop.resolver = resolver;
+        pop.answerType = IPopResolver(resolver).getTemplateAnswerType(templateId);
+        pop.disputeWindow = disputeWindow;
+        pop.truthKeeperWindow = truthKeeperWindow;
+        pop.escalationWindow = escalationWindow;
+        pop.postResolutionWindow = postResolutionWindow;
+        pop.truthKeeper = truthKeeper;
+        pop.tierAtCreation = _calculateAccountabilityTier(resolver, truthKeeper);
 
-        emit POPCreated(popId, resolver, trust, templateId, answerType, initialState, truthKeeper, tier);
+        // Call resolver to create POP (may set initial state)
+        pop.state = IPopResolver(resolver).onPopCreated(popId, templateId, payload);
+
+        emit POPCreated(popId, resolver, trust, templateId, pop.answerType, pop.state, truthKeeper, pop.tierAtCreation);
     }
 
     /// @inheritdoc IPOPRegistry
