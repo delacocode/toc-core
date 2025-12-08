@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../Popregistry/POPRegistry.sol";
 import "../Popregistry/POPTypes.sol";
 import "../resolvers/OptimisticResolver.sol";
+import "../libraries/POPResultCodec.sol";
 
 /// @title OptimisticResolverTest
 /// @notice Tests for OptimisticResolver contract
@@ -136,7 +137,8 @@ contract OptimisticResolverTest is Test {
         registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
 
         // Check result
-        bool result = registry.getBooleanResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        bool result = POPResultCodec.decodeBoolean(resultBytes);
         require(result == true, "Result should be true");
     }
 
@@ -163,7 +165,8 @@ contract OptimisticResolverTest is Test {
 
         registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
 
-        bool result = registry.getBooleanResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        bool result = POPResultCodec.decodeBoolean(resultBytes);
         require(result == false, "Result should be false");
     }
 
@@ -302,7 +305,8 @@ contract OptimisticResolverTest is Test {
 
         registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
 
-        bool result = registry.getBooleanResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        bool result = POPResultCodec.decodeBoolean(resultBytes);
         require(result == true, "Result should be true (home team won)");
     }
 
@@ -357,7 +361,8 @@ contract OptimisticResolverTest is Test {
 
         registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
 
-        bool result = registry.getBooleanResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        bool result = POPResultCodec.decodeBoolean(resultBytes);
         require(result == false, "Result should be false");
     }
 
@@ -565,7 +570,7 @@ contract OptimisticResolverTest is Test {
             MIN_DISPUTE_BOND,
             "Premature resolution - event hasn't occurred",
             "",
-            false, 0, "" // Propose NO
+            POPResultCodec.encodeBoolean(false) // Propose NO
         );
 
         // Check disputed (pre-resolution goes to DISPUTED_ROUND_1)

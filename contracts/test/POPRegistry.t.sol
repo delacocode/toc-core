@@ -5,6 +5,7 @@ import "../Popregistry/POPRegistry.sol";
 import "../Popregistry/POPTypes.sol";
 import "./MockResolver.sol";
 import "./MockERC20.sol";
+import "../libraries/POPResultCodec.sol";
 
 /// @title POPRegistryTest
 /// @notice Comprehensive tests for POPRegistry contract
@@ -382,9 +383,7 @@ contract POPRegistryTest {
             MIN_DISPUTE_BOND,
             "Incorrect outcome",
             "",    // evidenceURI
-            false, // proposedBooleanResult
-            0,     // proposedNumericResult
-            ""     // proposedGenericResult
+            POPResultCodec.encodeBoolean(false) // proposedResult
         );
 
         POP memory pop = registry.getPOP(popId);
@@ -415,7 +414,8 @@ contract POPRegistryTest {
             address(0),
             MIN_DISPUTE_BOND,
             "First dispute",
-            "", false, 0, ""
+            "",
+            POPResultCodec.encodeBoolean(false)
         );
 
         // Try to dispute again
@@ -425,7 +425,8 @@ contract POPRegistryTest {
             address(0),
             MIN_DISPUTE_BOND,
             "Second dispute",
-            "", false, 0, ""
+            "",
+            POPResultCodec.encodeBoolean(false)
         ) {
             // Should not reach here
         } catch {
@@ -461,23 +462,22 @@ contract POPRegistryTest {
             MIN_DISPUTE_BOND,
             "Wrong outcome",
             "",    // evidenceURI
-            false, 0, "" // Propose false as correct result
+            POPResultCodec.encodeBoolean(false) // Propose false as correct result
         );
 
         // Uphold dispute (admin action) - use admin's corrected answer
         registry.resolveDispute(
             popId,
             DisputeResolution.UPHOLD_DISPUTE,
-            false, // correctedBooleanResult
-            0,     // correctedNumericResult
-            ""     // correctedGenericResult
+            POPResultCodec.encodeBoolean(false) // correctedResult
         );
 
         POP memory pop = registry.getPOP(popId);
         require(pop.state == POPState.RESOLVED, "State should be RESOLVED");
 
         // Check boolean result was corrected (default was true, should now be false)
-        bool result = registry.getBooleanResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        bool result = POPResultCodec.decodeBoolean(resultBytes);
         require(result == false, "Result should be corrected to false");
     }
 
@@ -502,21 +502,23 @@ contract POPRegistryTest {
             address(0),
             MIN_DISPUTE_BOND,
             "Wrong outcome",
-            "", false, 0, ""
+            "",
+            POPResultCodec.encodeBoolean(false)
         );
 
         // Reject dispute (admin action)
         registry.resolveDispute(
             popId,
             DisputeResolution.REJECT_DISPUTE,
-            false, 0, "" // Not used when rejecting
+            "" // Not used when rejecting
         );
 
         POP memory pop = registry.getPOP(popId);
         require(pop.state == POPState.RESOLVED, "State should be RESOLVED");
 
         // Check boolean result is original (true)
-        bool result = registry.getBooleanResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        bool result = POPResultCodec.decodeBoolean(resultBytes);
         require(result == true, "Result should remain true");
     }
 
@@ -541,14 +543,15 @@ contract POPRegistryTest {
             address(0),
             MIN_DISPUTE_BOND,
             "Invalid question",
-            "", false, 0, ""
+            "",
+            POPResultCodec.encodeBoolean(false)
         );
 
         // Cancel POP (admin action)
         registry.resolveDispute(
             popId,
             DisputeResolution.CANCEL_POP,
-            false, 0, "" // Not used when canceling
+            "" // Not used when canceling
         );
 
         POP memory pop = registry.getPOP(popId);
@@ -579,7 +582,7 @@ contract POPRegistryTest {
 
     function test_GenericAnswerType() public {
         resolver.setTemplateAnswerType(0, AnswerType.GENERIC);
-        resolver.setDefaultGenericResult(abi.encode("custom result"));
+        resolver.setDefaultResult(abi.encode("custom result"));
 
         registry.registerResolver(address(resolver));
         uint256 popId = registry.createPOP(
@@ -869,7 +872,8 @@ contract POPRegistryTest {
             address(0),
             MIN_DISPUTE_BOND,
             "Result is wrong",
-            "", false, 0, "" // evidenceURI, propose false as correct
+            "",
+            POPResultCodec.encodeBoolean(false) // propose false as correct
         );
 
         // Now should be contested
@@ -879,14 +883,15 @@ contract POPRegistryTest {
         registry.resolveDispute(
             popId,
             DisputeResolution.UPHOLD_DISPUTE,
-            false, 0, "" // correct to false
+            POPResultCodec.encodeBoolean(false) // correct to false
         );
 
         // Should have corrected result
         require(registry.hasCorrectedResult(popId), "Should have corrected result after uphold");
 
         // Check corrected result
-        bool correctedResult = registry.getCorrectedBooleanResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        bool correctedResult = POPResultCodec.decodeBoolean(resultBytes);
         require(correctedResult == false, "Corrected result should be false");
     }
 
@@ -912,7 +917,8 @@ contract POPRegistryTest {
             address(0),
             MIN_DISPUTE_BOND,
             "Should fail",
-            "", false, 0, ""
+            "",
+            POPResultCodec.encodeBoolean(false)
         ) {
             // Should not reach here
         } catch {
@@ -929,7 +935,7 @@ contract POPRegistryTest {
             address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper
         );
         registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId1, address(0), MIN_RESOLUTION_BOND, "");
-        registry.dispute{value: MIN_DISPUTE_BOND}(popId1, address(0), MIN_DISPUTE_BOND, "Pre-res dispute", "", false, 0, "");
+        registry.dispute{value: MIN_DISPUTE_BOND}(popId1, address(0), MIN_DISPUTE_BOND, "Pre-res dispute", "", POPResultCodec.encodeBoolean(false));
 
         DisputeInfo memory info1 = registry.getDisputeInfo(popId1);
         require(info1.phase == DisputePhase.PRE_RESOLUTION, "Should be pre-resolution phase");
@@ -939,7 +945,7 @@ contract POPRegistryTest {
             address(resolver), 0, "", 0, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper  // immediate resolution, post-res window
         );
         registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId2, address(0), MIN_RESOLUTION_BOND, "");
-        registry.dispute{value: MIN_DISPUTE_BOND}(popId2, address(0), MIN_DISPUTE_BOND, "Post-res dispute", "", false, 0, "");
+        registry.dispute{value: MIN_DISPUTE_BOND}(popId2, address(0), MIN_DISPUTE_BOND, "Post-res dispute", "", POPResultCodec.encodeBoolean(false));
 
         DisputeInfo memory info2 = registry.getDisputeInfo(popId2);
         require(info2.phase == DisputePhase.POST_RESOLUTION, "Should be post-resolution phase");
@@ -970,21 +976,18 @@ contract POPRegistryTest {
             MIN_DISPUTE_BOND,
             "Wrong number",
             "",    // evidenceURI
-            false,
-            50,   // proposed numeric result
-            ""
+            POPResultCodec.encodeNumeric(50) // proposed numeric result
         );
 
         // Admin upholds with their own corrected value (75)
         registry.resolveDispute(
             popId,
             DisputeResolution.UPHOLD_DISPUTE,
-            false,
-            75,   // admin's corrected result (overrides disputer's 50)
-            ""
+            POPResultCodec.encodeNumeric(75) // admin's corrected result (overrides disputer's 50)
         );
 
-        int256 result = registry.getNumericResult(popId);
+        bytes memory resultBytes = registry.getResult(popId);
+        int256 result = POPResultCodec.decodeNumeric(resultBytes);
         require(result == 75, "Result should be admin's corrected value (75)");
     }
 
@@ -1005,7 +1008,8 @@ contract POPRegistryTest {
 
         ExtensiveResult memory result = registry.getExtensiveResult(popId);
         require(result.answerType == AnswerType.BOOLEAN, "Answer type should be BOOLEAN");
-        require(result.booleanResult == true, "Boolean result should be true (mock default)");
+        bool boolResult = POPResultCodec.decodeBoolean(result.result);
+        require(boolResult == true, "Boolean result should be true (mock default)");
         require(result.isFinalized == true, "Should be finalized");
         require(result.wasDisputed == false, "Should not be disputed");
         require(result.wasCorrected == false, "Should not be corrected");

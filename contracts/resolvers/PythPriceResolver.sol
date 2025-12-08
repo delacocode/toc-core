@@ -6,6 +6,7 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "../Popregistry/IPopResolver.sol";
 import "../Popregistry/IPOPRegistry.sol";
 import "../Popregistry/POPTypes.sol";
+import "../libraries/POPResultCodec.sol";
 
 /// @title PythPriceResolver
 /// @notice Resolver for price-based POPs using Pyth oracle
@@ -123,7 +124,7 @@ contract PythPriceResolver is IPopResolver {
         uint256 popId,
         address, // caller not used for price resolution
         bytes calldata pythUpdateData
-    ) external onlyRegistry returns (bool booleanResult, int256 numericResult, bytes memory genericResult) {
+    ) external onlyRegistry returns (bytes memory result) {
         uint32 templateId = _popTemplates[popId];
 
         bool outcome;
@@ -138,9 +139,7 @@ contract PythPriceResolver is IPopResolver {
         }
 
         // All Pyth templates return boolean results
-        booleanResult = outcome;
-        numericResult = 0;
-        genericResult = "";
+        return POPResultCodec.encodeBoolean(outcome);
     }
 
     /// @inheritdoc IPopResolver

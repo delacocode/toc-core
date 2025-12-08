@@ -146,15 +146,11 @@ interface IPOPRegistry {
     /// @notice TruthKeeper resolves a Round 1 dispute
     /// @param popId The disputed POP
     /// @param resolution How to resolve (UPHOLD_DISPUTE, REJECT_DISPUTE, CANCEL_POP, TOO_EARLY)
-    /// @param correctedBooleanResult Corrected boolean result (if upholding)
-    /// @param correctedNumericResult Corrected numeric result (if upholding)
-    /// @param correctedGenericResult Corrected generic result (if upholding)
+    /// @param correctedResult ABI-encoded corrected result (if upholding)
     function resolveTruthKeeperDispute(
         uint256 popId,
         DisputeResolution resolution,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult
+        bytes calldata correctedResult
     ) external;
 
     // ============ POP Lifecycle ============
@@ -204,18 +200,14 @@ interface IPOPRegistry {
     /// @param bondAmount Amount of bond to post
     /// @param reason Reason for the dispute
     /// @param evidenceURI IPFS/Arweave link for detailed evidence
-    /// @param proposedBooleanResult Disputer's proposed correct boolean result (optional)
-    /// @param proposedNumericResult Disputer's proposed correct numeric result (optional)
-    /// @param proposedGenericResult Disputer's proposed correct generic result (optional)
+    /// @param proposedResult ABI-encoded disputer's proposed correct result (optional)
     function dispute(
         uint256 popId,
         address bondToken,
         uint256 bondAmount,
         string calldata reason,
         string calldata evidenceURI,
-        bool proposedBooleanResult,
-        int256 proposedNumericResult,
-        bytes calldata proposedGenericResult
+        bytes calldata proposedResult
     ) external payable;
 
     /// @notice Challenge a TruthKeeper's decision (escalate to Round 2)
@@ -224,18 +216,14 @@ interface IPOPRegistry {
     /// @param bondAmount Amount of escalation bond (higher than dispute bond)
     /// @param reason Reason for challenging TK decision
     /// @param evidenceURI IPFS/Arweave link for detailed evidence
-    /// @param proposedBooleanResult Challenger's proposed boolean result
-    /// @param proposedNumericResult Challenger's proposed numeric result
-    /// @param proposedGenericResult Challenger's proposed generic result
+    /// @param proposedResult ABI-encoded challenger's proposed result
     function challengeTruthKeeperDecision(
         uint256 popId,
         address bondToken,
         uint256 bondAmount,
         string calldata reason,
         string calldata evidenceURI,
-        bool proposedBooleanResult,
-        int256 proposedNumericResult,
-        bytes calldata proposedGenericResult
+        bytes calldata proposedResult
     ) external payable;
 
     /// @notice Finalize a POP after TruthKeeper decision (if no challenge)
@@ -249,29 +237,21 @@ interface IPOPRegistry {
     /// @notice Admin resolves a Round 2 escalation
     /// @param popId The escalated POP
     /// @param resolution How to resolve the escalation
-    /// @param correctedBooleanResult Admin's corrected boolean result
-    /// @param correctedNumericResult Admin's corrected numeric result
-    /// @param correctedGenericResult Admin's corrected generic result
+    /// @param correctedResult ABI-encoded admin's corrected result
     function resolveEscalation(
         uint256 popId,
         DisputeResolution resolution,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult
+        bytes calldata correctedResult
     ) external;
 
     /// @notice Admin resolves a dispute
     /// @param popId The disputed POP
     /// @param resolution How to resolve the dispute
-    /// @param correctedBooleanResult Admin's corrected boolean result (used if upholding, can override disputer's proposal)
-    /// @param correctedNumericResult Admin's corrected numeric result (used if upholding, can override disputer's proposal)
-    /// @param correctedGenericResult Admin's corrected generic result (used if upholding, can override disputer's proposal)
+    /// @param correctedResult ABI-encoded admin's corrected result (used if upholding, can override disputer's proposal)
     function resolveDispute(
         uint256 popId,
         DisputeResolution resolution,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult
+        bytes calldata correctedResult
     ) external;
 
     // ============ Resolver Callbacks ============
@@ -352,20 +332,17 @@ interface IPOPRegistry {
     /// @return result The POP result (check isResolved before using)
     function getPOPResult(uint256 popId) external view returns (POPResult memory result);
 
-    /// @notice Get the boolean result for a POP (only valid if answerType == BOOLEAN)
+    /// @notice Get the ABI-encoded result for a POP
+    /// @dev Use POPResultCodec to decode based on answerType
     /// @param popId The POP identifier
-    /// @return result The boolean result
-    function getBooleanResult(uint256 popId) external view returns (bool result);
+    /// @return result The ABI-encoded result
+    function getResult(uint256 popId) external view returns (bytes memory result);
 
-    /// @notice Get the numeric result for a POP (only valid if answerType == NUMERIC)
+    /// @notice Get the original proposed result (before any corrections)
+    /// @dev Useful for UI audit trails
     /// @param popId The POP identifier
-    /// @return result The numeric result
-    function getNumericResult(uint256 popId) external view returns (int256 result);
-
-    /// @notice Get the generic result for a POP (only valid if answerType == GENERIC)
-    /// @param popId The POP identifier
-    /// @return result The generic result as bytes
-    function getGenericResult(uint256 popId) external view returns (bytes memory result);
+    /// @return result The original ABI-encoded result
+    function getOriginalResult(uint256 popId) external view returns (bytes memory result);
 
     /// @notice Check if bond is acceptable for resolution
     /// @param token Token address
@@ -403,21 +380,6 @@ interface IPOPRegistry {
     /// @param popId The POP identifier
     /// @return True if has corrected result
     function hasCorrectedResult(uint256 popId) external view returns (bool);
-
-    /// @notice Get the corrected boolean result (only valid if hasCorrectedResult is true)
-    /// @param popId The POP identifier
-    /// @return result The corrected boolean result
-    function getCorrectedBooleanResult(uint256 popId) external view returns (bool result);
-
-    /// @notice Get the corrected numeric result (only valid if hasCorrectedResult is true)
-    /// @param popId The POP identifier
-    /// @return result The corrected numeric result
-    function getCorrectedNumericResult(uint256 popId) external view returns (int256 result);
-
-    /// @notice Get the corrected generic result (only valid if hasCorrectedResult is true)
-    /// @param popId The POP identifier
-    /// @return result The corrected generic result
-    function getCorrectedGenericResult(uint256 popId) external view returns (bytes memory result);
 
     // ============ TruthKeeper View Functions ============
 

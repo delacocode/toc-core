@@ -80,14 +80,12 @@ struct POP {
     AccountabilityTier tierAtCreation; // Immutable snapshot of tier
 }
 
-/// @notice Result data for a resolved POP, stored separately from POP lifecycle
-/// @dev Only one of booleanResult/numericResult/genericResult is valid based on answerType
+/// @notice Result data for a resolved POP
+/// @dev Result is ABI-encoded based on answerType. Use POPResultCodec to decode.
 struct POPResult {
     AnswerType answerType;      // Which type of answer this POP returns
     bool isResolved;            // Whether a result has been set
-    bool booleanResult;         // Result if answerType == BOOLEAN
-    int256 numericResult;       // Result if answerType == NUMERIC
-    bytes genericResult;        // Result if answerType == GENERIC
+    bytes result;               // ABI-encoded result (use POPResultCodec to decode)
 }
 
 /// @notice Information about a dispute
@@ -102,10 +100,8 @@ struct DisputeInfo {
     uint256 resolvedAt;             // Timestamp when dispute was resolved (0 if pending)
     bool resultCorrected;           // Whether the result was corrected (dispute upheld)
 
-    // Disputer's proposed correction (optional)
-    bool proposedBooleanResult;
-    int256 proposedNumericResult;
-    bytes proposedGenericResult;
+    // Disputer's proposed correction (optional, ABI-encoded)
+    bytes proposedResult;
 
     // TruthKeeper decision (Round 1)
     DisputeResolution tkDecision;   // TK's decision (if decided)
@@ -122,10 +118,8 @@ struct EscalationInfo {
     uint256 filedAt;                // Timestamp when escalation was filed
     uint256 resolvedAt;             // Timestamp when admin resolved (0 if pending)
 
-    // Challenger's proposed correction (optional)
-    bool proposedBooleanResult;
-    int256 proposedNumericResult;
-    bytes proposedGenericResult;
+    // Challenger's proposed correction (optional, ABI-encoded)
+    bytes proposedResult;
 }
 
 /// @notice Information about a resolution proposal
@@ -133,10 +127,7 @@ struct ResolutionInfo {
     address proposer;           // Who proposed the resolution
     address bondToken;          // Token used for resolution bond
     uint256 bondAmount;         // Amount of bond held
-    // Proposed outcome (type determined by POP's answerType)
-    bool proposedBooleanOutcome;
-    int256 proposedNumericOutcome;
-    bytes proposedGenericOutcome;
+    bytes proposedResult;       // ABI-encoded proposed outcome
 }
 
 /// @notice Configuration for a resolver
@@ -172,15 +163,8 @@ struct POPInfo {
 
     // Result (only valid when state == RESOLVED)
     bool isResolved;
-    bool booleanResult;
-    int256 numericResult;
-    bytes genericResult;
-
-    // Corrected result (if dispute was upheld)
-    bool hasCorrectedResult;
-    bool correctedBooleanResult;
-    int256 correctedNumericResult;
-    bytes correctedGenericResult;
+    bytes result;               // ABI-encoded result (use POPResultCodec to decode)
+    bool hasCorrectedResult;    // Whether result was corrected via dispute
 
     // Resolver context
     ResolverTrust resolverTrust;
@@ -196,9 +180,7 @@ struct BondRequirement {
 struct ExtensiveResult {
     // The answer
     AnswerType answerType;
-    bool booleanResult;
-    int256 numericResult;
-    bytes genericResult;
+    bytes result;               // ABI-encoded result (use POPResultCodec to decode)
 
     // Resolution context
     bool isFinalized;           // State == RESOLVED

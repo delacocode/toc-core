@@ -4,6 +4,7 @@ pragma solidity ^0.8.29;
 import "../Popregistry/IPopResolver.sol";
 import "../Popregistry/IPOPRegistry.sol";
 import "../Popregistry/POPTypes.sol";
+import "../libraries/POPResultCodec.sol";
 
 /// @title OptimisticResolver
 /// @notice Resolver for human-judgment questions using optimistic proposal model
@@ -165,7 +166,7 @@ contract OptimisticResolver is IPopResolver {
         uint256 popId,
         address, // caller - not used for access control in optimistic model
         bytes calldata answerPayload
-    ) external onlyRegistry returns (bool booleanResult, int256 numericResult, bytes memory genericResult) {
+    ) external onlyRegistry returns (bytes memory result) {
         QuestionData storage q = _questions[popId];
         if (q.createdAt == 0) {
             revert PopNotManaged(popId);
@@ -175,7 +176,7 @@ contract OptimisticResolver is IPopResolver {
         AnswerPayload memory answer = abi.decode(answerPayload, (AnswerPayload));
 
         // All templates return boolean
-        return (answer.answer, 0, "");
+        return POPResultCodec.encodeBoolean(answer.answer);
     }
 
     /// @inheritdoc IPopResolver

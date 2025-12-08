@@ -29,18 +29,21 @@ interface IPopResolver {
     ) external returns (POPState initialState);
 
     /// @notice Resolve a POP with provided proof/data
-    /// @dev Called by POPRegistry when someone proposes resolution
+    /// @dev Called by POPRegistry when someone proposes resolution.
+    ///      Result must be ABI-encoded based on template's answerType:
+    ///      - BOOLEAN: abi.encode(bool)
+    ///      - NUMERIC: abi.encode(int256)
+    ///      - GENERIC: raw bytes
+    ///      Use POPResultCodec library for encoding.
     /// @param popId The POP identifier
     /// @param caller The address that initiated resolution (for access control)
     /// @param payload Resolver-specific resolution data (e.g., Pyth price proof)
-    /// @return booleanResult Result if answerType == BOOLEAN (ignored otherwise)
-    /// @return numericResult Result if answerType == NUMERIC (ignored otherwise)
-    /// @return genericResult Result if answerType == GENERIC (ignored otherwise)
+    /// @return result ABI-encoded result based on template's answerType
     function resolvePop(
         uint256 popId,
         address caller,
         bytes calldata payload
-    ) external returns (bool booleanResult, int256 numericResult, bytes memory genericResult);
+    ) external returns (bytes memory result);
 
     /// @notice Get POP details stored by this resolver
     /// @param popId The POP identifier

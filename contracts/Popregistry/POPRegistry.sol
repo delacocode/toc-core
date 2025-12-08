@@ -33,15 +33,10 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     mapping(uint256 => POP) private _pops;
     mapping(uint256 => DisputeInfo) private _disputes;
     mapping(uint256 => ResolutionInfo) private _resolutions;
-    mapping(uint256 => bool) private _booleanResults;
-    mapping(uint256 => int256) private _numericResults;
-    mapping(uint256 => bytes) private _genericResults;
+    mapping(uint256 => bytes) private _results;
     uint256 private _nextPopId;
 
-    // Corrected results storage (for post-resolution disputes)
-    mapping(uint256 => bool) private _correctedBooleanResults;
-    mapping(uint256 => int256) private _correctedNumericResults;
-    mapping(uint256 => bytes) private _correctedGenericResults;
+    // Corrected results flag (for post-resolution disputes)
     mapping(uint256 => bool) private _hasCorrectedResult;
 
     // Bond configuration
@@ -235,9 +230,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     function resolveTruthKeeperDispute(
         uint256 popId,
         DisputeResolution resolution,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult
+        bytes calldata correctedResult
     ) external nonReentrant validPopId(popId) onlyTruthKeeper(popId) {
         POP storage pop = _pops[popId];
 
@@ -363,16 +356,13 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         uint256 bondAmount,
         bytes calldata payload
     ) internal {
-        (bool boolResult, int256 numResult, bytes memory genResult) =
-            IPopResolver(resolver).resolvePop(popId, msg.sender, payload);
+        bytes memory result = IPopResolver(resolver).resolvePop(popId, msg.sender, payload);
 
         _resolutions[popId] = ResolutionInfo({
             proposer: msg.sender,
             bondToken: bondToken,
             bondAmount: bondAmount,
-            proposedBooleanOutcome: boolResult,
-            proposedNumericOutcome: numResult,
-            proposedGenericOutcome: genResult
+            proposedResult: result
         });
     }
 
@@ -393,7 +383,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             : 0;
 
         // Store result immediately
-        _storeResult(popId, pop.answerType, resolution.proposedBooleanOutcome, resolution.proposedNumericOutcome, resolution.proposedGenericOutcome);
+        _results[popId] = resolution.proposedResult;
 
         // Return bond if it was posted (for undisputable POPs with postResolutionWindow == 0)
         if (requiresBond && pop.postResolutionWindow == 0) {
@@ -444,7 +434,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             : 0;
 
         // Store the final result
-        _storeResult(popId, pop.answerType, resolution.proposedBooleanOutcome, resolution.proposedNumericOutcome, resolution.proposedGenericOutcome);
+        _results[popId] = resolution.proposedResult;
 
         // Return resolution bond to proposer (unless there's a post-resolution window)
         if (pop.postResolutionWindow == 0) {
@@ -464,9 +454,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         uint256 bondAmount,
         string calldata reason,
         string calldata evidenceURI,
-        bool proposedBooleanResult,
-        int256 proposedNumericResult,
-        bytes calldata proposedGenericResult
+        bytes calldata proposedResult
     ) external payable nonReentrant validPopId(popId) {
         POP storage pop = _pops[popId];
 
@@ -519,9 +507,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             filedAt: block.timestamp,
             resolvedAt: 0,
             resultCorrected: false,
-            proposedBooleanResult: proposedBooleanResult,
-            proposedNumericResult: proposedNumericResult,
-            proposedGenericResult: proposedGenericResult,
+            proposedResult: proposedResult,
             tkDecision: DisputeResolution.UPHOLD_DISPUTE, // Default, will be set by TK
             tkDecidedAt: 0
         });
@@ -542,9 +528,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         uint256 bondAmount,
         string calldata reason,
         string calldata evidenceURI,
-        bool proposedBooleanResult,
-        int256 proposedNumericResult,
-        bytes calldata proposedGenericResult
+        bytes calldata proposedResult
     ) external payable nonReentrant validPopId(popId) {
         POP storage pop = _pops[popId];
         DisputeInfo storage disputeInfo = _disputes[popId];
@@ -582,9 +566,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             evidenceURI: evidenceURI,
             filedAt: block.timestamp,
             resolvedAt: 0,
-            proposedBooleanResult: proposedBooleanResult,
-            proposedNumericResult: proposedNumericResult,
-            proposedGenericResult: proposedGenericResult
+            proposedResult: proposedResult
         });
 
         // Move to Round 2
@@ -650,9 +632,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     function resolveEscalation(
         uint256 popId,
         DisputeResolution resolution,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult
+        bytes calldata correctedResult
     ) external onlyOwner nonReentrant validPopId(popId) {
         POP storage pop = _pops[popId];
 
@@ -681,7 +661,8 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             disputeInfo.resultCorrected = true;
 
             // Set corrected result
-            _storeResult(popId, pop.answerType, correctedBooleanResult, correctedNumericResult, correctedGenericResult);
+            _results[popId] = correctedResult;
+            _hasCorrectedResult[popId] = true;
 
             // Bond economics: challenger gets back + 50% of TK-side bond
             // Original disputer also gets rewarded
@@ -715,9 +696,7 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     function resolveDispute(
         uint256 popId,
         DisputeResolution resolution,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult
+        bytes calldata correctedResult
     ) external onlyOwner nonReentrant validPopId(popId) {
         DisputeInfo storage disputeInfo = _disputes[popId];
 
@@ -745,8 +724,16 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         if (resolution == DisputeResolution.UPHOLD_DISPUTE) {
             disputeInfo.resultCorrected = true;
 
-            // Post-resolution: store corrected result in separate mappings
-            _storePostResolutionCorrectedResult(popId, pop.answerType, correctedBooleanResult, correctedNumericResult, correctedGenericResult, disputeInfo);
+            // Post-resolution: store corrected result (overwrite existing)
+            // Priority: admin's answer > disputer's proposed answer
+            if (correctedResult.length > 0) {
+                _results[popId] = correctedResult;
+            } else if (disputeInfo.proposedResult.length > 0) {
+                _results[popId] = disputeInfo.proposedResult;
+            } else {
+                revert NoCorrectedAnswerProvided(popId);
+            }
+            _hasCorrectedResult[popId] = true;
 
             // Slash resolution bond with 50/50 split
             _slashBondWithReward(popId, disputeInfo.disputer, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
@@ -835,13 +822,8 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             truthKeeper: pop.truthKeeper,
             tierAtCreation: pop.tierAtCreation,
             isResolved: pop.state == POPState.RESOLVED,
-            booleanResult: _hasCorrectedResult[popId] ? _correctedBooleanResults[popId] : _booleanResults[popId],
-            numericResult: _hasCorrectedResult[popId] ? _correctedNumericResults[popId] : _numericResults[popId],
-            genericResult: _hasCorrectedResult[popId] ? _correctedGenericResults[popId] : _genericResults[popId],
+            result: _results[popId],
             hasCorrectedResult: _hasCorrectedResult[popId],
-            correctedBooleanResult: _correctedBooleanResults[popId],
-            correctedNumericResult: _correctedNumericResults[popId],
-            correctedGenericResult: _correctedGenericResults[popId],
             resolverTrust: _resolverConfigs[pop.resolver].trust
         });
     }
@@ -907,34 +889,18 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         result = POPResult({
             answerType: pop.answerType,
             isResolved: pop.state == POPState.RESOLVED,
-            booleanResult: _booleanResults[popId],
-            numericResult: _numericResults[popId],
-            genericResult: _genericResults[popId]
+            result: _results[popId]
         });
     }
 
     /// @inheritdoc IPOPRegistry
-    function getBooleanResult(uint256 popId) external view validPopId(popId) returns (bool result) {
-        if (_hasCorrectedResult[popId]) {
-            return _correctedBooleanResults[popId];
-        }
-        return _booleanResults[popId];
+    function getResult(uint256 popId) external view validPopId(popId) returns (bytes memory result) {
+        return _results[popId];
     }
 
     /// @inheritdoc IPOPRegistry
-    function getNumericResult(uint256 popId) external view validPopId(popId) returns (int256 result) {
-        if (_hasCorrectedResult[popId]) {
-            return _correctedNumericResults[popId];
-        }
-        return _numericResults[popId];
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function getGenericResult(uint256 popId) external view validPopId(popId) returns (bytes memory result) {
-        if (_hasCorrectedResult[popId]) {
-            return _correctedGenericResults[popId];
-        }
-        return _genericResults[popId];
+    function getOriginalResult(uint256 popId) external view validPopId(popId) returns (bytes memory result) {
+        return _resolutions[popId].proposedResult;
     }
 
     /// @inheritdoc IPOPRegistry
@@ -1000,21 +966,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         return _hasCorrectedResult[popId];
     }
 
-    /// @inheritdoc IPOPRegistry
-    function getCorrectedBooleanResult(uint256 popId) external view validPopId(popId) returns (bool result) {
-        return _correctedBooleanResults[popId];
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function getCorrectedNumericResult(uint256 popId) external view validPopId(popId) returns (int256 result) {
-        return _correctedNumericResults[popId];
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function getCorrectedGenericResult(uint256 popId) external view validPopId(popId) returns (bytes memory result) {
-        return _correctedGenericResults[popId];
-    }
-
     // ============ TruthKeeper View Functions ============
 
     /// @inheritdoc IPOPRegistry
@@ -1054,16 +1005,12 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         POP storage pop = _pops[popId];
         DisputeInfo storage disputeInfo = _disputes[popId];
 
-        bool hasCorrected = _hasCorrectedResult[popId];
-
         result = ExtensiveResult({
             answerType: pop.answerType,
-            booleanResult: hasCorrected ? _correctedBooleanResults[popId] : _booleanResults[popId],
-            numericResult: hasCorrected ? _correctedNumericResults[popId] : _numericResults[popId],
-            genericResult: hasCorrected ? _correctedGenericResults[popId] : _genericResults[popId],
+            result: _results[popId],
             isFinalized: pop.state == POPState.RESOLVED,
             wasDisputed: disputeInfo.disputer != address(0),
-            wasCorrected: hasCorrected,
+            wasCorrected: _hasCorrectedResult[popId],
             resolvedAt: pop.resolutionTime,
             tier: pop.tierAtCreation,
             resolverTrust: _resolverConfigs[pop.resolver].trust
@@ -1085,16 +1032,13 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         }
 
         DisputeInfo storage disputeInfo = _disputes[popId];
-        bool hasCorrected = _hasCorrectedResult[popId];
 
         result = ExtensiveResult({
             answerType: pop.answerType,
-            booleanResult: hasCorrected ? _correctedBooleanResults[popId] : _booleanResults[popId],
-            numericResult: hasCorrected ? _correctedNumericResults[popId] : _numericResults[popId],
-            genericResult: hasCorrected ? _correctedGenericResults[popId] : _genericResults[popId],
+            result: _results[popId],
             isFinalized: true,
             wasDisputed: disputeInfo.disputer != address(0),
-            wasCorrected: hasCorrected,
+            wasCorrected: _hasCorrectedResult[popId],
             resolvedAt: pop.resolutionTime,
             tier: pop.tierAtCreation,
             resolverTrust: _resolverConfigs[pop.resolver].trust
@@ -1256,7 +1200,8 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             disputeInfo.resultCorrected = true;
 
             // Set the disputer's proposed result
-            _storeResult(popId, pop.answerType, disputeInfo.proposedBooleanResult, disputeInfo.proposedNumericResult, disputeInfo.proposedGenericResult);
+            _results[popId] = disputeInfo.proposedResult;
+            _hasCorrectedResult[popId] = true;
 
             // Bond economics: disputer gets back + 50% of proposer bond
             _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
@@ -1271,6 +1216,8 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             emit DisputeResolved(popId, decision, pop.truthKeeper);
         } else {
             // REJECT_DISPUTE - proposer was right
+            _results[popId] = resolutionInfo.proposedResult;
+
             _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
             _slashBondWithReward(popId, resolutionInfo.proposer, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
 
@@ -1284,68 +1231,4 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         }
     }
 
-    /// @notice Store result in the appropriate mapping
-    function _storeResult(
-        uint256 popId,
-        AnswerType answerType,
-        bool boolResult,
-        int256 numResult,
-        bytes memory genResult
-    ) internal {
-        if (answerType == AnswerType.BOOLEAN) {
-            _booleanResults[popId] = boolResult;
-        } else if (answerType == AnswerType.NUMERIC) {
-            _numericResults[popId] = numResult;
-        } else if (answerType == AnswerType.GENERIC) {
-            _genericResults[popId] = genResult;
-        }
-    }
-
-    /// @notice Store corrected result for post-resolution dispute upheld
-    function _storePostResolutionCorrectedResult(
-        uint256 popId,
-        AnswerType answerType,
-        bool correctedBooleanResult,
-        int256 correctedNumericResult,
-        bytes calldata correctedGenericResult,
-        DisputeInfo storage disputeInfo
-    ) internal {
-        if (answerType == AnswerType.BOOLEAN) {
-            // For boolean: admin's if different from original, else disputer's, else flip
-            bool originalResult = _booleanResults[popId];
-            bool result;
-            if (correctedBooleanResult != originalResult) {
-                result = correctedBooleanResult;
-            } else if (disputeInfo.proposedBooleanResult != originalResult) {
-                result = disputeInfo.proposedBooleanResult;
-            } else {
-                result = !originalResult;
-            }
-            _correctedBooleanResults[popId] = result;
-            _hasCorrectedResult[popId] = true;
-        } else if (answerType == AnswerType.NUMERIC) {
-            int256 originalResult = _numericResults[popId];
-            int256 result;
-            if (correctedNumericResult != originalResult) {
-                result = correctedNumericResult;
-            } else if (disputeInfo.proposedNumericResult != originalResult) {
-                result = disputeInfo.proposedNumericResult;
-            } else {
-                revert NoCorrectedAnswerProvided(popId);
-            }
-            _correctedNumericResults[popId] = result;
-            _hasCorrectedResult[popId] = true;
-        } else if (answerType == AnswerType.GENERIC) {
-            bytes memory result;
-            if (correctedGenericResult.length > 0) {
-                result = correctedGenericResult;
-            } else if (disputeInfo.proposedGenericResult.length > 0) {
-                result = disputeInfo.proposedGenericResult;
-            } else {
-                revert NoCorrectedAnswerProvided(popId);
-            }
-            _correctedGenericResults[popId] = result;
-            _hasCorrectedResult[popId] = true;
-        }
-    }
 }

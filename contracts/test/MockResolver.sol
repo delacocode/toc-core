@@ -3,6 +3,7 @@ pragma solidity ^0.8.29;
 
 import "../Popregistry/IPopResolver.sol";
 import "../Popregistry/POPTypes.sol";
+import "../libraries/POPResultCodec.sol";
 
 /// @title MockResolver
 /// @notice Mock resolver for testing the POPRegistry
@@ -23,13 +24,8 @@ contract MockResolver is IPopResolver {
     bool public shouldRevertOnResolve;
 
     // Resolution outcomes (can be set per POP or use defaults)
-    bool public defaultBooleanResult = true;
-    int256 public defaultNumericResult = 100;
-    bytes public defaultGenericResult = "test";
-
-    mapping(uint256 => bool) private _booleanResults;
-    mapping(uint256 => int256) private _numericResults;
-    mapping(uint256 => bytes) private _genericResults;
+    bytes public defaultResult;
+    mapping(uint256 => bytes) private _results;
     mapping(uint256 => bool) private _hasCustomResult;
 
     // Template configuration
@@ -50,6 +46,8 @@ contract MockResolver is IPopResolver {
         _templateAnswerTypes[0] = AnswerType.BOOLEAN;
         _templateAnswerTypes[1] = AnswerType.NUMERIC;
         _templateAnswerTypes[2] = AnswerType.GENERIC;
+        // Default result (boolean true)
+        defaultResult = POPResultCodec.encodeBoolean(true);
     }
 
     // ============ Modifiers ============
@@ -79,30 +77,30 @@ contract MockResolver is IPopResolver {
         shouldRevertOnResolve = value;
     }
 
+    function setDefaultResult(bytes calldata value) external {
+        defaultResult = value;
+    }
+
     function setDefaultBooleanResult(bool value) external {
-        defaultBooleanResult = value;
+        defaultResult = POPResultCodec.encodeBoolean(value);
     }
 
     function setDefaultNumericResult(int256 value) external {
-        defaultNumericResult = value;
+        defaultResult = POPResultCodec.encodeNumeric(value);
     }
 
-    function setDefaultGenericResult(bytes calldata value) external {
-        defaultGenericResult = value;
+    function setPopResult(uint256 popId, bytes calldata value) external {
+        _results[popId] = value;
+        _hasCustomResult[popId] = true;
     }
 
     function setPopBooleanResult(uint256 popId, bool value) external {
-        _booleanResults[popId] = value;
+        _results[popId] = POPResultCodec.encodeBoolean(value);
         _hasCustomResult[popId] = true;
     }
 
     function setPopNumericResult(uint256 popId, int256 value) external {
-        _numericResults[popId] = value;
-        _hasCustomResult[popId] = true;
-    }
-
-    function setPopGenericResult(uint256 popId, bytes calldata value) external {
-        _genericResults[popId] = value;
+        _results[popId] = POPResultCodec.encodeNumeric(value);
         _hasCustomResult[popId] = true;
     }
 
@@ -143,16 +141,16 @@ contract MockResolver is IPopResolver {
         uint256 popId,
         address, // caller
         bytes calldata // payload
-    ) external onlyRegistry returns (bool booleanResult, int256 numericResult, bytes memory genericResult) {
+    ) external onlyRegistry returns (bytes memory result) {
         if (shouldRevertOnResolve) {
             revert MockRevertOnResolve();
         }
 
         if (_hasCustomResult[popId]) {
-            return (_booleanResults[popId], _numericResults[popId], _genericResults[popId]);
+            return _results[popId];
         }
 
-        return (defaultBooleanResult, defaultNumericResult, defaultGenericResult);
+        return defaultResult;
     }
 
     /// @inheritdoc IPopResolver
