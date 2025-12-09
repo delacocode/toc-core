@@ -6,12 +6,14 @@ import "../Popregistry/POPRegistry.sol";
 import "../Popregistry/POPTypes.sol";
 import "../resolvers/OptimisticResolver.sol";
 import "../libraries/POPResultCodec.sol";
+import "./MockTruthKeeper.sol";
 
 /// @title OptimisticResolverTest
 /// @notice Tests for OptimisticResolver contract
 contract OptimisticResolverTest is Test {
     POPRegistry registry;
     OptimisticResolver resolver;
+    MockTruthKeeper truthKeeperContract;
 
     address owner;
     address user1;
@@ -32,7 +34,6 @@ contract OptimisticResolverTest is Test {
         owner = address(this);
         user1 = address(0x1);
         user2 = address(0x2);
-        truthKeeper = address(0x4);
         creator = address(0x5);
 
         // Fund creator
@@ -43,6 +44,10 @@ contract OptimisticResolverTest is Test {
 
         // Deploy optimistic resolver
         resolver = new OptimisticResolver(address(registry));
+
+        // Deploy mock TruthKeeper contract
+        truthKeeperContract = new MockTruthKeeper(address(registry));
+        truthKeeper = address(truthKeeperContract);
 
         // Configure acceptable bonds
         registry.addAcceptableResolutionBond(address(0), MIN_RESOLUTION_BOND);

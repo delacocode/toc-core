@@ -56,6 +56,13 @@ enum DisputePhase {
     POST_RESOLUTION // Dispute filed after RESOLVED state
 }
 
+/// @notice Response from TruthKeeper when a POP is assigned
+enum TKApprovalResponse {
+    APPROVE,        // Accept responsibility, tier upgrades
+    REJECT_SOFT,    // Decline but allow POP as PERMISSIONLESS
+    REJECT_HARD     // Decline and revert POP creation
+}
+
 /// @notice Core POP data stored in registry
 struct POP {
     address resolver;               // Which resolver manages this POP

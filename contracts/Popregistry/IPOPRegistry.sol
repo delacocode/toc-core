@@ -16,8 +16,8 @@ interface IPOPRegistry {
     // TruthKeeper registry
     event TruthKeeperWhitelisted(address indexed tk);
     event TruthKeeperRemovedFromWhitelist(address indexed tk);
-    event TruthKeeperGuaranteeAdded(address indexed tk, address indexed resolver);
-    event TruthKeeperGuaranteeRemoved(address indexed tk, address indexed resolver);
+    event TruthKeeperApproved(uint256 indexed popId, address indexed tk);
+    event TruthKeeperSoftRejected(uint256 indexed popId, address indexed tk);
 
     // POP lifecycle
     event POPCreated(
@@ -134,14 +134,6 @@ interface IPOPRegistry {
     function addAcceptableEscalationBond(address token, uint256 minAmount) external;
 
     // ============ TruthKeeper Functions ============
-
-    /// @notice TruthKeeper adds a resolver to their guaranteed list
-    /// @param resolver Address of resolver they guarantee to handle
-    function addGuaranteedResolver(address resolver) external;
-
-    /// @notice TruthKeeper removes a resolver from their guaranteed list
-    /// @param resolver Address of resolver to remove
-    function removeGuaranteedResolver(address resolver) external;
 
     /// @notice TruthKeeper resolves a Round 1 dispute
     /// @param popId The disputed POP
@@ -388,27 +380,10 @@ interface IPOPRegistry {
     /// @return True if whitelisted
     function isWhitelistedTruthKeeper(address tk) external view returns (bool);
 
-    /// @notice Get list of resolvers a TruthKeeper guarantees
-    /// @param tk TruthKeeper address
-    /// @return Array of resolver addresses
-    function getTruthKeeperGuaranteedResolvers(address tk) external view returns (address[] memory);
-
-    /// @notice Check if TruthKeeper guarantees a specific resolver
-    /// @param tk TruthKeeper address
-    /// @param resolver Resolver address
-    /// @return True if TK guarantees this resolver
-    function isTruthKeeperGuaranteedResolver(address tk, address resolver) external view returns (bool);
-
     /// @notice Get escalation info for a POP
     /// @param popId The POP identifier
     /// @return info The escalation information
     function getEscalationInfo(uint256 popId) external view returns (EscalationInfo memory info);
-
-    /// @notice Calculate accountability tier for a resolver + TK combination
-    /// @param resolver Resolver address
-    /// @param tk TruthKeeper address
-    /// @return tier The accountability tier
-    function calculateAccountabilityTier(address resolver, address tk) external view returns (AccountabilityTier tier);
 
     /// @notice Check if a bond is acceptable for escalation
     /// @param token Token address

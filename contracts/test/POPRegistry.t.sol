@@ -5,6 +5,7 @@ import "../Popregistry/POPRegistry.sol";
 import "../Popregistry/POPTypes.sol";
 import "./MockResolver.sol";
 import "./MockERC20.sol";
+import "./MockTruthKeeper.sol";
 import "../libraries/POPResultCodec.sol";
 
 /// @title POPRegistryTest
@@ -13,6 +14,7 @@ contract POPRegistryTest {
     POPRegistry registry;
     MockResolver resolver;
     MockERC20 bondToken;
+    MockTruthKeeper truthKeeperContract;
 
     address owner;
     address user1;
@@ -36,13 +38,16 @@ contract POPRegistryTest {
         user1 = address(0x1);
         user2 = address(0x2);
         disputer = address(0x3);
-        truthKeeper = address(0x4);
 
         // Deploy registry
         registry = new POPRegistry();
 
         // Deploy mock resolver with registry address
         resolver = new MockResolver(address(registry));
+
+        // Deploy mock TruthKeeper contract
+        truthKeeperContract = new MockTruthKeeper(address(registry));
+        truthKeeper = address(truthKeeperContract);
 
         // Deploy mock ERC20 for bond testing
         bondToken = new MockERC20("Test Token", "TEST", 18);
@@ -1013,7 +1018,8 @@ contract POPRegistryTest {
         require(result.isFinalized == true, "Should be finalized");
         require(result.wasDisputed == false, "Should not be disputed");
         require(result.wasCorrected == false, "Should not be corrected");
-        require(result.tier == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS");
+        // TK approves by default, so tier is TK_GUARANTEED (not SYSTEM because resolver is PERMISSIONLESS)
+        require(result.tier == AccountabilityTier.TK_GUARANTEED, "Tier should be TK_GUARANTEED when TK approves");
         require(result.resolverTrust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
     }
 
@@ -1074,6 +1080,187 @@ contract POPRegistryTest {
         resolvers = registry.getRegisteredResolvers();
         require(resolvers.length == 1, "Should have 1 resolver");
         require(resolvers[0] == address(resolver), "Resolver address should match");
+    }
+
+    // ============ TruthKeeper Approval Tests ============
+
+    function test_TKApprovalGrantsTKGuaranteedTier() public {
+        registry.registerResolver(address(resolver));
+
+        // Default TK approves all POPs
+        uint256 popId = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        POP memory pop = registry.getPOP(popId);
+        // TK is whitelisted and approved, resolver is PERMISSIONLESS
+        // So tier should be TK_GUARANTEED (not SYSTEM since resolver isn't SYSTEM)
+        require(pop.tierAtCreation == AccountabilityTier.TK_GUARANTEED, "Tier should be TK_GUARANTEED when TK approves");
+
+        // Verify TK was called
+        require(truthKeeperContract.assignedPops(popId), "TK should have been notified of POP");
+    }
+
+    function test_TKSoftRejectGivesPermissionlessTier() public {
+        registry.registerResolver(address(resolver));
+
+        // Set TK to soft reject
+        truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_SOFT);
+
+        uint256 popId = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        POP memory pop = registry.getPOP(popId);
+        require(pop.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
+        require(pop.state == POPState.ACTIVE, "POP should still be created in ACTIVE state");
+    }
+
+    function test_TKHardRejectRevertsCreation() public {
+        registry.registerResolver(address(resolver));
+
+        // Set TK to hard reject
+        truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_HARD);
+
+        bool reverted = false;
+        try registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        ) {
+            // Should not reach here
+        } catch {
+            reverted = true;
+        }
+        require(reverted, "Should revert when TK hard rejects");
+    }
+
+    function test_TKApprovalWithSystemResolverGivesSystemTier() public {
+        registry.registerResolver(address(resolver));
+        registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
+
+        // TK is whitelisted and approves
+        uint256 popId = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        POP memory pop = registry.getPOP(popId);
+        require(pop.tierAtCreation == AccountabilityTier.SYSTEM, "Tier should be SYSTEM when SYSTEM resolver + whitelisted TK + approval");
+    }
+
+    function test_TKSoftRejectWithSystemResolverGivesPermissionless() public {
+        registry.registerResolver(address(resolver));
+        registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
+
+        // TK soft rejects
+        truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_SOFT);
+
+        uint256 popId = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        POP memory pop = registry.getPOP(popId);
+        // Even with SYSTEM resolver, no approval = PERMISSIONLESS
+        require(pop.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
+    }
+
+    function test_RevertCreatePOPWithEOATruthKeeper() public {
+        registry.registerResolver(address(resolver));
+
+        // Try to use an EOA as TK (should fail)
+        address eoaTK = address(0x999);
+
+        bool reverted = false;
+        try registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            eoaTK
+        ) {
+            // Should not reach here
+        } catch {
+            reverted = true;
+        }
+        require(reverted, "Should revert when using EOA as TruthKeeper");
+    }
+
+    function test_TKPerResolverFiltering() public {
+        registry.registerResolver(address(resolver));
+
+        // Create another resolver
+        MockResolver resolver2 = new MockResolver(address(registry));
+        registry.registerResolver(address(resolver2));
+
+        // TK approves resolver1 but rejects resolver2
+        truthKeeperContract.setResolverResponse(address(resolver2), TKApprovalResponse.REJECT_HARD);
+
+        // Should succeed with resolver1
+        uint256 popId1 = registry.createPOP(
+            address(resolver),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+        require(popId1 == 1, "Should create POP with resolver1");
+
+        // Should fail with resolver2
+        bool reverted = false;
+        try registry.createPOP(
+            address(resolver2),
+            0,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        ) {
+            // Should not reach here
+        } catch {
+            reverted = true;
+        }
+        require(reverted, "Should revert when TK rejects resolver2");
     }
 
     // ============ Helpers ============

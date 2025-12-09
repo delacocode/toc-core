@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./POPTypes.sol";
 import "./IPOPRegistry.sol";
 import "./IPopResolver.sol";
+import "./ITruthKeeper.sol";
 
 /// @title POPRegistry
 /// @notice Central registry managing POP lifecycle, resolvers, and disputes
@@ -49,7 +50,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
 
     // TruthKeeper registry
     EnumerableSet.AddressSet private _whitelistedTruthKeepers;
-    mapping(address => EnumerableSet.AddressSet) private _tkGuaranteedResolvers;
 
     // Escalation info storage
     mapping(uint256 => EscalationInfo) private _escalations;
@@ -86,6 +86,8 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     error AlreadyEscalated(uint256 popId);
     error InvalidTruthKeeper(address tk);
     error NotFullyFinalized(uint256 popId);
+    error TruthKeeperNotContract(address tk);
+    error TruthKeeperRejected(address tk, uint256 popId);
 
     // ============ Constructor ============
 
@@ -215,18 +217,6 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     // ============ TruthKeeper Functions ============
 
     /// @inheritdoc IPOPRegistry
-    function addGuaranteedResolver(address resolver) external {
-        _tkGuaranteedResolvers[msg.sender].add(resolver);
-        emit TruthKeeperGuaranteeAdded(msg.sender, resolver);
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function removeGuaranteedResolver(address resolver) external {
-        _tkGuaranteedResolvers[msg.sender].remove(resolver);
-        emit TruthKeeperGuaranteeRemoved(msg.sender, resolver);
-    }
-
-    /// @inheritdoc IPOPRegistry
     function resolveTruthKeeperDispute(
         uint256 popId,
         DisputeResolution resolution,
@@ -284,6 +274,11 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
             revert InvalidTemplateId(templateId);
         }
 
+        // Verify TruthKeeper is a contract
+        if (truthKeeper.code.length == 0) {
+            revert TruthKeeperNotContract(truthKeeper);
+        }
+
         // Generate POP ID
         popId = _nextPopId++;
 
@@ -297,7 +292,35 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
         pop.escalationWindow = escalationWindow;
         pop.postResolutionWindow = postResolutionWindow;
         pop.truthKeeper = truthKeeper;
-        pop.tierAtCreation = _calculateAccountabilityTier(resolver, truthKeeper);
+
+        // Call TruthKeeper for approval
+        TKApprovalResponse tkResponse = ITruthKeeper(truthKeeper).onPopAssigned(
+            popId,
+            resolver,
+            templateId,
+            msg.sender,
+            payload,
+            uint32(disputeWindow),
+            uint32(truthKeeperWindow),
+            uint32(escalationWindow),
+            uint32(postResolutionWindow)
+        );
+
+        // Handle TK response
+        bool tkApproved;
+        if (tkResponse == TKApprovalResponse.REJECT_HARD) {
+            revert TruthKeeperRejected(truthKeeper, popId);
+        } else if (tkResponse == TKApprovalResponse.APPROVE) {
+            tkApproved = true;
+            emit TruthKeeperApproved(popId, truthKeeper);
+        } else {
+            // REJECT_SOFT
+            tkApproved = false;
+            emit TruthKeeperSoftRejected(popId, truthKeeper);
+        }
+
+        // Calculate tier with approval status
+        pop.tierAtCreation = _calculateAccountabilityTier(resolver, truthKeeper, tkApproved);
 
         // Call resolver to create POP (may set initial state)
         pop.state = IPopResolver(resolver).onPopCreated(popId, templateId, payload);
@@ -962,23 +985,8 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc IPOPRegistry
-    function getTruthKeeperGuaranteedResolvers(address tk) external view returns (address[] memory) {
-        return _tkGuaranteedResolvers[tk].values();
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function isTruthKeeperGuaranteedResolver(address tk, address resolver) external view returns (bool) {
-        return _tkGuaranteedResolvers[tk].contains(resolver);
-    }
-
-    /// @inheritdoc IPOPRegistry
     function getEscalationInfo(uint256 popId) external view validPopId(popId) returns (EscalationInfo memory) {
         return _escalations[popId];
-    }
-
-    /// @inheritdoc IPOPRegistry
-    function calculateAccountabilityTier(address resolver, address tk) external view returns (AccountabilityTier) {
-        return _calculateAccountabilityTier(resolver, tk);
     }
 
     /// @inheritdoc IPOPRegistry
@@ -1124,16 +1132,22 @@ contract POPRegistry is IPOPRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @notice Calculate accountability tier for resolver + TK combination
-    function _calculateAccountabilityTier(address resolver, address tk) internal view returns (AccountabilityTier) {
-        // SYSTEM tier: resolver has SYSTEM trust and TK is whitelisted
+    /// @param resolver The resolver address
+    /// @param tk The TruthKeeper address
+    /// @param tkApproved Whether the TK approved this POP
+    function _calculateAccountabilityTier(address resolver, address tk, bool tkApproved) internal view returns (AccountabilityTier) {
+        // No approval = PERMISSIONLESS
+        if (!tkApproved) {
+            return AccountabilityTier.PERMISSIONLESS;
+        }
+
+        // SYSTEM tier: resolver has SYSTEM trust and TK is whitelisted and approved
         if (_resolverConfigs[resolver].trust == ResolverTrust.SYSTEM && _whitelistedTruthKeepers.contains(tk)) {
             return AccountabilityTier.SYSTEM;
         }
-        // TK_GUARANTEED tier: TK guarantees this resolver
-        if (_tkGuaranteedResolvers[tk].contains(resolver)) {
-            return AccountabilityTier.TK_GUARANTEED;
-        }
-        return AccountabilityTier.PERMISSIONLESS;
+
+        // TK approved but not SYSTEM conditions = TK_GUARANTEED
+        return AccountabilityTier.TK_GUARANTEED;
     }
 
     /// @notice Handle TOO_EARLY resolution - return to ACTIVE
