@@ -8,7 +8,7 @@ This document describes the fee system for TOC Core, covering revenue collection
 
 The protocol collects fees from two sources:
 
-1. **Creation Fees** - Paid when `createPOP()` is called
+1. **Creation Fees** - Paid when `createTOC()` is called
    - Protocol fee (minimum or standard based on TK presence)
    - Resolver fee (per-template, set by resolver)
    - TK share (percentage of protocol fee, tier-based)
@@ -58,15 +58,15 @@ Percentages are configurable by admin (stored in basis points).
 - Stored per resolver + template: `resolverTemplateFees[resolver][templateId]`
 - Resolver sets via `setResolverFee(templateId, amount)`
 - Default: 0 (resolver can choose not to charge)
-- Stored per-POP after creation: `resolverFeeByPop[popId]`
+- Stored per-TOC after creation: `resolverFeeByToc[tocId]`
 
-This per-POP tracking allows resolvers to implement custom distribution logic (e.g., share with data providers, oracles).
+This per-TOC tracking allows resolvers to implement custom distribution logic (e.g., share with data providers, oracles).
 
 ---
 
 ## Creation Fee Flow
 
-When `createPOP()` is called:
+When `createTOC()` is called:
 
 ```
 Total Payment = Protocol Fee + Resolver Fee
@@ -79,14 +79,14 @@ User pays:          0.003 ETH total
 ├── Protocol fee:   0.001 ETH (standard)
 │   ├── TK share:   0.0004 ETH (40%)
 │   └── Protocol:   0.0006 ETH (60%)
-└── Resolver fee:   0.002 ETH (stored per-POP)
+└── Resolver fee:   0.002 ETH (stored per-TOC)
 ```
 
-### Storage After createPOP:
+### Storage After createTOC:
 
 - Protocol portion → `protocolBalances[CREATION]`
 - TK portion → `tkBalances[tkAddress]`
-- Resolver portion → `resolverFeeByPop[popId]`
+- Resolver portion → `resolverFeeByToc[tocId]`
 
 ---
 
@@ -150,15 +150,15 @@ function withdrawTKFees() external
 ### Resolver Withdrawal
 
 ```solidity
-function claimResolverFee(uint256 popId) external
+function claimResolverFee(uint256 tocId) external
 ```
-- Only resolver of that POP can call
-- Sends `resolverFeeByPop[popId]` to resolver address
+- Only resolver of that TOC can call
+- Sends `resolverFeeByToc[tocId]` to resolver address
 
 ```solidity
-function claimResolverFees(uint256[] calldata popIds) external
+function claimResolverFees(uint256[] calldata tocIds) external
 ```
-- Batch claim for multiple POPs
+- Batch claim for multiple TOCs
 - Gas efficient for active resolvers
 
 ---
@@ -190,7 +190,7 @@ function setResolverFee(uint32 templateId, uint256 amount) external
 function getCreationFee(address resolver, uint32 templateId, address truthKeeper)
     external view returns (uint256 protocolFee, uint256 resolverFee, uint256 total)
 ```
-- Returns total cost to create a POP with given parameters
+- Returns total cost to create a TOC with given parameters
 
 ```solidity
 function getProtocolFeeMinimum() external view returns (uint256)
@@ -199,7 +199,7 @@ function getTKSharePercent(AccountabilityTier tier) external view returns (uint2
 function getResolverFee(address resolver, uint32 templateId) external view returns (uint256)
 function getProtocolBalance(FeeCategory category) external view returns (uint256)
 function getTKBalance(address tk) external view returns (uint256)
-function getResolverFeeByPop(uint256 popId) external view returns (uint256)
+function getResolverFeeByToc(uint256 tocId) external view returns (uint256)
 ```
 
 ---
@@ -224,8 +224,8 @@ mapping(FeeCategory => uint256) public protocolBalances;
 // TK balances (aggregate per TK)
 mapping(address => uint256) public tkBalances;
 
-// Resolver fees (per POP)
-mapping(uint256 => uint256) public resolverFeeByPop;
+// Resolver fees (per TOC)
+mapping(uint256 => uint256) public resolverFeeByToc;
 
 // Resolver fee configuration (per resolver, per template)
 mapping(address => mapping(uint32 => uint256)) public resolverTemplateFees;
@@ -243,13 +243,13 @@ event TKShareUpdated(AccountabilityTier indexed tier, uint256 basisPoints);
 event ResolverFeeSet(address indexed resolver, uint32 indexed templateId, uint256 amount);
 
 // Fee collection events
-event CreationFeesCollected(uint256 indexed popId, uint256 protocolFee, uint256 tkFee, uint256 resolverFee);
-event SlashingFeesCollected(uint256 indexed popId, uint256 protocolFee, uint256 tkFee);
+event CreationFeesCollected(uint256 indexed tocId, uint256 protocolFee, uint256 tkFee, uint256 resolverFee);
+event SlashingFeesCollected(uint256 indexed tocId, uint256 protocolFee, uint256 tkFee);
 
 // Withdrawal events
 event ProtocolFeesWithdrawn(address indexed treasury, uint256 creationFees, uint256 slashingFees);
 event TKFeesWithdrawn(address indexed tk, uint256 amount);
-event ResolverFeeClaimed(address indexed resolver, uint256 indexed popId, uint256 amount);
+event ResolverFeeClaimed(address indexed resolver, uint256 indexed tocId, uint256 amount);
 ```
 
 ---
@@ -257,7 +257,7 @@ event ResolverFeeClaimed(address indexed resolver, uint256 indexed popId, uint25
 ## Future Enhancements (Out of Scope)
 
 1. **Multi-token support** - Allow fees in USDC, DAI, protocol token
-2. **Bounty system** - Separate `BountyManager.sol` contract for POP incentivization
+2. **Bounty system** - Separate `BountyManager.sol` contract for TOC incentivization
 3. **Per-template resolver fees** - Already designed, can be extended
 4. **Configurable slashing ratios** - Currently fixed at 50/50
 
@@ -265,13 +265,13 @@ event ResolverFeeClaimed(address indexed resolver, uint256 indexed popId, uint25
 
 ## Implementation Notes
 
-1. **createPOP changes:**
+1. **createTOC changes:**
    - Must be `payable`
    - Calculate and validate fee payment
    - Distribute to protocol, TK, and resolver balances
    - Revert if insufficient payment
 
-2. **Fee calculation at createPOP:**
+2. **Fee calculation at createTOC:**
    ```solidity
    uint256 protocolFee = (truthKeeper == address(0))
        ? protocolFeeMinimum
@@ -288,7 +288,7 @@ event ResolverFeeClaimed(address indexed resolver, uint256 indexed popId, uint25
 
 4. **Slashing modification:**
    - Update `_slashBondWithReward` to split protocol portion with TK
-   - Add TK address parameter or lookup from POP
+   - Add TK address parameter or lookup from TOC
 
 5. **Refund excess:**
    - If user overpays, refund the difference
