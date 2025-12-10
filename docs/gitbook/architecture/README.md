@@ -24,9 +24,9 @@ Every answer in TOC carries:
                               │ getResult() / getExtensiveResult()
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                        POPRegistry                           │
+│                        TOCRegistry                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   Resolver  │  │     POP     │  │      Dispute        │  │
+│  │   Resolver  │  │     TOC     │  │      Dispute        │  │
 │  │  Management │  │  Lifecycle  │  │     Resolution      │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
@@ -34,7 +34,7 @@ Every answer in TOC carries:
 │  │   System    │  │   Storage   │  │     Management      │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 └─────────────────────────────┬───────────────────────────────┘
-                              │ onPopCreated() / resolvePop()
+                              │ onTocCreated() / resolveToc()
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                         Resolvers                            │
@@ -54,8 +54,8 @@ mapping(address => ResolverConfig) _resolverConfigs;
 // All registered resolvers
 EnumerableSet.AddressSet _registeredResolvers;
 
-// POP state machines
-mapping(uint256 => POP) _pops;
+// TOC state machines
+mapping(uint256 => TOC) _tocs;
 
 // Unified result storage (ABI-encoded bytes)
 mapping(uint256 => bytes) _results;
@@ -72,8 +72,8 @@ mapping(address => EnumerableSet.AddressSet) _tkGuaranteedResolvers;
 
 ## Architecture Sections
 
-- [Core Concepts](core-concepts.md) - POPs, Resolvers, TruthKeepers, and Accountability Tiers
-- [POP Lifecycle](pop-lifecycle.md) - State machine and lifecycle phases
+- [Core Concepts](core-concepts.md) - TOCs, Resolvers, TruthKeepers, and Accountability Tiers
+- [TOC Lifecycle](toc-lifecycle.md) - State machine and lifecycle phases
 - [Resolver System](resolver-system.md) - Interface, answer types, and examples
 - [Dispute Resolution](dispute-resolution.md) - Two-round dispute system
 - [Accountability Model](accountability-model.md) - Tier calculation and usage

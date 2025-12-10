@@ -35,7 +35,7 @@ Admin decision is final.
 enum DisputeResolution {
     UPHOLD_DISPUTE,   // Disputer was right, proposer wrong
     REJECT_DISPUTE,   // Proposer was right, disputer wrong
-    CANCEL_POP,       // Question invalid, void everything
+    CANCEL_TOC,       // Question invalid, void everything
     TOO_EARLY         // Cannot decide yet
 }
 ```

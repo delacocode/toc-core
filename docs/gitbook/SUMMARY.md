@@ -11,7 +11,7 @@
 
 * [System Architecture](architecture/README.md)
 * [Core Concepts](architecture/core-concepts.md)
-* [POP Lifecycle](architecture/pop-lifecycle.md)
+* [TOC Lifecycle](architecture/toc-lifecycle.md)
 * [Resolver System](architecture/resolver-system.md)
 * [Dispute Resolution](architecture/dispute-resolution.md)
 * [Accountability Model](architecture/accountability-model.md)

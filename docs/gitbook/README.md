@@ -2,7 +2,7 @@
 
 **Financially-Backed Truth Infrastructure for DeFi**
 
-Truth on Chain (TOC) is a modular infrastructure layer for creating, resolving, and disputing verifiable predictions on-chain. The system introduces a **Prediction Option Protocol (POP)** - a standardized unit of truth that can be created, resolved, disputed, and consumed by any protocol.
+Truth on Chain (TOC) is a modular infrastructure layer for creating, resolving, and disputing verifiable predictions on-chain. The system introduces **Truth On Chain (TOC)** units - a standardized unit of truth that can be created, resolved, disputed, and consumed by any protocol.
 
 ## What Makes TOC Different
 
@@ -27,7 +27,7 @@ Every answer in TOC carries:
 ```solidity
 // That's it. Really.
 (bytes memory result, bool finalized, AccountabilityTier tier) =
-    registry.getExtensiveResult(popId);
+    registry.getExtensiveResult(tocId);
 ```
 
 - One call to get the answer

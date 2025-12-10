@@ -1,4 +1,4 @@
-# POP System Documentation
+# TOC System Documentation
 
 **Version:** 1.0
 **Last Updated:** November 2025
@@ -8,7 +8,7 @@
 
 ## Overview
 
-The POP (Prediction Option Protocol) system is a modular "Truth on Chain" infrastructure for creating, resolving, and disputing verifiable predictions. It separates the lifecycle management of predictions from their resolution logic, enabling pluggable resolvers for different data sources and question types.
+The TOC (Truth On Chain) system is a modular "Truth on Chain" infrastructure for creating, resolving, and disputing verifiable predictions. It separates the lifecycle management of predictions from their resolution logic, enabling pluggable resolvers for different data sources and question types.
 
 ### Key Features
 
@@ -24,8 +24,8 @@ The POP (Prediction Option Protocol) system is a modular "Truth on Chain" infras
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      POPRegistry                             │
-│  - Manages POP lifecycle                                     │
+│                      TOCRegistry                             │
+│  - Manages TOC lifecycle                                     │
 │  - Routes to resolvers                                       │
 │  - Handles disputes                                          │
 │  - Stores typed results                                      │
@@ -44,22 +44,22 @@ The POP (Prediction Option Protocol) system is a modular "Truth on Chain" infras
 
 ## Core Contracts
 
-### 1. POPRegistry.sol
+### 1. TOCRegistry.sol
 
-The central contract managing all POPs. Responsibilities:
+The central contract managing all TOCs. Responsibilities:
 
 - **Resolver Management**: Register, deprecate, restore resolvers
-- **POP Lifecycle**: Create, resolve, finalize, dispute, cancel
+- **TOC Lifecycle**: Create, resolve, finalize, dispute, cancel
 - **Bond Management**: Accept, hold, return, slash bonds
 - **Result Storage**: Typed results in separate mappings for gas efficiency
 
-### 2. POPTypes.sol
+### 2. TOCTypes.sol
 
 Shared type definitions:
 
 ```solidity
-// POP States
-enum POPState {
+// TOC States
+enum TOCState {
     NONE,           // Default/uninitialized
     PENDING,        // Awaiting resolver approval
     REJECTED,       // Resolver rejected
@@ -83,20 +83,20 @@ enum ResolverType {
     NONE,       // Default/unregistered
     SYSTEM,     // Official ecosystem resolvers
     PUBLIC,     // Third-party resolvers
-    DEPRECATED  // Soft-deprecated (existing POPs work, no new ones)
+    DEPRECATED  // Soft-deprecated (existing TOCs work, no new ones)
 }
 
-// Core POP Structure
-struct POP {
+// Core TOC Structure
+struct TOC {
     address resolver;           // Managing resolver
-    POPState state;             // Current state
+    TOCState state;             // Current state
     AnswerType answerType;      // Type of answer
     uint256 resolutionTime;     // When resolved
     uint256 disputeDeadline;    // Dispute window end
 }
 
-// Typed Result (stored separately from POP)
-struct POPResult {
+// Typed Result (stored separately from TOC)
+struct TOCResult {
     AnswerType answerType;
     bool isResolved;
     bool booleanResult;
@@ -105,25 +105,25 @@ struct POPResult {
 }
 ```
 
-### 3. IPopResolver.sol
+### 3. ITOCResolver.sol
 
 Interface that all resolvers must implement:
 
 ```solidity
-interface IPopResolver {
-    // Check if resolver manages a POP
-    function isPopManaged(uint256 popId) external view returns (bool);
+interface ITOCResolver {
+    // Check if resolver manages a TOC
+    function isTocManaged(uint256 tocId) external view returns (bool);
 
-    // Called on POP creation - returns initial state
-    function onPopCreated(
-        uint256 popId,
+    // Called on TOC creation - returns initial state
+    function onTocCreated(
+        uint256 tocId,
         uint32 templateId,
         bytes calldata payload
-    ) external returns (POPState initialState);
+    ) external returns (TOCState initialState);
 
     // Execute resolution - returns typed result
-    function resolvePop(
-        uint256 popId,
+    function resolveToc(
+        uint256 tocId,
         address caller,
         bytes calldata payload
     ) external returns (
@@ -132,12 +132,12 @@ interface IPopResolver {
         bytes memory genericResult
     );
 
-    // Get stored POP details
-    function getPopDetails(uint256 popId)
+    // Get stored TOC details
+    function getTocDetails(uint256 tocId)
         external view returns (uint32 templateId, bytes memory creationPayload);
 
     // Generate human-readable question
-    function getPopQuestion(uint256 popId)
+    function getTocQuestion(uint256 tocId)
         external view returns (string memory question);
 
     // Template management
@@ -147,13 +147,13 @@ interface IPopResolver {
 }
 ```
 
-### 4. IPOPRegistry.sol
+### 4. ITOCRegistry.sol
 
 Registry interface for external interactions. See full interface in the contract file.
 
 ---
 
-## POP Lifecycle
+## TOC Lifecycle
 
 ### State Transitions
 
@@ -195,21 +195,21 @@ Registry interface for external interactions. See full interface in the contract
 
 ```solidity
 // Using system resolver
-uint256 popId = registry.createPOPWithSystemResolver(
+uint256 tocId = registry.createTOCWithSystemResolver(
     resolverId,     // Which resolver
     templateId,     // Template within resolver
     payload         // Template-specific parameters
 );
 
 // Using public resolver
-uint256 popId = registry.createPOPWithPublicResolver(
+uint256 tocId = registry.createTOCWithPublicResolver(
     resolverId,
     templateId,
     payload
 );
 ```
 
-The resolver's `onPopCreated` is called, which:
+The resolver's `onTocCreated` is called, which:
 - Validates the payload
 - Stores template-specific data
 - Returns initial state (PENDING or ACTIVE)
@@ -219,15 +219,15 @@ The resolver's `onPopCreated` is called, which:
 Anyone can propose a resolution by posting a bond:
 
 ```solidity
-registry.resolvePOP(
-    popId,
+registry.resolveTOC(
+    tocId,
     bondToken,      // ERC20 or address(0) for native
     bondAmount,     // Amount to stake
     payload         // Resolver-specific proof data
 );
 ```
 
-The resolver's `resolvePop` returns the typed outcome:
+The resolver's `resolveToc` returns the typed outcome:
 - `booleanResult` - for BOOLEAN answer type
 - `numericResult` - for NUMERIC answer type
 - `genericResult` - for GENERIC answer type
@@ -238,7 +238,7 @@ After resolution is proposed, a dispute window opens (default 24 hours). During 
 
 ```solidity
 registry.dispute(
-    popId,
+    tocId,
     bondToken,
     bondAmount,
     "Reason for dispute"
@@ -250,7 +250,7 @@ registry.dispute(
 If no dispute during the window:
 
 ```solidity
-registry.finalizePOP(popId);
+registry.finalizeTOC(tocId);
 ```
 
 The resolution bond is returned and the result is stored.
@@ -260,16 +260,16 @@ The resolution bond is returned and the result is stored.
 If disputed, admin resolves with one of:
 
 ```solidity
-registry.resolveDispute(popId, DisputeResolution.UPHOLD_DISPUTE);
+registry.resolveDispute(tocId, DisputeResolution.UPHOLD_DISPUTE);
 // Disputer was right - for BOOLEAN, flips the outcome
 // Resolution bond slashed, dispute bond returned
 
-registry.resolveDispute(popId, DisputeResolution.REJECT_DISPUTE);
+registry.resolveDispute(tocId, DisputeResolution.REJECT_DISPUTE);
 // Original outcome stands
 // Dispute bond slashed, resolution bond returned
 
-registry.resolveDispute(popId, DisputeResolution.CANCEL_POP);
-// Entire POP invalid - both bonds returned
+registry.resolveDispute(tocId, DisputeResolution.CANCEL_TOC);
+// Entire TOC invalid - both bonds returned
 ```
 
 ---
@@ -282,7 +282,7 @@ Simple true/false answers. Example: "Will BTC be above $100,000 on Jan 1, 2026?"
 
 ```solidity
 // Get result
-bool result = registry.getBooleanResult(popId);
+bool result = registry.getBooleanResult(tocId);
 ```
 
 ### NUMERIC
@@ -291,7 +291,7 @@ Integer answers (int256 supports negative). Example: "What will BTC price be on 
 
 ```solidity
 // Get result
-int256 result = registry.getNumericResult(popId);
+int256 result = registry.getNumericResult(tocId);
 ```
 
 ### GENERIC
@@ -300,7 +300,7 @@ Arbitrary bytes data. Example: "What will be the winning lottery numbers?"
 
 ```solidity
 // Get result
-bytes memory result = registry.getGenericResult(popId);
+bytes memory result = registry.getGenericResult(tocId);
 ```
 
 ---
@@ -326,7 +326,7 @@ Third-party resolvers:
 ```solidity
 struct SystemResolverConfig {
     uint256 disputeWindow;      // Custom dispute period (0 = default)
-    bool isActive;              // Can create new POPs
+    bool isActive;              // Can create new TOCs
     uint256 registeredAt;
     address registeredBy;
 }
@@ -342,8 +342,8 @@ struct PublicResolverConfig {
 ### Deprecation
 
 Resolvers can be soft-deprecated:
-- Existing POPs continue to work
-- No new POPs can be created
+- Existing TOCs continue to work
+- No new TOCs can be created
 - Can be restored to any type later
 
 ---
@@ -403,7 +403,7 @@ Reference implementation for price-based predictions using Pyth Network oracle.
 - Can resolve early if condition met
 - Answer type: BOOLEAN
 
-### Creating a POP
+### Creating a TOC
 
 ```solidity
 // Encode payload for Template 0 (Snapshot)
@@ -414,8 +414,8 @@ bytes memory payload = abi.encode(
     deadline        // uint256 timestamp
 );
 
-// Create POP
-uint256 popId = registry.createPOPWithSystemResolver(
+// Create TOC
+uint256 tocId = registry.createTOCWithSystemResolver(
     pythResolverId,
     0,              // Template 0
     payload
@@ -430,8 +430,8 @@ bytes[] memory updateData = getPythUpdateData();
 bytes memory pythPayload = abi.encode(updateData);
 
 // Propose resolution
-registry.resolvePOP{value: pythFee}(
-    popId,
+registry.resolveTOC{value: pythFee}(
+    tocId,
     address(0),     // Native ETH bond
     0.1 ether,
     pythPayload
@@ -442,36 +442,36 @@ registry.resolvePOP{value: pythFee}(
 
 ## Creating a Custom Resolver
 
-### Step 1: Implement IPopResolver
+### Step 1: Implement ITOCResolver
 
 ```solidity
-contract MyResolver is IPopResolver {
-    IPOPRegistry public immutable registry;
+contract MyResolver is ITOCResolver {
+    ITOCRegistry public immutable registry;
 
     // Template definitions
     uint32 public constant TEMPLATE_MY_QUESTION = 0;
 
-    // Storage for POP data
-    mapping(uint256 => MyPopData) private _popData;
+    // Storage for TOC data
+    mapping(uint256 => MyTocData) private _tocData;
 
     modifier onlyRegistry() {
         require(msg.sender == address(registry));
         _;
     }
 
-    function onPopCreated(
-        uint256 popId,
+    function onTocCreated(
+        uint256 tocId,
         uint32 templateId,
         bytes calldata payload
-    ) external onlyRegistry returns (POPState) {
+    ) external onlyRegistry returns (TOCState) {
         // Decode and validate payload
-        // Store POP-specific data
+        // Store TOC-specific data
         // Return ACTIVE (or PENDING if approval needed)
-        return POPState.ACTIVE;
+        return TOCState.ACTIVE;
     }
 
-    function resolvePop(
-        uint256 popId,
+    function resolveToc(
+        uint256 tocId,
         address caller,
         bytes calldata payload
     ) external onlyRegistry returns (bool, int256, bytes memory) {
@@ -501,7 +501,7 @@ contract MyResolver is IPopResolver {
 }
 ```
 
-### Step 2: Register with POPRegistry
+### Step 2: Register with TOCRegistry
 
 ```solidity
 // Admin registers the resolver
@@ -518,8 +518,8 @@ registry.registerResolver(
 ### Access Control
 
 - Admin-only: resolver registration, dispute resolution, bond configuration
-- Resolver-only: approve/reject PENDING POPs
-- Anyone: create POPs, propose resolutions, dispute
+- Resolver-only: approve/reject PENDING TOCs
+- Anyone: create TOCs, propose resolutions, dispute
 
 ### Reentrancy Protection
 
@@ -567,33 +567,33 @@ event ResolverDeprecated(address resolver, ResolverType resolverType);
 event ResolverRestored(address resolver, ResolverType fromType, ResolverType newType);
 ```
 
-### POP Lifecycle
+### TOC Lifecycle
 
 ```solidity
-event POPCreated(uint256 popId, ResolverType resolverType, uint256 resolverId, address resolver, uint32 templateId, AnswerType answerType, POPState initialState);
-event POPApproved(uint256 popId);
-event POPRejected(uint256 popId, string reason);
-event POPResolutionProposed(uint256 popId, address proposer, AnswerType answerType, uint256 disputeDeadline);
-event POPFinalized(uint256 popId, AnswerType answerType);
-event POPResolved(uint256 popId, AnswerType answerType);
-event POPCancelled(uint256 popId, string reason);
+event TOCCreated(uint256 tocId, ResolverType resolverType, uint256 resolverId, address resolver, uint32 templateId, AnswerType answerType, TOCState initialState);
+event TOCApproved(uint256 tocId);
+event TOCRejected(uint256 tocId, string reason);
+event TOCResolutionProposed(uint256 tocId, address proposer, AnswerType answerType, uint256 disputeDeadline);
+event TOCFinalized(uint256 tocId, AnswerType answerType);
+event TOCResolved(uint256 tocId, AnswerType answerType);
+event TOCCancelled(uint256 tocId, string reason);
 ```
 
 ### Disputes
 
 ```solidity
-event POPDisputed(uint256 popId, address disputer, string reason);
-event DisputeResolved(uint256 popId, DisputeResolution resolution, address admin);
+event TOCDisputed(uint256 tocId, address disputer, string reason);
+event DisputeResolved(uint256 tocId, DisputeResolution resolution, address admin);
 ```
 
 ### Bonds
 
 ```solidity
-event ResolutionBondDeposited(uint256 popId, address proposer, address token, uint256 amount);
-event ResolutionBondReturned(uint256 popId, address to, address token, uint256 amount);
-event DisputeBondDeposited(uint256 popId, address disputer, address token, uint256 amount);
-event DisputeBondReturned(uint256 popId, address to, address token, uint256 amount);
-event BondSlashed(uint256 popId, address from, address token, uint256 amount);
+event ResolutionBondDeposited(uint256 tocId, address proposer, address token, uint256 amount);
+event ResolutionBondReturned(uint256 tocId, address to, address token, uint256 amount);
+event DisputeBondDeposited(uint256 tocId, address disputer, address token, uint256 amount);
+event DisputeBondReturned(uint256 tocId, address to, address token, uint256 amount);
+event BondSlashed(uint256 tocId, address from, address token, uint256 amount);
 ```
 
 ---
@@ -602,11 +602,11 @@ event BondSlashed(uint256 popId, address from, address token, uint256 amount);
 
 ```
 contracts/
-├── Popregistry/
-│   ├── POPTypes.sol          # Shared type definitions
-│   ├── IPopResolver.sol      # Resolver interface
-│   ├── IPOPRegistry.sol      # Registry interface
-│   └── POPRegistry.sol       # Main registry implementation
+├── TOCRegistry/
+│   ├── TOCTypes.sol          # Shared type definitions
+│   ├── ITOCResolver.sol      # Resolver interface
+│   ├── ITOCRegistry.sol      # Registry interface
+│   └── TOCRegistry.sol       # Main registry implementation
 ├── resolvers/
 │   └── PythPriceResolver.sol # Example resolver
 └── mocks/
@@ -634,7 +634,7 @@ When setting up the new repo:
    - Test each answer type
 
 4. **Deployment**
-   - Deploy POPRegistry first
+   - Deploy TOCRegistry first
    - Deploy resolvers with registry address
    - Register resolvers
    - Configure acceptable bonds
@@ -649,7 +649,7 @@ When setting up the new repo:
 - Consistent pattern across all enums
 
 ```solidity
-enum POPState { NONE, PENDING, ... }
+enum TOCState { NONE, PENDING, ... }
 enum AnswerType { NONE, BOOLEAN, NUMERIC, GENERIC }
 enum ResolverType { NONE, SYSTEM, PUBLIC, DEPRECATED }
 enum DisputeResolution { UPHOLD_DISPUTE, ... }  // Exception: no NONE needed for actions
@@ -659,4 +659,4 @@ enum DisputeResolution { UPHOLD_DISPUTE, ... }  // Exception: no NONE needed for
 
 ## Contact & Support
 
-This documentation is for agents and developers working with the POP system. For questions about implementation details, refer to the source code comments and NatSpec documentation.
+This documentation is for agents and developers working with the TOC system. For questions about implementation details, refer to the source code comments and NatSpec documentation.

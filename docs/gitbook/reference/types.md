@@ -2,10 +2,10 @@
 
 ## Enums
 
-### POPState
+### TOCState
 
 ```solidity
-enum POPState {
+enum TOCState {
     NONE,
     PENDING,
     REJECTED,
@@ -57,23 +57,23 @@ enum AccountabilityTier {
 enum DisputeResolution {
     UPHOLD_DISPUTE,
     REJECT_DISPUTE,
-    CANCEL_POP,
+    CANCEL_TOC,
     TOO_EARLY
 }
 ```
 
 ## Structs
 
-### POP
+### TOC
 
 ```solidity
-struct POP {
+struct TOC {
     address resolver;
     address creator;
     address truthKeeper;
     uint32 templateId;
     AnswerType answerType;
-    POPState state;
+    TOCState state;
     AccountabilityTier tier;
     uint32 disputeWindow;
     uint32 truthKeeperWindow;

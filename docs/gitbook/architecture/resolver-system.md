@@ -5,23 +5,23 @@
 Every resolver must implement:
 
 ```solidity
-interface IPopResolver {
-    // Called when POP is created - validate and store question data
-    function onPopCreated(
-        uint256 popId,
+interface ITOCResolver {
+    // Called when TOC is created - validate and store question data
+    function onTocCreated(
+        uint256 tocId,
         uint32 templateId,
         bytes calldata payload
-    ) external returns (POPState initialState);
+    ) external returns (TOCState initialState);
 
     // Called to resolve - return ABI-encoded result
-    function resolvePop(
-        uint256 popId,
+    function resolveToc(
+        uint256 tocId,
         address caller,
         bytes calldata payload
     ) external returns (bytes memory result);
 
     // Human-readable question for UI/display
-    function getPopQuestion(uint256 popId)
+    function getTocQuestion(uint256 tocId)
         external view returns (string memory);
 
     // Template metadata
@@ -61,7 +61,7 @@ Templates:
 - **Template 1 (Range)**: Is price within [min, max] at deadline?
 - **Template 2 (Reached By)**: Did price reach target before deadline?
 
-All return BOOLEAN results via `POPResultCodec.encodeBoolean()`.
+All return BOOLEAN results via `TOCResultCodec.encodeBoolean()`.
 
 ## Example: OptimisticResolver
 

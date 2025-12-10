@@ -1,4 +1,4 @@
-# POP Lifecycle
+# TOC Lifecycle
 
 ## State Machine
 
@@ -6,7 +6,7 @@
                     ┌──────────┐
                     │   NONE   │
                     └────┬─────┘
-                         │ createPOP()
+                         │ createTOC()
                          ▼
                     ┌──────────┐
           ┌─────────│ PENDING  │─────────┐
@@ -16,7 +16,7 @@
     ┌──────────┐   ┌──────────┐          │
     │ REJECTED │   │  ACTIVE  │          │
     └──────────┘   └────┬─────┘          │
-                        │ resolvePOP()   │
+                        │ resolveTOC()   │
                         ▼                │
                    ┌───────────┐         │
                    │ RESOLVING │         │
@@ -53,7 +53,7 @@
 ### 1. Creation
 
 ```solidity
-function createPOP(
+function createTOC(
     address resolver,
     uint32 templateId,
     bytes calldata payload,
@@ -62,10 +62,10 @@ function createPOP(
     uint32 truthKeeperWindow,
     uint32 escalationWindow,
     uint32 postResolutionWindow
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 ```
 
-- Resolver validates payload via `onPopCreated()`
+- Resolver validates payload via `onTocCreated()`
 - Resolver returns initial state (PENDING or ACTIVE)
 - Accountability tier calculated and frozen
 - Time windows stored for later use
@@ -73,8 +73,8 @@ function createPOP(
 ### 2. Resolution
 
 ```solidity
-function resolvePOP(
-    uint256 popId,
+function resolveTOC(
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     bytes calldata payload
@@ -82,15 +82,15 @@ function resolvePOP(
 ```
 
 - Proposer stakes resolution bond
-- Resolver executes `resolvePop()` and returns ABI-encoded result
+- Resolver executes `resolveToc()` and returns ABI-encoded result
 - Dispute window opens
 - State → RESOLVING
 
 ### 3. Dispute (Optional)
 
 ```solidity
-function disputePOP(
-    uint256 popId,
+function disputeTOC(
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount
 ) external;
@@ -103,7 +103,7 @@ function disputePOP(
 ### 4. Finalization
 
 ```solidity
-function finalizePOP(uint256 popId) external;
+function finalizeTOC(uint256 tocId) external;
 ```
 
 - Called after dispute window expires (if no dispute)

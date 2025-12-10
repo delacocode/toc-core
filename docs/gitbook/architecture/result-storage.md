@@ -18,10 +18,10 @@ bytes memory encoded = abi.encode(price);   // 32 bytes
 bytes memory arbitrary = customData;        // variable length
 ```
 
-## POPResultCodec Helper
+## TOCResultCodec Helper
 
 ```solidity
-library POPResultCodec {
+library TOCResultCodec {
     function encodeBoolean(bool value) internal pure returns (bytes memory) {
         return abi.encode(value);
     }
@@ -51,6 +51,6 @@ Previous approach: separate mappings for bool, int256, bytes results.
 
 **Unified approach:**
 - Single `_results` mapping
-- Answer type stored in POP metadata
+- Answer type stored in TOC metadata
 - Decoder library handles type-specific extraction
 - Future types need zero contract changes

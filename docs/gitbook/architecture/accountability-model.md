@@ -2,7 +2,7 @@
 
 ## Tier Calculation
 
-At POP creation, accountability tier is calculated and frozen:
+At TOC creation, accountability tier is calculated and frozen:
 
 ```solidity
 function _calculateAccountabilityTier(
@@ -32,17 +32,17 @@ The tier is captured at creation and never changes because:
 
 - Consumers know accountability upfront before interacting
 - Prevents retroactive trust downgrades
-- Resolver upgrades don't affect existing POPs
+- Resolver upgrades don't affect existing TOCs
 - Clear audit trail for historical analysis
 
 ## Consumer Usage
 
 ```solidity
 // Simple: just get the answer
-bytes memory result = registry.getResult(popId);
+bytes memory result = registry.getResult(tocId);
 
 // Comprehensive: get answer + context
-ExtensiveResult memory extensive = registry.getExtensiveResult(popId);
+ExtensiveResult memory extensive = registry.getExtensiveResult(tocId);
 // extensive.result - the answer
 // extensive.finalized - is it final?
 // extensive.tier - accountability level

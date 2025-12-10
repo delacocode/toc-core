@@ -18,7 +18,7 @@ Bonds create economic incentives for honest behavior:
 | No dispute | Returned in full |
 | Dispute rejected | Returned in full |
 | Dispute upheld | 50% to disputer, 50% to protocol |
-| POP cancelled | Returned in full |
+| TOC cancelled | Returned in full |
 
 ### Dispute Bond (posted by disputer)
 
@@ -26,7 +26,7 @@ Bonds create economic incentives for honest behavior:
 |---------|-----------------|
 | Dispute upheld | Returned in full |
 | Dispute rejected | 50% to proposer, 50% to protocol |
-| POP cancelled | Returned in full |
+| TOC cancelled | Returned in full |
 
 ### Escalation Bond (Round 2)
 

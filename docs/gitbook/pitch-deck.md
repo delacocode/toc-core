@@ -111,7 +111,7 @@ Your protocol just calls `getResult()`. We handle the rest.
 ```solidity
 // That's it. Really.
 (bytes memory result, bool finalized, AccountabilityTier tier) =
-    registry.getExtensiveResult(popId);
+    registry.getExtensiveResult(tocId);
 ```
 
 - One call to get the answer

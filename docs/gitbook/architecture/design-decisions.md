@@ -25,11 +25,11 @@
 
 **Rationale:** Explicit trust levels let consumers decide. Don't gate innovation.
 
-## 3. Per-POP Time Windows (vs. Global)
+## 3. Per-TOC Time Windows (vs. Global)
 
-**Decision:** Each POP specifies its own dispute/escalation windows.
+**Decision:** Each TOC specifies its own dispute/escalation windows.
 
-| Aspect | Per-POP | Global |
+| Aspect | Per-TOC | Global |
 |--------|---------|--------|
 | Flexibility | High | Low |
 | Complexity | Higher | Lower |

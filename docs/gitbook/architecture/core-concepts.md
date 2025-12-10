@@ -1,10 +1,10 @@
 # Core Concepts
 
-## POP (Prediction Option Protocol)
+## TOC (Truth On Chain)
 
-A POP is the fundamental unit in TOC. It represents a question that will be resolved to an answer.
+A TOC is the fundamental unit in the system. It represents a question that will be resolved to an answer.
 
-### Anatomy of a POP
+### Anatomy of a TOC
 
 - **Resolver** - The contract responsible for determining the answer
 - **Template** - A reusable question format defined by the resolver
@@ -27,14 +27,14 @@ Resolvers are pluggable contracts that handle domain-specific resolution logic. 
 
 TruthKeepers are whitelisted addresses with domain expertise. They:
 
-- Get assigned to POPs at creation time
+- Get assigned to TOCs at creation time
 - Adjudicate Round 1 disputes
 - Can declare which resolvers they guarantee (affecting accountability tier)
 - Face timeout penalties if they fail to act
 
 ## Accountability Tiers
 
-Every POP has an immutable accountability tier captured at creation:
+Every TOC has an immutable accountability tier captured at creation:
 
 | Tier | Derivation | Meaning |
 |------|------------|---------|
