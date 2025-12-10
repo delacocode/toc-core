@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import "../Popregistry/POPRegistry.sol";
-import "../Popregistry/POPTypes.sol";
+import "../TOCRegistry/TOCRegistry.sol";
+import "../TOCRegistry/TOCTypes.sol";
 import "./MockResolver.sol";
 import "./MockERC20.sol";
 import "./MockTruthKeeper.sol";
-import "../libraries/POPResultCodec.sol";
+import "../libraries/TOCResultCodec.sol";
 
-/// @title POPRegistryTest
-/// @notice Comprehensive tests for POPRegistry contract
-contract POPRegistryTest {
-    POPRegistry registry;
+/// @title TOCRegistryTest
+/// @notice Comprehensive tests for TOCRegistry contract
+contract TOCRegistryTest {
+    TOCRegistry registry;
     MockResolver resolver;
     MockERC20 bondToken;
     MockTruthKeeper truthKeeperContract;
@@ -40,7 +40,7 @@ contract POPRegistryTest {
         disputer = address(0x3);
 
         // Deploy registry
-        registry = new POPRegistry();
+        registry = new TOCRegistry();
 
         // Deploy mock resolver with registry address
         resolver = new MockResolver(address(registry));
@@ -121,14 +121,14 @@ contract POPRegistryTest {
         require(config.registeredBy == address(this), "RegisteredBy should be test contract");
     }
 
-    // ============ POP Creation Tests ============
+    // ============ TOC Creation Tests ============
 
-    function test_CreatePOP() public {
+    function test_CreateTOC() public {
         registry.registerResolver(address(resolver));
 
         bytes memory payload = abi.encode("test payload");
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             payload,
@@ -138,24 +138,24 @@ contract POPRegistryTest {
             DEFAULT_POST_RESOLUTION_WINDOW,
             truthKeeper
         );
-        require(popId == 1, "First POP should have ID 1");
+        require(tocId == 1, "First TOC should have ID 1");
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.resolver == address(resolver), "Resolver should match");
-        require(pop.state == POPState.ACTIVE, "State should be ACTIVE");
-        require(pop.answerType == AnswerType.BOOLEAN, "Answer type should be BOOLEAN");
-        require(pop.disputeWindow == DEFAULT_DISPUTE_WINDOW, "Dispute window should be set");
-        require(pop.postResolutionWindow == DEFAULT_POST_RESOLUTION_WINDOW, "Post resolution window should be set");
-        require(pop.truthKeeper == truthKeeper, "TruthKeeper should be set");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.resolver == address(resolver), "Resolver should match");
+        require(toc.state == TOCState.ACTIVE, "State should be ACTIVE");
+        require(toc.answerType == AnswerType.BOOLEAN, "Answer type should be BOOLEAN");
+        require(toc.disputeWindow == DEFAULT_DISPUTE_WINDOW, "Dispute window should be set");
+        require(toc.postResolutionWindow == DEFAULT_POST_RESOLUTION_WINDOW, "Post resolution window should be set");
+        require(toc.truthKeeper == truthKeeper, "TruthKeeper should be set");
     }
 
-    function test_CreatePOPWithSystemResolver() public {
+    function test_CreateTOCWithSystemResolver() public {
         registry.registerResolver(address(resolver));
         registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
 
         bytes memory payload = abi.encode("test payload");
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             payload,
@@ -166,15 +166,15 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.tierAtCreation == AccountabilityTier.SYSTEM, "Tier should be SYSTEM for system resolver + whitelisted TK");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.tierAtCreation == AccountabilityTier.SYSTEM, "Tier should be SYSTEM for system resolver + whitelisted TK");
     }
 
-    function test_CreatePOPWithPendingState() public {
+    function test_CreateTOCWithPendingState() public {
         registry.registerResolver(address(resolver));
-        resolver.setDefaultInitialState(POPState.PENDING);
+        resolver.setDefaultInitialState(TOCState.PENDING);
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -185,15 +185,15 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.PENDING, "State should be PENDING");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.PENDING, "State should be PENDING");
     }
 
-    function test_RevertCreatePOPWithInvalidTemplate() public {
+    function test_RevertCreateTOCWithInvalidTemplate() public {
         registry.registerResolver(address(resolver));
 
         bool reverted = false;
-        try registry.createPOP(
+        try registry.createTOC(
             address(resolver),
             99,
             "",
@@ -210,12 +210,12 @@ contract POPRegistryTest {
         require(reverted, "Should revert on invalid template");
     }
 
-    function test_RevertCreatePOPWithUnregisteredResolver() public {
+    function test_RevertCreateTOCWithUnregisteredResolver() public {
         // Create another mock resolver but don't register it
         MockResolver unregisteredResolver = new MockResolver(address(registry));
 
         bool reverted = false;
-        try registry.createPOP(
+        try registry.createTOC(
             address(unregisteredResolver),
             0,
             "",
@@ -232,13 +232,13 @@ contract POPRegistryTest {
         require(reverted, "Should revert on unregistered resolver");
     }
 
-    // ============ POP Approval/Rejection Tests ============
+    // ============ TOC Approval/Rejection Tests ============
 
-    function test_ApproveAndRejectPOP() public {
+    function test_ApproveAndRejectTOC() public {
         registry.registerResolver(address(resolver));
-        resolver.setDefaultInitialState(POPState.PENDING);
+        resolver.setDefaultInitialState(TOCState.PENDING);
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -249,8 +249,8 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.PENDING, "State should be PENDING");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.PENDING, "State should be PENDING");
 
         // Resolver approves (we call from test contract, which is registry for mock)
         // Need to call from resolver - set test contract as registry temporarily
@@ -261,9 +261,9 @@ contract POPRegistryTest {
 
     // ============ Resolution Tests ============
 
-    function test_ResolvePOPWithETHBond() public {
+    function test_ResolveTOCWithETHBond() public {
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -275,25 +275,25 @@ contract POPRegistryTest {
         );
 
         // Resolve with ETH bond
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(
-            popId,
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(
+            tocId,
             address(0), // ETH
             MIN_RESOLUTION_BOND,
             ""
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.RESOLVING, "State should be RESOLVING");
-        require(pop.disputeDeadline > block.timestamp, "Dispute deadline should be set");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.RESOLVING, "State should be RESOLVING");
+        require(toc.disputeDeadline > block.timestamp, "Dispute deadline should be set");
 
-        ResolutionInfo memory info = registry.getResolutionInfo(popId);
+        ResolutionInfo memory info = registry.getResolutionInfo(tocId);
         require(info.proposer == address(this), "Proposer should be test contract");
         require(info.bondAmount == MIN_RESOLUTION_BOND, "Bond amount should match");
     }
 
     function test_RevertResolveWithInsufficientBond() public {
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -305,7 +305,7 @@ contract POPRegistryTest {
         );
 
         bool reverted = false;
-        try registry.resolvePOP{value: 0.01 ether}(popId, address(0), 0.01 ether, "") {
+        try registry.resolveTOC{value: 0.01 ether}(tocId, address(0), 0.01 ether, "") {
             // Should not reach here
         } catch {
             reverted = true;
@@ -313,11 +313,11 @@ contract POPRegistryTest {
         require(reverted, "Should revert on insufficient bond");
     }
 
-    function test_RevertResolveNonActivePOP() public {
+    function test_RevertResolveNonActiveTOC() public {
         registry.registerResolver(address(resolver));
-        resolver.setDefaultInitialState(POPState.PENDING);
+        resolver.setDefaultInitialState(TOCState.PENDING);
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -329,19 +329,19 @@ contract POPRegistryTest {
         );
 
         bool reverted = false;
-        try registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "") {
+        try registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "") {
             // Should not reach here
         } catch {
             reverted = true;
         }
-        require(reverted, "Should revert on non-ACTIVE POP");
+        require(reverted, "Should revert on non-ACTIVE TOC");
     }
 
     // ============ Finalization Tests ============
 
     function test_RevertFinalizeBeforeDisputeWindow() public {
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -352,11 +352,11 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
 
         // Try to finalize immediately (should fail)
         bool reverted = false;
-        try registry.finalizePOP(popId) {
+        try registry.finalizeTOC(tocId) {
             // Should not reach here
         } catch {
             reverted = true;
@@ -366,9 +366,9 @@ contract POPRegistryTest {
 
     // ============ Dispute Tests ============
 
-    function test_DisputePOP() public {
+    function test_DisputeTOC() public {
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -379,22 +379,22 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
 
         // Dispute with proposed result (false)
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Incorrect outcome",
             "",    // evidenceURI
-            POPResultCodec.encodeBoolean(false) // proposedResult
+            TOCResultCodec.encodeBoolean(false) // proposedResult
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.DISPUTED_ROUND_1, "State should be DISPUTED");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.DISPUTED_ROUND_1, "State should be DISPUTED");
 
-        DisputeInfo memory info = registry.getDisputeInfo(popId);
+        DisputeInfo memory info = registry.getDisputeInfo(tocId);
         require(info.disputer == address(this), "Disputer should be test contract");
         require(keccak256(bytes(info.reason)) == keccak256(bytes("Incorrect outcome")), "Reason should match");
         require(info.phase == DisputePhase.PRE_RESOLUTION, "Should be pre-resolution dispute");
@@ -402,7 +402,7 @@ contract POPRegistryTest {
 
     function test_RevertDisputeAlreadyDisputed() public {
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -413,40 +413,40 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "First dispute",
             "",
-            POPResultCodec.encodeBoolean(false)
+            TOCResultCodec.encodeBoolean(false)
         );
 
         // Try to dispute again
         bool reverted = false;
         try registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Second dispute",
             "",
-            POPResultCodec.encodeBoolean(false)
+            TOCResultCodec.encodeBoolean(false)
         ) {
             // Should not reach here
         } catch {
             reverted = true;
         }
-        require(reverted, "Should revert on already disputed POP");
+        require(reverted, "Should revert on already disputed TOC");
     }
 
     // ============ Dispute Resolution Tests ============
 
     function test_ResolveDisputeUphold() public {
         registry.registerResolver(address(resolver));
-        // Create POP with no pre-resolution dispute window, only post-resolution
+        // Create TOC with no pre-resolution dispute window, only post-resolution
         // This allows immediate resolution, then post-resolution dispute goes to admin
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -458,38 +458,38 @@ contract POPRegistryTest {
         );
 
         // Resolve immediately (no bond needed for undisputable pre-resolution)
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
 
         // File post-resolution dispute (goes directly to admin for resolution)
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Wrong outcome",
             "",    // evidenceURI
-            POPResultCodec.encodeBoolean(false) // Propose false as correct result
+            TOCResultCodec.encodeBoolean(false) // Propose false as correct result
         );
 
         // Uphold dispute (admin action) - use admin's corrected answer
         registry.resolveDispute(
-            popId,
+            tocId,
             DisputeResolution.UPHOLD_DISPUTE,
-            POPResultCodec.encodeBoolean(false) // correctedResult
+            TOCResultCodec.encodeBoolean(false) // correctedResult
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.RESOLVED, "State should be RESOLVED");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.RESOLVED, "State should be RESOLVED");
 
         // Check boolean result was corrected (default was true, should now be false)
-        bytes memory resultBytes = registry.getResult(popId);
-        bool result = POPResultCodec.decodeBoolean(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
         require(result == false, "Result should be corrected to false");
     }
 
     function test_ResolveDisputeReject() public {
         registry.registerResolver(address(resolver));
-        // Create POP with no pre-resolution dispute window, only post-resolution
-        uint256 popId = registry.createPOP(
+        // Create TOC with no pre-resolution dispute window, only post-resolution
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -500,37 +500,37 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
         // Post-resolution dispute
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Wrong outcome",
             "",
-            POPResultCodec.encodeBoolean(false)
+            TOCResultCodec.encodeBoolean(false)
         );
 
         // Reject dispute (admin action)
         registry.resolveDispute(
-            popId,
+            tocId,
             DisputeResolution.REJECT_DISPUTE,
             "" // Not used when rejecting
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.RESOLVED, "State should be RESOLVED");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.RESOLVED, "State should be RESOLVED");
 
         // Check boolean result is original (true)
-        bytes memory resultBytes = registry.getResult(popId);
-        bool result = POPResultCodec.decodeBoolean(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
         require(result == true, "Result should remain true");
     }
 
     function test_ResolveDisputeCancel() public {
         registry.registerResolver(address(resolver));
-        // Create POP with no pre-resolution dispute window, only post-resolution
-        uint256 popId = registry.createPOP(
+        // Create TOC with no pre-resolution dispute window, only post-resolution
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -541,26 +541,26 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
         // Post-resolution dispute
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Invalid question",
             "",
-            POPResultCodec.encodeBoolean(false)
+            TOCResultCodec.encodeBoolean(false)
         );
 
-        // Cancel POP (admin action)
+        // Cancel TOC (admin action)
         registry.resolveDispute(
-            popId,
+            tocId,
             DisputeResolution.CANCEL_POP,
             "" // Not used when canceling
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.CANCELLED, "State should be CANCELLED");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.CANCELLED, "State should be CANCELLED");
     }
 
     // ============ Answer Type Tests ============
@@ -570,7 +570,7 @@ contract POPRegistryTest {
         resolver.setDefaultNumericResult(42);
 
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -581,8 +581,8 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.answerType == AnswerType.NUMERIC, "Answer type should be NUMERIC");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.answerType == AnswerType.NUMERIC, "Answer type should be NUMERIC");
     }
 
     function test_GenericAnswerType() public {
@@ -590,7 +590,7 @@ contract POPRegistryTest {
         resolver.setDefaultResult(abi.encode("custom result"));
 
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -601,15 +601,15 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.answerType == AnswerType.GENERIC, "Answer type should be GENERIC");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.answerType == AnswerType.GENERIC, "Answer type should be GENERIC");
     }
 
     // ============ View Function Tests ============
 
-    function test_GetPOPInfo() public {
+    function test_GetTOCInfo() public {
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode("test"),
@@ -620,9 +620,9 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POPInfo memory info = registry.getPOPInfo(popId);
+        TOCInfo memory info = registry.getTOCInfo(tocId);
         require(info.resolver == address(resolver), "Resolver should match");
-        require(info.state == POPState.ACTIVE, "State should be ACTIVE");
+        require(info.state == TOCState.ACTIVE, "State should be ACTIVE");
         require(info.resolverTrust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
         require(info.disputeWindow == DEFAULT_DISPUTE_WINDOW, "Dispute window should match");
         require(info.postResolutionWindow == DEFAULT_POST_RESOLUTION_WINDOW, "Post resolution window should match");
@@ -630,7 +630,7 @@ contract POPRegistryTest {
 
     function test_GetPopQuestion() public {
         registry.registerResolver(address(resolver));
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -641,20 +641,20 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        string memory question = registry.getPopQuestion(popId);
+        string memory question = registry.getTocQuestion(tocId);
         require(bytes(question).length > 0, "Question should not be empty");
     }
 
     function test_NextPopId() public {
-        require(registry.nextPopId() == 1, "Initial nextPopId should be 1");
+        require(registry.nextTocId() == 1, "Initial nextTocId should be 1");
 
         registry.registerResolver(address(resolver));
 
-        registry.createPOP(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
-        require(registry.nextPopId() == 2, "nextPopId should be 2 after creating one POP");
+        registry.createTOC(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        require(registry.nextTocId() == 2, "nextTocId should be 2 after creating one TOC");
 
-        registry.createPOP(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
-        require(registry.nextPopId() == 3, "nextPopId should be 3 after creating two POPs");
+        registry.createTOC(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        require(registry.nextTocId() == 3, "nextTocId should be 3 after creating two TOCs");
     }
 
     function test_DefaultDisputeWindow() public {
@@ -688,40 +688,40 @@ contract POPRegistryTest {
 
     function test_RevertInvalidPopId() public {
         bool reverted = false;
-        try registry.getPOPInfo(0) {
+        try registry.getTOCInfo(0) {
             // Should not reach here
         } catch {
             reverted = true;
         }
-        require(reverted, "Should revert on popId 0");
+        require(reverted, "Should revert on tocId 0");
 
         reverted = false;
-        try registry.getPOPInfo(999) {
+        try registry.getTOCInfo(999) {
             // Should not reach here
         } catch {
             reverted = true;
         }
-        require(reverted, "Should revert on non-existent popId");
+        require(reverted, "Should revert on non-existent tocId");
     }
 
     // ============ Multiple POPs Test ============
 
-    function test_MultiplePOPs() public {
+    function test_MultipleTOCs() public {
         registry.registerResolver(address(resolver));
 
         // Create multiple POPs
-        uint256 pop1 = registry.createPOP(address(resolver), 0, abi.encode("pop1"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
-        uint256 pop2 = registry.createPOP(address(resolver), 1, abi.encode("pop2"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
-        uint256 pop3 = registry.createPOP(address(resolver), 2, abi.encode("pop3"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 toc1 = registry.createTOC(address(resolver), 0, abi.encode("toc1"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 toc2 = registry.createTOC(address(resolver), 1, abi.encode("toc2"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 toc3 = registry.createTOC(address(resolver), 2, abi.encode("toc3"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
 
-        require(pop1 == 1, "First POP should be ID 1");
-        require(pop2 == 2, "Second POP should be ID 2");
-        require(pop3 == 3, "Third POP should be ID 3");
+        require(toc1 == 1, "First TOC should be ID 1");
+        require(toc2 == 2, "Second TOC should be ID 2");
+        require(toc3 == 3, "Third TOC should be ID 3");
 
         // Verify different answer types
-        POP memory popData1 = registry.getPOP(pop1);
-        POP memory popData2 = registry.getPOP(pop2);
-        POP memory popData3 = registry.getPOP(pop3);
+        TOC memory tocData1 = registry.getTOC(toc1);
+        TOC memory tocData2 = registry.getTOC(toc2);
+        TOC memory tocData3 = registry.getTOC(toc3);
 
         require(popData1.answerType == AnswerType.BOOLEAN, "POP1 should be BOOLEAN");
         require(popData2.answerType == AnswerType.NUMERIC, "POP2 should be NUMERIC");
@@ -730,13 +730,13 @@ contract POPRegistryTest {
 
     // ============ Flexible Dispute Windows Tests ============
 
-    function test_CreatePOPWithCustomDisputeWindows() public {
+    function test_CreateTOCWithCustomDisputeWindows() public {
         registry.registerResolver(address(resolver));
 
         uint256 customDisputeWindow = 12 hours;
         uint256 customPostResolutionWindow = 48 hours;
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -747,16 +747,16 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.disputeWindow == customDisputeWindow, "Custom dispute window should be set");
-        require(pop.postResolutionWindow == customPostResolutionWindow, "Custom post resolution window should be set");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.disputeWindow == customDisputeWindow, "Custom dispute window should be set");
+        require(toc.postResolutionWindow == customPostResolutionWindow, "Custom post resolution window should be set");
     }
 
-    function test_CreateUndisputablePOP() public {
+    function test_CreateUndisputableTOC() public {
         registry.registerResolver(address(resolver));
 
-        // Create POP with both windows = 0 (undisputable)
-        uint256 popId = registry.createPOP(
+        // Create TOC with both windows = 0 (undisputable)
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -767,17 +767,17 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.disputeWindow == 0, "Dispute window should be 0");
-        require(pop.postResolutionWindow == 0, "Post resolution window should be 0");
-        require(pop.state == POPState.ACTIVE, "State should be ACTIVE");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.disputeWindow == 0, "Dispute window should be 0");
+        require(toc.postResolutionWindow == 0, "Post resolution window should be 0");
+        require(toc.state == TOCState.ACTIVE, "State should be ACTIVE");
     }
 
     function test_ImmediateResolutionNoBond() public {
         registry.registerResolver(address(resolver));
 
-        // Create undisputable POP
-        uint256 popId = registry.createPOP(
+        // Create undisputable TOC
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -786,23 +786,23 @@ contract POPRegistryTest {
         );
 
         // Resolve without bond (should work since undisputable)
-        registry.resolvePOP(
-            popId,
+        registry.resolveTOC(
+            tocId,
             address(0),
             0,      // No bond required
             ""
         );
 
-        POP memory pop = registry.getPOP(popId);
+        TOC memory toc = registry.getTOC(tocId);
         // Should go directly to RESOLVED since disputeWindow = 0
-        require(pop.state == POPState.RESOLVED, "Undisputable POP should go directly to RESOLVED");
+        require(toc.state == TOCState.RESOLVED, "Undisputable TOC should go directly to RESOLVED");
     }
 
     function test_ImmediateResolutionWithPostResolutionWindow() public {
         registry.registerResolver(address(resolver));
 
-        // Create POP with no pre-resolution dispute but has post-resolution window
-        uint256 popId = registry.createPOP(
+        // Create TOC with no pre-resolution dispute but has post-resolution window
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -814,25 +814,25 @@ contract POPRegistryTest {
         );
 
         // Resolve with bond (required since postResolutionWindow > 0)
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(
-            popId,
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(
+            tocId,
             address(0),
             MIN_RESOLUTION_BOND,
             ""
         );
 
-        POP memory pop = registry.getPOP(popId);
+        TOC memory toc = registry.getTOC(tocId);
         // Should go directly to RESOLVED since disputeWindow = 0
-        require(pop.state == POPState.RESOLVED, "Should go directly to RESOLVED when disputeWindow = 0");
+        require(toc.state == TOCState.RESOLVED, "Should go directly to RESOLVED when disputeWindow = 0");
         // But should have post-resolution dispute deadline set
-        require(pop.postDisputeDeadline > block.timestamp, "Post dispute deadline should be set");
+        require(toc.postDisputeDeadline > block.timestamp, "Post dispute deadline should be set");
     }
 
     function test_FullyFinalizedWithoutPostResolutionWindow() public {
         registry.registerResolver(address(resolver));
 
-        // Create undisputable POP
-        uint256 popId = registry.createPOP(
+        // Create undisputable TOC
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -841,19 +841,19 @@ contract POPRegistryTest {
         );
 
         // Resolve without bond
-        registry.resolvePOP(popId, address(0), 0, "");
+        registry.resolveTOC(tocId, address(0), 0, "");
 
         // Should be immediately fully finalized
-        bool fullyFinalized = registry.isFullyFinalized(popId);
-        require(fullyFinalized, "Undisputable POP should be fully finalized immediately");
+        bool fullyFinalized = registry.isFullyFinalized(tocId);
+        require(fullyFinalized, "Undisputable TOC should be fully finalized immediately");
     }
 
     function test_IsContestedAndHasCorrectedResult() public {
-        // Create POP with post-resolution window
+        // Create TOC with post-resolution window
         registry.registerResolver(address(resolver));
 
         // Pre-resolution = 0, post-resolution = 24h (immediate resolve, then can dispute)
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -865,46 +865,46 @@ contract POPRegistryTest {
         );
 
         // Resolve immediately
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
 
         // Initially not contested
-        require(!registry.isContested(popId), "Should not be contested initially");
-        require(!registry.hasCorrectedResult(popId), "Should not have corrected result initially");
+        require(!registry.isContested(tocId), "Should not be contested initially");
+        require(!registry.hasCorrectedResult(tocId), "Should not have corrected result initially");
 
         // File post-resolution dispute
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Result is wrong",
             "",
-            POPResultCodec.encodeBoolean(false) // propose false as correct
+            TOCResultCodec.encodeBoolean(false) // propose false as correct
         );
 
         // Now should be contested
-        require(registry.isContested(popId), "Should be contested after post-resolution dispute");
+        require(registry.isContested(tocId), "Should be contested after post-resolution dispute");
 
         // Uphold the dispute
         registry.resolveDispute(
-            popId,
+            tocId,
             DisputeResolution.UPHOLD_DISPUTE,
-            POPResultCodec.encodeBoolean(false) // correct to false
+            TOCResultCodec.encodeBoolean(false) // correct to false
         );
 
         // Should have corrected result
-        require(registry.hasCorrectedResult(popId), "Should have corrected result after uphold");
+        require(registry.hasCorrectedResult(tocId), "Should have corrected result after uphold");
 
         // Check corrected result
-        bytes memory resultBytes = registry.getResult(popId);
-        bool correctedResult = POPResultCodec.decodeBoolean(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool correctedResult = TOCResultCodec.decodeBoolean(resultBytes);
         require(correctedResult == false, "Corrected result should be false");
     }
 
     function test_DisputeOnlyIfDisputeWindowGtZero() public {
         registry.registerResolver(address(resolver));
 
-        // Create undisputable POP (both windows = 0)
-        uint256 popId = registry.createPOP(
+        // Create undisputable TOC (both windows = 0)
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -913,46 +913,46 @@ contract POPRegistryTest {
         );
 
         // Resolve
-        registry.resolvePOP(popId, address(0), 0, "");
+        registry.resolveTOC(tocId, address(0), 0, "");
 
         // Try to dispute - should fail
         bool reverted = false;
         try registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Should fail",
             "",
-            POPResultCodec.encodeBoolean(false)
+            TOCResultCodec.encodeBoolean(false)
         ) {
             // Should not reach here
         } catch {
             reverted = true;
         }
-        require(reverted, "Should not be able to dispute undisputable POP");
+        require(reverted, "Should not be able to dispute undisputable TOC");
     }
 
     function test_DisputeInfoPhaseTracking() public {
         registry.registerResolver(address(resolver));
 
         // Test pre-resolution dispute phase
-        uint256 popId1 = registry.createPOP(
+        uint256 tocId1 = registry.createTOC(
             address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper
         );
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId1, address(0), MIN_RESOLUTION_BOND, "");
-        registry.dispute{value: MIN_DISPUTE_BOND}(popId1, address(0), MIN_DISPUTE_BOND, "Pre-res dispute", "", POPResultCodec.encodeBoolean(false));
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId1, address(0), MIN_RESOLUTION_BOND, "");
+        registry.dispute{value: MIN_DISPUTE_BOND}(tocId1, address(0), MIN_DISPUTE_BOND, "Pre-res dispute", "", TOCResultCodec.encodeBoolean(false));
 
-        DisputeInfo memory info1 = registry.getDisputeInfo(popId1);
+        DisputeInfo memory info1 = registry.getDisputeInfo(tocId1);
         require(info1.phase == DisputePhase.PRE_RESOLUTION, "Should be pre-resolution phase");
 
         // Test post-resolution dispute phase
-        uint256 popId2 = registry.createPOP(
+        uint256 tocId2 = registry.createTOC(
             address(resolver), 0, "", 0, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper  // immediate resolution, post-res window
         );
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId2, address(0), MIN_RESOLUTION_BOND, "");
-        registry.dispute{value: MIN_DISPUTE_BOND}(popId2, address(0), MIN_DISPUTE_BOND, "Post-res dispute", "", POPResultCodec.encodeBoolean(false));
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId2, address(0), MIN_RESOLUTION_BOND, "");
+        registry.dispute{value: MIN_DISPUTE_BOND}(tocId2, address(0), MIN_DISPUTE_BOND, "Post-res dispute", "", TOCResultCodec.encodeBoolean(false));
 
-        DisputeInfo memory info2 = registry.getDisputeInfo(popId2);
+        DisputeInfo memory info2 = registry.getDisputeInfo(tocId2);
         require(info2.phase == DisputePhase.POST_RESOLUTION, "Should be post-resolution phase");
     }
 
@@ -962,8 +962,8 @@ contract POPRegistryTest {
 
         registry.registerResolver(address(resolver));
 
-        // Create POP with no pre-resolution dispute window, only post-resolution
-        uint256 popId = registry.createPOP(
+        // Create TOC with no pre-resolution dispute window, only post-resolution
+        uint256 tocId = registry.createTOC(
             address(resolver), 0, "",
             0,     // no pre-resolution dispute
             0,     // no TK window
@@ -972,27 +972,27 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
 
         // Post-resolution dispute - proposes 50 as correct result
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Wrong number",
             "",    // evidenceURI
-            POPResultCodec.encodeNumeric(50) // proposed numeric result
+            TOCResultCodec.encodeNumeric(50) // proposed numeric result
         );
 
         // Admin upholds with their own corrected value (75)
         registry.resolveDispute(
-            popId,
+            tocId,
             DisputeResolution.UPHOLD_DISPUTE,
-            POPResultCodec.encodeNumeric(75) // admin's corrected result (overrides disputer's 50)
+            TOCResultCodec.encodeNumeric(75) // admin's corrected result (overrides disputer's 50)
         );
 
-        bytes memory resultBytes = registry.getResult(popId);
-        int256 result = POPResultCodec.decodeNumeric(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        int256 result = TOCResultCodec.decodeNumeric(resultBytes);
         require(result == 75, "Result should be admin's corrected value (75)");
     }
 
@@ -1001,7 +1001,7 @@ contract POPRegistryTest {
     function test_GetExtensiveResult() public {
         registry.registerResolver(address(resolver));
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1009,11 +1009,11 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP(popId, address(0), 0, "");
+        registry.resolveTOC(tocId, address(0), 0, "");
 
-        ExtensiveResult memory result = registry.getExtensiveResult(popId);
+        ExtensiveResult memory result = registry.getExtensiveResult(tocId);
         require(result.answerType == AnswerType.BOOLEAN, "Answer type should be BOOLEAN");
-        bool boolResult = POPResultCodec.decodeBoolean(result.result);
+        bool boolResult = TOCResultCodec.decodeBoolean(result.result);
         require(boolResult == true, "Boolean result should be true (mock default)");
         require(result.isFinalized == true, "Should be finalized");
         require(result.wasDisputed == false, "Should not be disputed");
@@ -1026,8 +1026,8 @@ contract POPRegistryTest {
     function test_GetExtensiveResultStrict() public {
         registry.registerResolver(address(resolver));
 
-        // Create undisputable POP
-        uint256 popId = registry.createPOP(
+        // Create undisputable TOC
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1035,18 +1035,18 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP(popId, address(0), 0, "");
+        registry.resolveTOC(tocId, address(0), 0, "");
 
-        // Should work for fully finalized POP
-        ExtensiveResult memory result = registry.getExtensiveResultStrict(popId);
+        // Should work for fully finalized TOC
+        ExtensiveResult memory result = registry.getExtensiveResultStrict(tocId);
         require(result.isFinalized == true, "Should be finalized");
     }
 
     function test_GetExtensiveResultStrictReverts() public {
         registry.registerResolver(address(resolver));
 
-        // Create POP with post-resolution window (not immediately fully finalized)
-        uint256 popId = registry.createPOP(
+        // Create TOC with post-resolution window (not immediately fully finalized)
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1057,11 +1057,11 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(popId, address(0), MIN_RESOLUTION_BOND, "");
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
 
         // Should revert - post-resolution window still open
         bool reverted = false;
-        try registry.getExtensiveResultStrict(popId) {
+        try registry.getExtensiveResultStrict(tocId) {
             // Should not reach here
         } catch {
             reverted = true;
@@ -1088,7 +1088,7 @@ contract POPRegistryTest {
         registry.registerResolver(address(resolver));
 
         // Default TK approves all POPs
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1099,13 +1099,13 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
+        TOC memory toc = registry.getTOC(tocId);
         // TK is whitelisted and approved, resolver is PERMISSIONLESS
         // So tier should be TK_GUARANTEED (not SYSTEM since resolver isn't SYSTEM)
-        require(pop.tierAtCreation == AccountabilityTier.TK_GUARANTEED, "Tier should be TK_GUARANTEED when TK approves");
+        require(toc.tierAtCreation == AccountabilityTier.TK_GUARANTEED, "Tier should be TK_GUARANTEED when TK approves");
 
         // Verify TK was called
-        require(truthKeeperContract.assignedPops(popId), "TK should have been notified of POP");
+        require(truthKeeperContract.assignedPops(tocId), "TK should have been notified of TOC");
     }
 
     function test_TKSoftRejectGivesPermissionlessTier() public {
@@ -1114,7 +1114,7 @@ contract POPRegistryTest {
         // Set TK to soft reject
         truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_SOFT);
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1125,9 +1125,9 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
-        require(pop.state == POPState.ACTIVE, "POP should still be created in ACTIVE state");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
+        require(toc.state == TOCState.ACTIVE, "TOC should still be created in ACTIVE state");
     }
 
     function test_TKHardRejectRevertsCreation() public {
@@ -1137,7 +1137,7 @@ contract POPRegistryTest {
         truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_HARD);
 
         bool reverted = false;
-        try registry.createPOP(
+        try registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1159,7 +1159,7 @@ contract POPRegistryTest {
         registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
 
         // TK is whitelisted and approves
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1170,8 +1170,8 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.tierAtCreation == AccountabilityTier.SYSTEM, "Tier should be SYSTEM when SYSTEM resolver + whitelisted TK + approval");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.tierAtCreation == AccountabilityTier.SYSTEM, "Tier should be SYSTEM when SYSTEM resolver + whitelisted TK + approval");
     }
 
     function test_TKSoftRejectWithSystemResolverGivesPermissionless() public {
@@ -1181,7 +1181,7 @@ contract POPRegistryTest {
         // TK soft rejects
         truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_SOFT);
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1192,19 +1192,19 @@ contract POPRegistryTest {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
+        TOC memory toc = registry.getTOC(tocId);
         // Even with SYSTEM resolver, no approval = PERMISSIONLESS
-        require(pop.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
+        require(toc.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
     }
 
-    function test_RevertCreatePOPWithEOATruthKeeper() public {
+    function test_RevertCreateTOCWithEOATruthKeeper() public {
         registry.registerResolver(address(resolver));
 
         // Try to use an EOA as TK (should fail)
         address eoaTK = address(0x999);
 
         bool reverted = false;
-        try registry.createPOP(
+        try registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1232,7 +1232,7 @@ contract POPRegistryTest {
         truthKeeperContract.setResolverResponse(address(resolver2), TKApprovalResponse.REJECT_HARD);
 
         // Should succeed with resolver1
-        uint256 popId1 = registry.createPOP(
+        uint256 tocId1 = registry.createTOC(
             address(resolver),
             0,
             "",
@@ -1242,11 +1242,11 @@ contract POPRegistryTest {
             DEFAULT_POST_RESOLUTION_WINDOW,
             truthKeeper
         );
-        require(popId1 == 1, "Should create POP with resolver1");
+        require(tocId1 == 1, "Should create TOC with resolver1");
 
         // Should fail with resolver2
         bool reverted = false;
-        try registry.createPOP(
+        try registry.createTOC(
             address(resolver2),
             0,
             "",

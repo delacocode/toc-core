@@ -2,16 +2,16 @@
 pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
-import "../Popregistry/POPRegistry.sol";
-import "../Popregistry/POPTypes.sol";
+import "../TOCRegistry/TOCRegistry.sol";
+import "../TOCRegistry/TOCTypes.sol";
 import "../resolvers/OptimisticResolver.sol";
-import "../libraries/POPResultCodec.sol";
+import "../libraries/TOCResultCodec.sol";
 import "./MockTruthKeeper.sol";
 
 /// @title OptimisticResolverTest
 /// @notice Tests for OptimisticResolver contract
 contract OptimisticResolverTest is Test {
-    POPRegistry registry;
+    TOCRegistry registry;
     OptimisticResolver resolver;
     MockTruthKeeper truthKeeperContract;
 
@@ -40,7 +40,7 @@ contract OptimisticResolverTest is Test {
         vm.deal(creator, 10 ether);
 
         // Deploy registry
-        registry = new POPRegistry();
+        registry = new TOCRegistry();
 
         // Deploy optimistic resolver
         resolver = new OptimisticResolver(address(registry));
@@ -70,7 +70,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 365 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0, // TEMPLATE_ARBITRARY
             abi.encode(payload),
@@ -81,11 +81,11 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        require(popId == 1, "First POP should have ID 1");
+        require(tocId == 1, "First TOC should have ID 1");
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.ACTIVE, "State should be ACTIVE");
-        require(pop.answerType == AnswerType.BOOLEAN, "Answer type should be BOOLEAN");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.ACTIVE, "State should be ACTIVE");
+        require(toc.answerType == AnswerType.BOOLEAN, "Answer type should be BOOLEAN");
     }
 
     function test_GetArbitraryQuestion() public {
@@ -96,7 +96,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 30 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -107,7 +107,7 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        string memory question = registry.getPopQuestion(popId);
+        string memory question = registry.getTocQuestion(tocId);
         require(bytes(question).length > 0, "Question should not be empty");
         // Check it contains our question text
         require(_contains(question, "Will ETH flip BTC?"), "Should contain question text");
@@ -121,7 +121,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -139,11 +139,11 @@ contract OptimisticResolverTest is Test {
         });
 
         // Resolve
-        registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
+        registry.resolveTOC(tocId, address(0), 0, abi.encode(answer));
 
         // Check result
-        bytes memory resultBytes = registry.getResult(popId);
-        bool result = POPResultCodec.decodeBoolean(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
         require(result == true, "Result should be true");
     }
 
@@ -155,7 +155,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -168,10 +168,10 @@ contract OptimisticResolverTest is Test {
             justification: "The event did not occur"
         });
 
-        registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
+        registry.resolveTOC(tocId, address(0), 0, abi.encode(answer));
 
-        bytes memory resultBytes = registry.getResult(popId);
-        bool result = POPResultCodec.decodeBoolean(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
         require(result == false, "Result should be false");
     }
 
@@ -184,7 +184,7 @@ contract OptimisticResolverTest is Test {
         });
 
         bool reverted = false;
-        try registry.createPOP(
+        try registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -210,7 +210,7 @@ contract OptimisticResolverTest is Test {
         });
 
         bool reverted = false;
-        try registry.createPOP(
+        try registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -239,7 +239,7 @@ contract OptimisticResolverTest is Test {
             line: 0
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             1, // TEMPLATE_SPORTS
             abi.encode(payload),
@@ -250,10 +250,10 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.ACTIVE, "State should be ACTIVE");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.ACTIVE, "State should be ACTIVE");
 
-        string memory question = registry.getPopQuestion(popId);
+        string memory question = registry.getTocQuestion(tocId);
         require(_contains(question, "Kansas City Chiefs"), "Should contain home team");
         require(_contains(question, "San Francisco 49ers"), "Should contain away team");
         require(_contains(question, "NFL"), "Should contain league");
@@ -269,7 +269,7 @@ contract OptimisticResolverTest is Test {
             line: -35e17 // -3.5 points
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             1,
             abi.encode(payload),
@@ -280,7 +280,7 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        string memory question = registry.getPopQuestion(popId);
+        string memory question = registry.getTocQuestion(tocId);
         require(_contains(question, "SPREAD"), "Should mention SPREAD");
     }
 
@@ -294,7 +294,7 @@ contract OptimisticResolverTest is Test {
             line: 0
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             1,
             abi.encode(payload),
@@ -308,10 +308,10 @@ contract OptimisticResolverTest is Test {
             justification: "Chiefs won 25-22 in OT"
         });
 
-        registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
+        registry.resolveTOC(tocId, address(0), 0, abi.encode(answer));
 
-        bytes memory resultBytes = registry.getResult(popId);
-        bool result = POPResultCodec.decodeBoolean(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
         require(result == true, "Result should be true (home team won)");
     }
 
@@ -324,7 +324,7 @@ contract OptimisticResolverTest is Test {
             deadline: block.timestamp + 30 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             2, // TEMPLATE_EVENT
             abi.encode(payload),
@@ -335,10 +335,10 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.ACTIVE, "State should be ACTIVE");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.ACTIVE, "State should be ACTIVE");
 
-        string memory question = registry.getPopQuestion(popId);
+        string memory question = registry.getTocQuestion(tocId);
         require(_contains(question, "Fed announces"), "Should contain event description");
         require(_contains(question, "Federal Reserve"), "Should contain verification source");
     }
@@ -350,7 +350,7 @@ contract OptimisticResolverTest is Test {
             deadline: block.timestamp + 30 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             2,
             abi.encode(payload),
@@ -364,10 +364,10 @@ contract OptimisticResolverTest is Test {
             justification: "No bankruptcy filing found by deadline"
         });
 
-        registry.resolvePOP(popId, address(0), 0, abi.encode(answer));
+        registry.resolveTOC(tocId, address(0), 0, abi.encode(answer));
 
-        bytes memory resultBytes = registry.getResult(popId);
-        bool result = POPResultCodec.decodeBoolean(resultBytes);
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
         require(result == false, "Result should be false");
     }
 
@@ -381,9 +381,9 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 30 days
         });
 
-        // Create POP as creator (prank sets both msg.sender and tx.origin)
+        // Create TOC as creator (prank sets both msg.sender and tx.origin)
         vm.prank(creator, creator);
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -396,14 +396,14 @@ contract OptimisticResolverTest is Test {
 
         // Add clarification as creator
         vm.prank(creator);
-        resolver.addClarification(popId, "This includes scenario Y but not Z");
+        resolver.addClarification(tocId, "This includes scenario Y but not Z");
 
         // Get clarifications
-        string[] memory clarifications = resolver.getClarifications(popId);
+        string[] memory clarifications = resolver.getClarifications(tocId);
         require(clarifications.length == 1, "Should have 1 clarification");
 
         // Check question includes clarification
-        string memory question = registry.getPopQuestion(popId);
+        string memory question = registry.getTocQuestion(tocId);
         require(_contains(question, "Clarifications:"), "Should have clarifications section");
     }
 
@@ -415,9 +415,9 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 30 days
         });
 
-        // Create POP as creator
+        // Create TOC as creator
         vm.prank(creator, creator);
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -430,13 +430,13 @@ contract OptimisticResolverTest is Test {
 
         // Add clarifications as creator
         vm.prank(creator);
-        resolver.addClarification(popId, "First clarification");
+        resolver.addClarification(tocId, "First clarification");
         vm.prank(creator);
-        resolver.addClarification(popId, "Second clarification");
+        resolver.addClarification(tocId, "Second clarification");
         vm.prank(creator);
-        resolver.addClarification(popId, "Third clarification");
+        resolver.addClarification(tocId, "Third clarification");
 
-        string[] memory clarifications = resolver.getClarifications(popId);
+        string[] memory clarifications = resolver.getClarifications(tocId);
         require(clarifications.length == 3, "Should have 3 clarifications");
     }
 
@@ -450,9 +450,9 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        // Create POP as creator
+        // Create TOC as creator
         vm.prank(creator, creator);
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -463,13 +463,13 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        (uint32 templateId, address popCreator, uint256 createdAt) = resolver.getQuestionData(popId);
+        (uint32 templateId, address tocCreator, uint256 createdAt) = resolver.getQuestionData(tocId);
         require(templateId == 0, "Template should be 0");
-        require(popCreator == creator, "Creator should be creator address");
+        require(tocCreator == creator, "Creator should be creator address");
         require(createdAt > 0, "CreatedAt should be set");
     }
 
-    function test_GetPopDetails() public {
+    function test_GetTocDetails() public {
         OptimisticResolver.ArbitraryPayload memory payload = OptimisticResolver.ArbitraryPayload({
             question: "Test?",
             description: "Desc",
@@ -477,7 +477,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -488,13 +488,13 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        (uint32 templateId, bytes memory creationPayload) = resolver.getPopDetails(popId);
+        (uint32 templateId, bytes memory creationPayload) = resolver.getTocDetails(tocId);
         require(templateId == 0, "Template should be 0");
         require(creationPayload.length > 0, "Payload should not be empty");
     }
 
-    function test_IsPopManaged() public {
-        require(!resolver.isPopManaged(999), "Non-existent POP should not be managed");
+    function test_IsTocManaged() public {
+        require(!resolver.isTocManaged(999), "Non-existent TOC should not be managed");
 
         OptimisticResolver.ArbitraryPayload memory payload = OptimisticResolver.ArbitraryPayload({
             question: "Test?",
@@ -503,7 +503,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -514,7 +514,7 @@ contract OptimisticResolverTest is Test {
             truthKeeper
         );
 
-        require(resolver.isPopManaged(popId), "Created POP should be managed");
+        require(resolver.isTocManaged(tocId), "Created TOC should be managed");
     }
 
     function test_TemplateInfo() public {
@@ -540,7 +540,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 30 days
         });
 
-        uint256 popId = registry.createPOP(
+        uint256 tocId = registry.createTOC(
             address(resolver),
             0,
             abi.encode(payload),
@@ -557,30 +557,30 @@ contract OptimisticResolverTest is Test {
             justification: "AP called the race"
         });
 
-        registry.resolvePOP{value: MIN_RESOLUTION_BOND}(
-            popId,
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(
+            tocId,
             address(0),
             MIN_RESOLUTION_BOND,
             abi.encode(answer)
         );
 
         // Check state is RESOLVING (waiting for dispute window)
-        POP memory pop = registry.getPOP(popId);
-        require(pop.state == POPState.RESOLVING, "Should be RESOLVING");
+        TOC memory toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.RESOLVING, "Should be RESOLVING");
 
         // File pre-resolution dispute
         registry.dispute{value: MIN_DISPUTE_BOND}(
-            popId,
+            tocId,
             address(0),
             MIN_DISPUTE_BOND,
             "Premature resolution - event hasn't occurred",
             "",
-            POPResultCodec.encodeBoolean(false) // Propose NO
+            TOCResultCodec.encodeBoolean(false) // Propose NO
         );
 
         // Check disputed (pre-resolution goes to DISPUTED_ROUND_1)
-        pop = registry.getPOP(popId);
-        require(pop.state == POPState.DISPUTED_ROUND_1, "Should be in DISPUTED_ROUND_1 state");
+        toc = registry.getTOC(tocId);
+        require(toc.state == TOCState.DISPUTED_ROUND_1, "Should be in DISPUTED_ROUND_1 state");
     }
 
     // ============ Helpers ============
