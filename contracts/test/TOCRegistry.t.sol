@@ -555,7 +555,7 @@ contract TOCRegistryTest {
         // Cancel TOC (admin action)
         registry.resolveDispute(
             tocId,
-            DisputeResolution.CANCEL_POP,
+            DisputeResolution.CANCEL_TOC,
             "" // Not used when canceling
         );
 
@@ -723,9 +723,9 @@ contract TOCRegistryTest {
         TOC memory tocData2 = registry.getTOC(toc2);
         TOC memory tocData3 = registry.getTOC(toc3);
 
-        require(popData1.answerType == AnswerType.BOOLEAN, "POP1 should be BOOLEAN");
-        require(popData2.answerType == AnswerType.NUMERIC, "POP2 should be NUMERIC");
-        require(popData3.answerType == AnswerType.GENERIC, "POP3 should be GENERIC");
+        require(tocData1.answerType == AnswerType.BOOLEAN, "TOC1 should be BOOLEAN");
+        require(tocData2.answerType == AnswerType.NUMERIC, "TOC2 should be NUMERIC");
+        require(tocData3.answerType == AnswerType.GENERIC, "TOC3 should be GENERIC");
     }
 
     // ============ Flexible Dispute Windows Tests ============
@@ -1105,7 +1105,7 @@ contract TOCRegistryTest {
         require(toc.tierAtCreation == AccountabilityTier.TK_GUARANTEED, "Tier should be TK_GUARANTEED when TK approves");
 
         // Verify TK was called
-        require(truthKeeperContract.assignedPops(tocId), "TK should have been notified of TOC");
+        require(truthKeeperContract.assignedTocs(tocId), "TK should have been notified of TOC");
     }
 
     function test_TKSoftRejectGivesPermissionlessTier() public {
