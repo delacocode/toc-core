@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import "../Popregistry/IPopResolver.sol";
-import "../Popregistry/IPOPRegistry.sol";
-import "../Popregistry/POPTypes.sol";
-import "../libraries/POPResultCodec.sol";
+import "../TOCRegistry/ITOCResolver.sol";
+import "../TOCRegistry/ITOCRegistry.sol";
+import "../TOCRegistry/TOCTypes.sol";
+import "../libraries/TOCResultCodec.sol";
 
 /// @title OptimisticResolver
 /// @notice Resolver for human-judgment questions using optimistic proposal model
@@ -12,7 +12,7 @@ import "../libraries/POPResultCodec.sol";
 ///   - Template 0: Arbitrary Question - Free-form YES/NO questions
 ///   - Template 1: Sports Outcome - Structured sports event questions
 ///   - Template 2: Event Occurrence - Did a specific event occur?
-contract OptimisticResolver is IPopResolver {
+contract OptimisticResolver is ITOCResolver {
     // ============ Constants ============
 
     uint32 public constant TEMPLATE_ARBITRARY = 0;
@@ -25,7 +25,7 @@ contract OptimisticResolver is IPopResolver {
 
     // ============ Immutables ============
 
-    IPOPRegistry public immutable registry;
+    ITOCRegistry public immutable registry;
 
     // ============ Enums ============
 
@@ -38,7 +38,7 @@ contract OptimisticResolver is IPopResolver {
 
     // ============ Structs ============
 
-    /// @notice Core question data stored for each POP
+    /// @notice Core question data stored for each TOC
     struct QuestionData {
         uint32 templateId;
         address creator;
@@ -79,23 +79,23 @@ contract OptimisticResolver is IPopResolver {
 
     // ============ Storage ============
 
-    /// @notice Question data for each POP
+    /// @notice Question data for each TOC
     mapping(uint256 => QuestionData) private _questions;
 
-    /// @notice Clarifications for each POP (append-only)
+    /// @notice Clarifications for each TOC (append-only)
     mapping(uint256 => string[]) private _clarifications;
 
     // ============ Events ============
 
     event QuestionCreated(
-        uint256 indexed popId,
+        uint256 indexed tocId,
         uint32 indexed templateId,
         address indexed creator,
         string questionPreview
     );
 
     event ClarificationAdded(
-        uint256 indexed popId,
+        uint256 indexed tocId,
         address indexed creator,
         string clarification
     );
@@ -106,10 +106,10 @@ contract OptimisticResolver is IPopResolver {
     error InvalidPayload();
     error OnlyRegistry();
     error OnlyCreator(address caller, address creator);
-    error CannotClarifyAfterResolution(POPState state);
+    error CannotClarifyAfterResolution(TOCState state);
     error TextTooLong(uint256 length, uint256 max);
     error ResolutionTimeInPast(uint256 resolutionTime, uint256 current);
-    error PopNotManaged(uint256 popId);
+    error TocNotManaged(uint256 tocId);
     error EmptyQuestion();
 
     // ============ Modifiers ============
@@ -124,22 +124,22 @@ contract OptimisticResolver is IPopResolver {
     // ============ Constructor ============
 
     constructor(address _registry) {
-        registry = IPOPRegistry(_registry);
+        registry = ITOCRegistry(_registry);
     }
 
-    // ============ IPopResolver Implementation ============
+    // ============ ITOCResolver Implementation ============
 
-    /// @inheritdoc IPopResolver
-    function isPopManaged(uint256 popId) external view returns (bool) {
-        return _questions[popId].createdAt != 0;
+    /// @inheritdoc ITOCResolver
+    function isTocManaged(uint256 tocId) external view returns (bool) {
+        return _questions[tocId].createdAt != 0;
     }
 
-    /// @inheritdoc IPopResolver
-    function onPopCreated(
-        uint256 popId,
+    /// @inheritdoc ITOCResolver
+    function onTocCreated(
+        uint256 tocId,
         uint32 templateId,
         bytes calldata payload
-    ) external onlyRegistry returns (POPState initialState) {
+    ) external onlyRegistry returns (TOCState initialState) {
         if (templateId >= TEMPLATE_COUNT) {
             revert InvalidTemplate(templateId);
         }
@@ -148,74 +148,74 @@ contract OptimisticResolver is IPopResolver {
         string memory questionPreview = _validateAndGetPreview(templateId, payload);
 
         // Store question data
-        _questions[popId] = QuestionData({
+        _questions[tocId] = QuestionData({
             templateId: templateId,
             creator: tx.origin, // Original caller, not registry
             createdAt: block.timestamp,
             payload: payload
         });
 
-        emit QuestionCreated(popId, templateId, tx.origin, questionPreview);
+        emit QuestionCreated(tocId, templateId, tx.origin, questionPreview);
 
         // All optimistic questions start ACTIVE (no approval needed)
-        return POPState.ACTIVE;
+        return TOCState.ACTIVE;
     }
 
-    /// @inheritdoc IPopResolver
-    function resolvePop(
-        uint256 popId,
+    /// @inheritdoc ITOCResolver
+    function resolveToc(
+        uint256 tocId,
         address, // caller - not used for access control in optimistic model
         bytes calldata answerPayload
     ) external onlyRegistry returns (bytes memory result) {
-        QuestionData storage q = _questions[popId];
+        QuestionData storage q = _questions[tocId];
         if (q.createdAt == 0) {
-            revert PopNotManaged(popId);
+            revert TocNotManaged(tocId);
         }
 
         // Decode answer payload
         AnswerPayload memory answer = abi.decode(answerPayload, (AnswerPayload));
 
         // All templates return boolean
-        return POPResultCodec.encodeBoolean(answer.answer);
+        return TOCResultCodec.encodeBoolean(answer.answer);
     }
 
-    /// @inheritdoc IPopResolver
-    function getPopDetails(
-        uint256 popId
+    /// @inheritdoc ITOCResolver
+    function getTocDetails(
+        uint256 tocId
     ) external view returns (uint32 templateId, bytes memory creationPayload) {
-        QuestionData storage q = _questions[popId];
+        QuestionData storage q = _questions[tocId];
         return (q.templateId, q.payload);
     }
 
-    /// @inheritdoc IPopResolver
-    function getPopQuestion(uint256 popId) external view returns (string memory question) {
-        QuestionData storage q = _questions[popId];
+    /// @inheritdoc ITOCResolver
+    function getTocQuestion(uint256 tocId) external view returns (string memory question) {
+        QuestionData storage q = _questions[tocId];
         if (q.createdAt == 0) {
-            return "Unknown POP";
+            return "Unknown TOC";
         }
 
         if (q.templateId == TEMPLATE_ARBITRARY) {
-            return _formatArbitraryQuestion(popId, q);
+            return _formatArbitraryQuestion(tocId, q);
         } else if (q.templateId == TEMPLATE_SPORTS) {
-            return _formatSportsQuestion(popId, q);
+            return _formatSportsQuestion(tocId, q);
         } else if (q.templateId == TEMPLATE_EVENT) {
-            return _formatEventQuestion(popId, q);
+            return _formatEventQuestion(tocId, q);
         }
 
         return "Unknown template";
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function getTemplateCount() external pure returns (uint32 count) {
         return TEMPLATE_COUNT;
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function isValidTemplate(uint32 templateId) external pure returns (bool) {
         return templateId < TEMPLATE_COUNT;
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function getTemplateAnswerType(uint32) external pure returns (AnswerType) {
         // All optimistic templates return boolean (YES/NO)
         return AnswerType.BOOLEAN;
@@ -225,12 +225,12 @@ contract OptimisticResolver is IPopResolver {
 
     /// @notice Add a clarification to an existing question
     /// @dev Only the original creator can add clarifications, and only before resolution
-    /// @param popId The POP identifier
+    /// @param tocId The TOC identifier
     /// @param clarification The clarification text to add
-    function addClarification(uint256 popId, string calldata clarification) external {
-        QuestionData storage q = _questions[popId];
+    function addClarification(uint256 tocId, string calldata clarification) external {
+        QuestionData storage q = _questions[tocId];
         if (q.createdAt == 0) {
-            revert PopNotManaged(popId);
+            revert TocNotManaged(tocId);
         }
 
         // Only creator can add clarifications
@@ -243,10 +243,10 @@ contract OptimisticResolver is IPopResolver {
             revert TextTooLong(bytes(clarification).length, MAX_TEXT_LENGTH);
         }
 
-        // Can only clarify while POP is ACTIVE or PENDING
-        POP memory pop = registry.getPOP(popId);
-        if (pop.state != POPState.ACTIVE && pop.state != POPState.PENDING) {
-            revert CannotClarifyAfterResolution(pop.state);
+        // Can only clarify while TOC is ACTIVE or PENDING
+        TOC memory toc = registry.getTOC(tocId);
+        if (toc.state != TOCState.ACTIVE && toc.state != TOCState.PENDING) {
+            revert CannotClarifyAfterResolution(toc.state);
         }
 
         // Add timestamped clarification
@@ -256,29 +256,29 @@ contract OptimisticResolver is IPopResolver {
             "] ",
             clarification
         ));
-        _clarifications[popId].push(timestamped);
+        _clarifications[tocId].push(timestamped);
 
-        emit ClarificationAdded(popId, msg.sender, clarification);
+        emit ClarificationAdded(tocId, msg.sender, clarification);
     }
 
-    /// @notice Get all clarifications for a POP
-    /// @param popId The POP identifier
+    /// @notice Get all clarifications for a TOC
+    /// @param tocId The TOC identifier
     /// @return clarifications Array of clarification strings
-    function getClarifications(uint256 popId) external view returns (string[] memory) {
-        return _clarifications[popId];
+    function getClarifications(uint256 tocId) external view returns (string[] memory) {
+        return _clarifications[tocId];
     }
 
-    /// @notice Get question data for a POP
-    /// @param popId The POP identifier
+    /// @notice Get question data for a TOC
+    /// @param tocId The TOC identifier
     /// @return templateId The template used
     /// @return creator The question creator
     /// @return createdAt Creation timestamp
-    function getQuestionData(uint256 popId) external view returns (
+    function getQuestionData(uint256 tocId) external view returns (
         uint32 templateId,
         address creator,
         uint256 createdAt
     ) {
-        QuestionData storage q = _questions[popId];
+        QuestionData storage q = _questions[tocId];
         return (q.templateId, q.creator, q.createdAt);
     }
 
@@ -336,7 +336,7 @@ contract OptimisticResolver is IPopResolver {
     // ============ Internal Formatting ============
 
     function _formatArbitraryQuestion(
-        uint256 popId,
+        uint256 tocId,
         QuestionData storage q
     ) internal view returns (string memory) {
         ArbitraryPayload memory p = abi.decode(q.payload, (ArbitraryPayload));
@@ -349,13 +349,13 @@ contract OptimisticResolver is IPopResolver {
         ));
 
         // Add clarifications if any
-        result = _appendClarifications(popId, result);
+        result = _appendClarifications(tocId, result);
 
         return result;
     }
 
     function _formatSportsQuestion(
-        uint256 popId,
+        uint256 tocId,
         QuestionData storage q
     ) internal view returns (string memory) {
         SportsPayload memory p = abi.decode(q.payload, (SportsPayload));
@@ -390,13 +390,13 @@ contract OptimisticResolver is IPopResolver {
             "Overtime counts. If game is cancelled, resolves via dispute."
         ));
 
-        result = _appendClarifications(popId, result);
+        result = _appendClarifications(tocId, result);
 
         return result;
     }
 
     function _formatEventQuestion(
-        uint256 popId,
+        uint256 tocId,
         QuestionData storage q
     ) internal view returns (string memory) {
         EventPayload memory p = abi.decode(q.payload, (EventPayload));
@@ -409,16 +409,16 @@ contract OptimisticResolver is IPopResolver {
             "Resolves YES if event occurs by deadline, NO otherwise."
         ));
 
-        result = _appendClarifications(popId, result);
+        result = _appendClarifications(tocId, result);
 
         return result;
     }
 
     function _appendClarifications(
-        uint256 popId,
+        uint256 tocId,
         string memory base
     ) internal view returns (string memory) {
-        string[] storage clarifications = _clarifications[popId];
+        string[] storage clarifications = _clarifications[tocId];
 
         if (clarifications.length == 0) {
             return base;

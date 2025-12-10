@@ -3,18 +3,18 @@ pragma solidity ^0.8.29;
 
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import "../Popregistry/IPopResolver.sol";
-import "../Popregistry/IPOPRegistry.sol";
-import "../Popregistry/POPTypes.sol";
-import "../libraries/POPResultCodec.sol";
+import "../TOCRegistry/ITOCResolver.sol";
+import "../TOCRegistry/ITOCRegistry.sol";
+import "../TOCRegistry/TOCTypes.sol";
+import "../libraries/TOCResultCodec.sol";
 
 /// @title PythPriceResolver
-/// @notice Resolver for price-based POPs using Pyth oracle
+/// @notice Resolver for price-based TOCs using Pyth oracle
 /// @dev Implements 3 templates:
 ///   - Template 0: Snapshot Above/Below - Is price above/below threshold at deadline?
 ///   - Template 1: Price Range - Is price within range at deadline?
 ///   - Template 2: Reached By - Did price reach target at any point before deadline?
-contract PythPriceResolver is IPopResolver {
+contract PythPriceResolver is ITOCResolver {
     // ============ Constants ============
 
     uint32 public constant TEMPLATE_SNAPSHOT = 0;
@@ -25,7 +25,7 @@ contract PythPriceResolver is IPopResolver {
     // ============ Immutables ============
 
     IPyth public immutable pyth;
-    IPOPRegistry public immutable registry;
+    ITOCRegistry public immutable registry;
 
     // ============ Storage ============
 
@@ -54,11 +54,11 @@ contract PythPriceResolver is IPopResolver {
         bool reached; // Track if target was ever reached
     }
 
-    mapping(uint256 => uint32) private _popTemplates;
-    mapping(uint256 => bytes) private _popPayloads;
-    mapping(uint256 => SnapshotData) private _snapshotPops;
-    mapping(uint256 => RangeData) private _rangePops;
-    mapping(uint256 => ReachedByData) private _reachedByPops;
+    mapping(uint256 => uint32) private _tocTemplates;
+    mapping(uint256 => bytes) private _tocPayloads;
+    mapping(uint256 => SnapshotData) private _snapshotTocs;
+    mapping(uint256 => RangeData) private _rangeTocs;
+    mapping(uint256 => ReachedByData) private _reachedByTocs;
 
     // ============ Errors ============
 
@@ -66,7 +66,7 @@ contract PythPriceResolver is IPopResolver {
     error InvalidPayload();
     error DeadlineNotReached(uint256 deadline, uint256 current);
     error DeadlinePassed(uint256 deadline, uint256 current);
-    error PopNotManaged(uint256 popId);
+    error TocNotManaged(uint256 tocId);
     error OnlyRegistry();
     error InvalidPriceData();
     error PriceDataTooOld(uint256 publishTime, uint256 deadline);
@@ -84,79 +84,79 @@ contract PythPriceResolver is IPopResolver {
 
     constructor(address _pyth, address _registry) {
         pyth = IPyth(_pyth);
-        registry = IPOPRegistry(_registry);
+        registry = ITOCRegistry(_registry);
     }
 
-    // ============ IPopResolver Implementation ============
+    // ============ ITOCResolver Implementation ============
 
-    /// @inheritdoc IPopResolver
-    function isPopManaged(uint256 popId) external view returns (bool) {
-        return _popTemplates[popId] != 0 || _popPayloads[popId].length > 0;
+    /// @inheritdoc ITOCResolver
+    function isTocManaged(uint256 tocId) external view returns (bool) {
+        return _tocTemplates[tocId] != 0 || _tocPayloads[tocId].length > 0;
     }
 
-    /// @inheritdoc IPopResolver
-    function onPopCreated(
-        uint256 popId,
+    /// @inheritdoc ITOCResolver
+    function onTocCreated(
+        uint256 tocId,
         uint32 templateId,
         bytes calldata payload
-    ) external onlyRegistry returns (POPState initialState) {
+    ) external onlyRegistry returns (TOCState initialState) {
         if (templateId >= TEMPLATE_COUNT) {
             revert InvalidTemplate(templateId);
         }
 
-        _popTemplates[popId] = templateId;
-        _popPayloads[popId] = payload;
+        _tocTemplates[tocId] = templateId;
+        _tocPayloads[tocId] = payload;
 
         if (templateId == TEMPLATE_SNAPSHOT) {
-            _decodeAndStoreSnapshot(popId, payload);
+            _decodeAndStoreSnapshot(tocId, payload);
         } else if (templateId == TEMPLATE_RANGE) {
-            _decodeAndStoreRange(popId, payload);
+            _decodeAndStoreRange(tocId, payload);
         } else {
-            _decodeAndStoreReachedBy(popId, payload);
+            _decodeAndStoreReachedBy(tocId, payload);
         }
 
         // All templates go directly to ACTIVE (no approval needed for price feeds)
-        return POPState.ACTIVE;
+        return TOCState.ACTIVE;
     }
 
-    /// @inheritdoc IPopResolver
-    function resolvePop(
-        uint256 popId,
+    /// @inheritdoc ITOCResolver
+    function resolveToc(
+        uint256 tocId,
         address, // caller not used for price resolution
         bytes calldata pythUpdateData
     ) external onlyRegistry returns (bytes memory result) {
-        uint32 templateId = _popTemplates[popId];
+        uint32 templateId = _tocTemplates[tocId];
 
         bool outcome;
         if (templateId == TEMPLATE_SNAPSHOT) {
-            outcome = _resolveSnapshot(popId, pythUpdateData);
+            outcome = _resolveSnapshot(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_RANGE) {
-            outcome = _resolveRange(popId, pythUpdateData);
+            outcome = _resolveRange(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_REACHED_BY) {
-            outcome = _resolveReachedBy(popId, pythUpdateData);
+            outcome = _resolveReachedBy(tocId, pythUpdateData);
         } else {
-            revert PopNotManaged(popId);
+            revert TocNotManaged(tocId);
         }
 
         // All Pyth templates return boolean results
-        return POPResultCodec.encodeBoolean(outcome);
+        return TOCResultCodec.encodeBoolean(outcome);
     }
 
-    /// @inheritdoc IPopResolver
-    function getPopDetails(
-        uint256 popId
+    /// @inheritdoc ITOCResolver
+    function getTocDetails(
+        uint256 tocId
     ) external view returns (uint32 templateId, bytes memory creationPayload) {
-        return (_popTemplates[popId], _popPayloads[popId]);
+        return (_tocTemplates[tocId], _tocPayloads[tocId]);
     }
 
-    /// @inheritdoc IPopResolver
-    function getPopQuestion(
-        uint256 popId
+    /// @inheritdoc ITOCResolver
+    function getTocQuestion(
+        uint256 tocId
     ) external view returns (string memory question) {
-        uint32 templateId = _popTemplates[popId];
+        uint32 templateId = _tocTemplates[tocId];
 
         if (templateId == TEMPLATE_SNAPSHOT) {
-            SnapshotData storage data = _snapshotPops[popId];
+            SnapshotData storage data = _snapshotTocs[tocId];
             string memory direction = data.isAbove ? "above" : "below";
             return string(
                 abi.encodePacked(
@@ -170,7 +170,7 @@ contract PythPriceResolver is IPopResolver {
                 )
             );
         } else if (templateId == TEMPLATE_RANGE) {
-            RangeData storage data = _rangePops[popId];
+            RangeData storage data = _rangeTocs[tocId];
             return string(
                 abi.encodePacked(
                     "Will price be between ",
@@ -183,7 +183,7 @@ contract PythPriceResolver is IPopResolver {
                 )
             );
         } else if (templateId == TEMPLATE_REACHED_BY) {
-            ReachedByData storage data = _reachedByPops[popId];
+            ReachedByData storage data = _reachedByTocs[tocId];
             string memory direction = data.isAbove ? "above" : "below";
             return string(
                 abi.encodePacked(
@@ -198,20 +198,20 @@ contract PythPriceResolver is IPopResolver {
             );
         }
 
-        return "Unknown POP";
+        return "Unknown TOC";
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function getTemplateCount() external pure returns (uint32 count) {
         return TEMPLATE_COUNT;
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function isValidTemplate(uint32 templateId) external pure returns (bool) {
         return templateId < TEMPLATE_COUNT;
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function getTemplateAnswerType(uint32 templateId) external pure returns (AnswerType) {
         // All Pyth templates return boolean (price above/below threshold)
         return AnswerType.BOOLEAN;
@@ -219,24 +219,24 @@ contract PythPriceResolver is IPopResolver {
 
     // ============ View Functions ============
 
-    /// @notice Get snapshot POP data
-    function getSnapshotData(uint256 popId) external view returns (SnapshotData memory) {
-        return _snapshotPops[popId];
+    /// @notice Get snapshot TOC data
+    function getSnapshotData(uint256 tocId) external view returns (SnapshotData memory) {
+        return _snapshotTocs[tocId];
     }
 
-    /// @notice Get range POP data
-    function getRangeData(uint256 popId) external view returns (RangeData memory) {
-        return _rangePops[popId];
+    /// @notice Get range TOC data
+    function getRangeData(uint256 tocId) external view returns (RangeData memory) {
+        return _rangeTocs[tocId];
     }
 
-    /// @notice Get reached-by POP data
-    function getReachedByData(uint256 popId) external view returns (ReachedByData memory) {
-        return _reachedByPops[popId];
+    /// @notice Get reached-by TOC data
+    function getReachedByData(uint256 tocId) external view returns (ReachedByData memory) {
+        return _reachedByTocs[tocId];
     }
 
     // ============ Internal Functions ============
 
-    function _decodeAndStoreSnapshot(uint256 popId, bytes calldata payload) internal {
+    function _decodeAndStoreSnapshot(uint256 tocId, bytes calldata payload) internal {
         if (payload.length < 73) revert InvalidPayload(); // 32 + 8 + 1 + 32 = 73 bytes minimum
 
         (bytes32 priceId, int64 threshold, bool isAbove, uint256 deadline) = abi.decode(
@@ -244,7 +244,7 @@ contract PythPriceResolver is IPopResolver {
             (bytes32, int64, bool, uint256)
         );
 
-        _snapshotPops[popId] = SnapshotData({
+        _snapshotTocs[tocId] = SnapshotData({
             priceId: priceId,
             threshold: threshold,
             isAbove: isAbove,
@@ -252,7 +252,7 @@ contract PythPriceResolver is IPopResolver {
         });
     }
 
-    function _decodeAndStoreRange(uint256 popId, bytes calldata payload) internal {
+    function _decodeAndStoreRange(uint256 tocId, bytes calldata payload) internal {
         if (payload.length < 80) revert InvalidPayload(); // 32 + 8 + 8 + 32 = 80 bytes minimum
 
         (bytes32 priceId, int64 lowerBound, int64 upperBound, uint256 deadline) = abi.decode(
@@ -260,7 +260,7 @@ contract PythPriceResolver is IPopResolver {
             (bytes32, int64, int64, uint256)
         );
 
-        _rangePops[popId] = RangeData({
+        _rangeTocs[tocId] = RangeData({
             priceId: priceId,
             lowerBound: lowerBound,
             upperBound: upperBound,
@@ -268,7 +268,7 @@ contract PythPriceResolver is IPopResolver {
         });
     }
 
-    function _decodeAndStoreReachedBy(uint256 popId, bytes calldata payload) internal {
+    function _decodeAndStoreReachedBy(uint256 tocId, bytes calldata payload) internal {
         if (payload.length < 73) revert InvalidPayload(); // 32 + 8 + 1 + 32 = 73 bytes minimum
 
         (bytes32 priceId, int64 targetPrice, bool isAbove, uint256 deadline) = abi.decode(
@@ -276,7 +276,7 @@ contract PythPriceResolver is IPopResolver {
             (bytes32, int64, bool, uint256)
         );
 
-        _reachedByPops[popId] = ReachedByData({
+        _reachedByTocs[tocId] = ReachedByData({
             priceId: priceId,
             targetPrice: targetPrice,
             isAbove: isAbove,
@@ -286,10 +286,10 @@ contract PythPriceResolver is IPopResolver {
     }
 
     function _resolveSnapshot(
-        uint256 popId,
+        uint256 tocId,
         bytes calldata pythUpdateData
     ) internal returns (bool) {
-        SnapshotData storage data = _snapshotPops[popId];
+        SnapshotData storage data = _snapshotTocs[tocId];
 
         // Deadline must have passed for snapshot
         if (block.timestamp < data.deadline) {
@@ -308,10 +308,10 @@ contract PythPriceResolver is IPopResolver {
     }
 
     function _resolveRange(
-        uint256 popId,
+        uint256 tocId,
         bytes calldata pythUpdateData
     ) internal returns (bool) {
-        RangeData storage data = _rangePops[popId];
+        RangeData storage data = _rangeTocs[tocId];
 
         // Deadline must have passed
         if (block.timestamp < data.deadline) {
@@ -326,10 +326,10 @@ contract PythPriceResolver is IPopResolver {
     }
 
     function _resolveReachedBy(
-        uint256 popId,
+        uint256 tocId,
         bytes calldata pythUpdateData
     ) internal returns (bool) {
-        ReachedByData storage data = _reachedByPops[popId];
+        ReachedByData storage data = _reachedByTocs[tocId];
 
         // Can be resolved anytime, but outcome depends on whether target was reached
 

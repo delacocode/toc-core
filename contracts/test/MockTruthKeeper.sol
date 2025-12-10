@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import {ITruthKeeper} from "../Popregistry/ITruthKeeper.sol";
-import {TKApprovalResponse} from "../Popregistry/POPTypes.sol";
+import {ITruthKeeper} from "../TOCRegistry/ITruthKeeper.sol";
+import {TKApprovalResponse} from "../TOCRegistry/TOCTypes.sol";
 
 /// @title MockTruthKeeper
-/// @notice Mock TruthKeeper for testing the POPRegistry
-/// @dev Simple implementation that approves all POPs by default
+/// @notice Mock TruthKeeper for testing the TOCRegistry
+/// @dev Simple implementation that approves all TOCs by default
 contract MockTruthKeeper is ITruthKeeper {
     address public registry;
 
@@ -22,8 +22,8 @@ contract MockTruthKeeper is ITruthKeeper {
     mapping(address => bool) public hasCreatorOverride;
 
     // Tracking
-    uint256 public totalPopsAssigned;
-    mapping(uint256 => bool) public assignedPops;
+    uint256 public totalTocsAssigned;
+    mapping(uint256 => bool) public assignedTocs;
 
     error OnlyRegistry();
 
@@ -67,7 +67,7 @@ contract MockTruthKeeper is ITruthKeeper {
     // ============ ITruthKeeper Implementation ============
 
     /// @inheritdoc ITruthKeeper
-    function canAcceptPop(
+    function canAcceptToc(
         address resolver,
         uint32 /* templateId */,
         address creator,
@@ -81,8 +81,8 @@ contract MockTruthKeeper is ITruthKeeper {
     }
 
     /// @inheritdoc ITruthKeeper
-    function onPopAssigned(
-        uint256 popId,
+    function onTocAssigned(
+        uint256 tocId,
         address resolver,
         uint32 /* templateId */,
         address creator,
@@ -92,8 +92,8 @@ contract MockTruthKeeper is ITruthKeeper {
         uint32 /* escalationWindow */,
         uint32 /* postResolutionWindow */
     ) external onlyRegistry returns (TKApprovalResponse) {
-        assignedPops[popId] = true;
-        totalPopsAssigned++;
+        assignedTocs[tocId] = true;
+        totalTocsAssigned++;
         return _evaluate(resolver, creator);
     }
 

@@ -1,29 +1,29 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import "../Popregistry/IPopResolver.sol";
-import "../Popregistry/POPTypes.sol";
-import "../libraries/POPResultCodec.sol";
+import "../TOCRegistry/ITOCResolver.sol";
+import "../TOCRegistry/TOCTypes.sol";
+import "../libraries/TOCResultCodec.sol";
 
 /// @title MockResolver
-/// @notice Mock resolver for testing the POPRegistry
+/// @notice Mock resolver for testing the TOCRegistry
 /// @dev Supports configurable behavior for testing various scenarios
-contract MockResolver is IPopResolver {
+contract MockResolver is ITOCResolver {
     // ============ Storage ============
 
     address public registry;
 
-    // POP tracking
-    mapping(uint256 => bool) private _managedPops;
-    mapping(uint256 => uint32) private _popTemplates;
-    mapping(uint256 => bytes) private _popPayloads;
+    // TOC tracking
+    mapping(uint256 => bool) private _managedTocs;
+    mapping(uint256 => uint32) private _tocTemplates;
+    mapping(uint256 => bytes) private _tocPayloads;
 
     // Configurable behavior
-    POPState public defaultInitialState = POPState.ACTIVE;
+    TOCState public defaultInitialState = TOCState.ACTIVE;
     bool public shouldRevertOnCreate;
     bool public shouldRevertOnResolve;
 
-    // Resolution outcomes (can be set per POP or use defaults)
+    // Resolution outcomes (can be set per TOC or use defaults)
     bytes public defaultResult;
     mapping(uint256 => bytes) private _results;
     mapping(uint256 => bool) private _hasCustomResult;
@@ -47,7 +47,7 @@ contract MockResolver is IPopResolver {
         _templateAnswerTypes[1] = AnswerType.NUMERIC;
         _templateAnswerTypes[2] = AnswerType.GENERIC;
         // Default result (boolean true)
-        defaultResult = POPResultCodec.encodeBoolean(true);
+        defaultResult = TOCResultCodec.encodeBoolean(true);
     }
 
     // ============ Modifiers ============
@@ -65,7 +65,7 @@ contract MockResolver is IPopResolver {
         registry = _registry;
     }
 
-    function setDefaultInitialState(POPState state) external {
+    function setDefaultInitialState(TOCState state) external {
         defaultInitialState = state;
     }
 
@@ -82,26 +82,26 @@ contract MockResolver is IPopResolver {
     }
 
     function setDefaultBooleanResult(bool value) external {
-        defaultResult = POPResultCodec.encodeBoolean(value);
+        defaultResult = TOCResultCodec.encodeBoolean(value);
     }
 
     function setDefaultNumericResult(int256 value) external {
-        defaultResult = POPResultCodec.encodeNumeric(value);
+        defaultResult = TOCResultCodec.encodeNumeric(value);
     }
 
-    function setPopResult(uint256 popId, bytes calldata value) external {
-        _results[popId] = value;
-        _hasCustomResult[popId] = true;
+    function setTocResult(uint256 tocId, bytes calldata value) external {
+        _results[tocId] = value;
+        _hasCustomResult[tocId] = true;
     }
 
-    function setPopBooleanResult(uint256 popId, bool value) external {
-        _results[popId] = POPResultCodec.encodeBoolean(value);
-        _hasCustomResult[popId] = true;
+    function setTocBooleanResult(uint256 tocId, bool value) external {
+        _results[tocId] = TOCResultCodec.encodeBoolean(value);
+        _hasCustomResult[tocId] = true;
     }
 
-    function setPopNumericResult(uint256 popId, int256 value) external {
-        _results[popId] = POPResultCodec.encodeNumeric(value);
-        _hasCustomResult[popId] = true;
+    function setTocNumericResult(uint256 tocId, int256 value) external {
+        _results[tocId] = TOCResultCodec.encodeNumeric(value);
+        _hasCustomResult[tocId] = true;
     }
 
     function setTemplateCount(uint32 count) external {
@@ -112,33 +112,33 @@ contract MockResolver is IPopResolver {
         _templateAnswerTypes[templateId] = answerType;
     }
 
-    // ============ IPopResolver Implementation ============
+    // ============ ITOCResolver Implementation ============
 
-    /// @inheritdoc IPopResolver
-    function isPopManaged(uint256 popId) external view returns (bool) {
-        return _managedPops[popId];
+    /// @inheritdoc ITOCResolver
+    function isTocManaged(uint256 tocId) external view returns (bool) {
+        return _managedTocs[tocId];
     }
 
-    /// @inheritdoc IPopResolver
-    function onPopCreated(
-        uint256 popId,
+    /// @inheritdoc ITOCResolver
+    function onTocCreated(
+        uint256 tocId,
         uint32 templateId,
         bytes calldata payload
-    ) external onlyRegistry returns (POPState initialState) {
+    ) external onlyRegistry returns (TOCState initialState) {
         if (shouldRevertOnCreate) {
             revert MockRevertOnCreate();
         }
 
-        _managedPops[popId] = true;
-        _popTemplates[popId] = templateId;
-        _popPayloads[popId] = payload;
+        _managedTocs[tocId] = true;
+        _tocTemplates[tocId] = templateId;
+        _tocPayloads[tocId] = payload;
 
         return defaultInitialState;
     }
 
-    /// @inheritdoc IPopResolver
-    function resolvePop(
-        uint256 popId,
+    /// @inheritdoc ITOCResolver
+    function resolveToc(
+        uint256 tocId,
         address, // caller
         bytes calldata // payload
     ) external onlyRegistry returns (bytes memory result) {
@@ -146,35 +146,35 @@ contract MockResolver is IPopResolver {
             revert MockRevertOnResolve();
         }
 
-        if (_hasCustomResult[popId]) {
-            return _results[popId];
+        if (_hasCustomResult[tocId]) {
+            return _results[tocId];
         }
 
         return defaultResult;
     }
 
-    /// @inheritdoc IPopResolver
-    function getPopDetails(uint256 popId) external view returns (uint32 templateId, bytes memory creationPayload) {
-        return (_popTemplates[popId], _popPayloads[popId]);
+    /// @inheritdoc ITOCResolver
+    function getTocDetails(uint256 tocId) external view returns (uint32 templateId, bytes memory creationPayload) {
+        return (_tocTemplates[tocId], _tocPayloads[tocId]);
     }
 
-    /// @inheritdoc IPopResolver
-    function getPopQuestion(uint256 popId) external view returns (string memory question) {
-        uint32 templateId = _popTemplates[popId];
-        return string(abi.encodePacked("Mock question for POP ", _uint256ToString(popId), " template ", _uint32ToString(templateId)));
+    /// @inheritdoc ITOCResolver
+    function getTocQuestion(uint256 tocId) external view returns (string memory question) {
+        uint32 templateId = _tocTemplates[tocId];
+        return string(abi.encodePacked("Mock question for TOC ", _uint256ToString(tocId), " template ", _uint32ToString(templateId)));
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function getTemplateCount() external view returns (uint32 count) {
         return templateCount;
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function isValidTemplate(uint32 templateId) external view returns (bool) {
         return templateId < templateCount;
     }
 
-    /// @inheritdoc IPopResolver
+    /// @inheritdoc ITOCResolver
     function getTemplateAnswerType(uint32 templateId) external view returns (AnswerType answerType) {
         return _templateAnswerTypes[templateId];
     }

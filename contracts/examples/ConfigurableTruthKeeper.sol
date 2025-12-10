@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import {ITruthKeeper} from "../Popregistry/ITruthKeeper.sol";
-import {TKApprovalResponse} from "../Popregistry/POPTypes.sol";
+import {ITruthKeeper} from "../TOCRegistry/ITruthKeeper.sol";
+import {TKApprovalResponse} from "../TOCRegistry/TOCTypes.sol";
 
 /// @title ConfigurableTruthKeeper
-/// @notice Example TruthKeeper contract that filters POPs based on configurable criteria
+/// @notice Example TruthKeeper contract that filters TOCs based on configurable criteria
 /// @dev Reference implementation showing how TK contracts can implement approval logic
 contract ConfigurableTruthKeeper is ITruthKeeper {
     address public owner;
@@ -57,7 +57,7 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
     // ============ ITruthKeeper Implementation ============
 
     /// @inheritdoc ITruthKeeper
-    function canAcceptPop(
+    function canAcceptToc(
         address resolver,
         uint32 templateId,
         address creator,
@@ -71,8 +71,8 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
     }
 
     /// @inheritdoc ITruthKeeper
-    function onPopAssigned(
-        uint256 /* popId */,
+    function onTocAssigned(
+        uint256 /* tocId */,
         address resolver,
         uint32 templateId,
         address creator,
@@ -82,11 +82,11 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
         uint32 /* escalationWindow */,
         uint32 /* postResolutionWindow */
     ) external onlyRegistry returns (TKApprovalResponse) {
-        // Could track popId internally here if needed for state management
+        // Could track tocId internally here if needed for state management
         return _evaluate(resolver, templateId, creator, disputeWindow, truthKeeperWindow);
     }
 
-    /// @notice Internal evaluation logic shared by canAcceptPop and onPopAssigned
+    /// @notice Internal evaluation logic shared by canAcceptToc and onTocAssigned
     function _evaluate(
         address resolver,
         uint32 templateId,
