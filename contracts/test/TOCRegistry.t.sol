@@ -628,7 +628,7 @@ contract TOCRegistryTest {
         require(info.postResolutionWindow == DEFAULT_POST_RESOLUTION_WINDOW, "Post resolution window should match");
     }
 
-    function test_GetPopQuestion() public {
+    function test_GetTocQuestion() public {
         registry.registerResolver(address(resolver));
         uint256 tocId = registry.createTOC(
             address(resolver),
@@ -645,7 +645,7 @@ contract TOCRegistryTest {
         require(bytes(question).length > 0, "Question should not be empty");
     }
 
-    function test_NextPopId() public {
+    function test_NextTocId() public {
         require(registry.nextTocId() == 1, "Initial nextTocId should be 1");
 
         registry.registerResolver(address(resolver));
@@ -686,7 +686,7 @@ contract TOCRegistryTest {
 
     // ============ Edge Cases ============
 
-    function test_RevertInvalidPopId() public {
+    function test_RevertInvalidTocId() public {
         bool reverted = false;
         try registry.getTOCInfo(0) {
             // Should not reach here
@@ -704,12 +704,12 @@ contract TOCRegistryTest {
         require(reverted, "Should revert on non-existent tocId");
     }
 
-    // ============ Multiple POPs Test ============
+    // ============ Multiple TOCs Test ============
 
     function test_MultipleTOCs() public {
         registry.registerResolver(address(resolver));
 
-        // Create multiple POPs
+        // Create multiple TOCs
         uint256 toc1 = registry.createTOC(address(resolver), 0, abi.encode("toc1"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
         uint256 toc2 = registry.createTOC(address(resolver), 1, abi.encode("toc2"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
         uint256 toc3 = registry.createTOC(address(resolver), 2, abi.encode("toc3"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
@@ -1087,7 +1087,7 @@ contract TOCRegistryTest {
     function test_TKApprovalGrantsTKGuaranteedTier() public {
         registry.registerResolver(address(resolver));
 
-        // Default TK approves all POPs
+        // Default TK approves all TOCs
         uint256 tocId = registry.createTOC(
             address(resolver),
             0,
