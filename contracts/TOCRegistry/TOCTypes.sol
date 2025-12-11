@@ -36,7 +36,7 @@ enum DisputeResolution {
 /// @notice Trust level for resolvers
 enum ResolverTrust {
     NONE,           // Not registered (default)
-    PERMISSIONLESS, // Registered, no system guarantees
+    RESOLVER,       // Registered, no system guarantees
     VERIFIED,       // Admin reviewed, some assurance
     SYSTEM          // Full system backing
 }
@@ -44,7 +44,7 @@ enum ResolverTrust {
 /// @notice Accountability tier for a TOC (snapshot at creation)
 enum AccountabilityTier {
     NONE,           // Default/uninitialized
-    PERMISSIONLESS, // No guarantees - creator's risk
+    RESOLVER,       // No guarantees - creator's risk
     TK_GUARANTEED,  // TruthKeeper guarantees response
     SYSTEM          // System takes full accountability
 }
@@ -59,7 +59,7 @@ enum DisputePhase {
 /// @notice Response from TruthKeeper when a TOC is assigned
 enum TKApprovalResponse {
     APPROVE,        // Accept responsibility, tier upgrades
-    REJECT_SOFT,    // Decline but allow TOC as PERMISSIONLESS
+    REJECT_SOFT,    // Decline but allow TOC as RESOLVER
     REJECT_HARD     // Decline and revert TOC creation
 }
 
@@ -194,7 +194,7 @@ struct ExtensiveResult {
     bool wasDisputed;           // Had a dispute filed
     bool wasCorrected;          // Dispute upheld, result changed
     uint256 resolvedAt;         // Timestamp of resolution
-    AccountabilityTier tier;    // SYSTEM/TK_GUARANTEED/PERMISSIONLESS
+    AccountabilityTier tier;    // SYSTEM/TK_GUARANTEED/RESOLVER
     ResolverTrust resolverTrust; // Trust level of resolver
 }
 

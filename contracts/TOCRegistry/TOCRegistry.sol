@@ -142,12 +142,12 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
 
         _registeredResolvers.add(resolver);
         _resolverConfigs[resolver] = ResolverConfig({
-            trust: ResolverTrust.PERMISSIONLESS,
+            trust: ResolverTrust.RESOLVER,
             registeredAt: block.timestamp,
             registeredBy: msg.sender
         });
 
-        emit ResolverRegistered(resolver, ResolverTrust.PERMISSIONLESS, msg.sender);
+        emit ResolverRegistered(resolver, ResolverTrust.RESOLVER, msg.sender);
     }
 
     /// @inheritdoc ITOCRegistry
@@ -1136,9 +1136,9 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     /// @param tk The TruthKeeper address
     /// @param tkApproved Whether the TK approved this TOC
     function _calculateAccountabilityTier(address resolver, address tk, bool tkApproved) internal view returns (AccountabilityTier) {
-        // No approval = PERMISSIONLESS
+        // No approval = RESOLVER
         if (!tkApproved) {
-            return AccountabilityTier.PERMISSIONLESS;
+            return AccountabilityTier.RESOLVER;
         }
 
         // SYSTEM tier: resolver has SYSTEM trust and TK is whitelisted and approved

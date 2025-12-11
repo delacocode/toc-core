@@ -69,7 +69,7 @@ contract TOCRegistryTest {
         registry.registerResolver(address(resolver));
 
         ResolverTrust trust = registry.getResolverTrust(address(resolver));
-        require(trust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
+        require(trust == ResolverTrust.RESOLVER, "Resolver trust should be RESOLVER");
 
         bool isRegistered = registry.isRegisteredResolver(address(resolver));
         require(isRegistered, "Resolver should be registered");
@@ -116,7 +116,7 @@ contract TOCRegistryTest {
         registry.registerResolver(address(resolver));
 
         ResolverConfig memory config = registry.getResolverConfig(address(resolver));
-        require(config.trust == ResolverTrust.PERMISSIONLESS, "Trust should be PERMISSIONLESS");
+        require(config.trust == ResolverTrust.RESOLVER, "Trust should be RESOLVER");
         require(config.registeredAt > 0, "RegisteredAt should be set");
         require(config.registeredBy == address(this), "RegisteredBy should be test contract");
     }
@@ -623,7 +623,7 @@ contract TOCRegistryTest {
         TOCInfo memory info = registry.getTOCInfo(tocId);
         require(info.resolver == address(resolver), "Resolver should match");
         require(info.state == TOCState.ACTIVE, "State should be ACTIVE");
-        require(info.resolverTrust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
+        require(info.resolverTrust == ResolverTrust.RESOLVER, "Resolver trust should be RESOLVER");
         require(info.disputeWindow == DEFAULT_DISPUTE_WINDOW, "Dispute window should match");
         require(info.postResolutionWindow == DEFAULT_POST_RESOLUTION_WINDOW, "Post resolution window should match");
     }
@@ -1018,9 +1018,9 @@ contract TOCRegistryTest {
         require(result.isFinalized == true, "Should be finalized");
         require(result.wasDisputed == false, "Should not be disputed");
         require(result.wasCorrected == false, "Should not be corrected");
-        // TK approves by default, so tier is TK_GUARANTEED (not SYSTEM because resolver is PERMISSIONLESS)
+        // TK approves by default, so tier is TK_GUARANTEED (not SYSTEM because resolver is RESOLVER)
         require(result.tier == AccountabilityTier.TK_GUARANTEED, "Tier should be TK_GUARANTEED when TK approves");
-        require(result.resolverTrust == ResolverTrust.PERMISSIONLESS, "Resolver trust should be PERMISSIONLESS");
+        require(result.resolverTrust == ResolverTrust.RESOLVER, "Resolver trust should be RESOLVER");
     }
 
     function test_GetExtensiveResultStrict() public {
@@ -1100,7 +1100,7 @@ contract TOCRegistryTest {
         );
 
         TOC memory toc = registry.getTOC(tocId);
-        // TK is whitelisted and approved, resolver is PERMISSIONLESS
+        // TK is whitelisted and approved, resolver is RESOLVER
         // So tier should be TK_GUARANTEED (not SYSTEM since resolver isn't SYSTEM)
         require(toc.tierAtCreation == AccountabilityTier.TK_GUARANTEED, "Tier should be TK_GUARANTEED when TK approves");
 
@@ -1126,7 +1126,7 @@ contract TOCRegistryTest {
         );
 
         TOC memory toc = registry.getTOC(tocId);
-        require(toc.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
+        require(toc.tierAtCreation == AccountabilityTier.RESOLVER, "Tier should be RESOLVER when TK soft rejects");
         require(toc.state == TOCState.ACTIVE, "TOC should still be created in ACTIVE state");
     }
 
@@ -1193,8 +1193,8 @@ contract TOCRegistryTest {
         );
 
         TOC memory toc = registry.getTOC(tocId);
-        // Even with SYSTEM resolver, no approval = PERMISSIONLESS
-        require(toc.tierAtCreation == AccountabilityTier.PERMISSIONLESS, "Tier should be PERMISSIONLESS when TK soft rejects");
+        // Even with SYSTEM resolver, no approval = RESOLVER
+        require(toc.tierAtCreation == AccountabilityTier.RESOLVER, "Tier should be RESOLVER when TK soft rejects");
     }
 
     function test_RevertCreateTOCWithEOATruthKeeper() public {
