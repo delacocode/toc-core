@@ -454,4 +454,27 @@ interface ITOCRegistry {
     /// @param tocId The TOC identifier
     /// @return result The extensive result with context
     function getExtensiveResultStrict(uint256 tocId) external view returns (ExtensiveResult memory result);
+
+    // ============ Fee Withdrawal Functions ============
+
+    /// @notice Withdraw all protocol fees to treasury (treasury only)
+    /// @return creationFees Amount of creation fees withdrawn
+    /// @return slashingFees Amount of slashing fees withdrawn
+    function withdrawProtocolFees() external returns (uint256 creationFees, uint256 slashingFees);
+
+    /// @notice Withdraw protocol fees by category (treasury only)
+    /// @param category The fee category to withdraw
+    /// @return amount Amount withdrawn
+    function withdrawProtocolFeesByCategory(FeeCategory category) external returns (uint256 amount);
+
+    /// @notice Withdraw accumulated TK fees (called by TK)
+    function withdrawTKFees() external;
+
+    /// @notice Claim resolver fee for a specific TOC
+    /// @param tocId The TOC ID
+    function claimResolverFee(uint256 tocId) external;
+
+    /// @notice Batch claim resolver fees for multiple TOCs
+    /// @param tocIds Array of TOC IDs
+    function claimResolverFees(uint256[] calldata tocIds) external;
 }

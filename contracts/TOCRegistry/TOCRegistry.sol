@@ -159,6 +159,12 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         _;
     }
 
+    modifier onlyTreasury() {
+        if (treasury == address(0)) revert TreasuryNotSet();
+        if (msg.sender != treasury) revert NotTreasury(msg.sender, treasury);
+        _;
+    }
+
     // ============ Resolver Registration ============
 
     /// @inheritdoc ITOCRegistry
@@ -1075,6 +1081,104 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     /// @inheritdoc ITOCRegistry
     function getResolverFee(address resolver, uint32 templateId) external view returns (uint256) {
         return resolverTemplateFees[resolver][templateId];
+    }
+
+    // ============ Fee Withdrawal Functions ============
+
+    /// @inheritdoc ITOCRegistry
+    function withdrawProtocolFees() external onlyTreasury returns (uint256 creationFees, uint256 slashingFees) {
+        creationFees = protocolBalances[FeeCategory.CREATION];
+        slashingFees = protocolBalances[FeeCategory.SLASHING];
+
+        uint256 total = creationFees + slashingFees;
+        if (total == 0) revert NoFeesToWithdraw();
+
+        protocolBalances[FeeCategory.CREATION] = 0;
+        protocolBalances[FeeCategory.SLASHING] = 0;
+
+        (bool success, ) = msg.sender.call{value: total}("");
+        if (!success) revert TransferFailed();
+
+        emit ProtocolFeesWithdrawn(msg.sender, creationFees, slashingFees);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function withdrawProtocolFeesByCategory(FeeCategory category) external onlyTreasury returns (uint256 amount) {
+        amount = protocolBalances[category];
+        if (amount == 0) revert NoFeesToWithdraw();
+
+        protocolBalances[category] = 0;
+
+        (bool success, ) = msg.sender.call{value: amount}("");
+        if (!success) revert TransferFailed();
+
+        emit ProtocolFeesWithdrawn(
+            msg.sender,
+            category == FeeCategory.CREATION ? amount : 0,
+            category == FeeCategory.SLASHING ? amount : 0
+        );
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function withdrawTKFees() external {
+        uint256 amount = tkBalances[msg.sender];
+        if (amount == 0) revert NoFeesToWithdraw();
+
+        tkBalances[msg.sender] = 0;
+
+        (bool success, ) = msg.sender.call{value: amount}("");
+        if (!success) revert TransferFailed();
+
+        emit TKFeesWithdrawn(msg.sender, amount);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function claimResolverFee(uint256 tocId) external validTocId(tocId) {
+        TOC storage toc = _tocs[tocId];
+        if (msg.sender != toc.resolver) {
+            revert NotResolverForToc(msg.sender, tocId);
+        }
+
+        uint256 amount = resolverFeeByToc[tocId];
+        if (amount == 0) revert NoResolverFee(tocId);
+
+        resolverFeeByToc[tocId] = 0;
+
+        (bool success, ) = msg.sender.call{value: amount}("");
+        if (!success) revert TransferFailed();
+
+        emit ResolverFeeClaimed(msg.sender, tocId, amount);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function claimResolverFees(uint256[] calldata tocIds) external {
+        uint256 totalAmount = 0;
+        address resolver = address(0);
+
+        for (uint256 i = 0; i < tocIds.length; i++) {
+            uint256 tocId = tocIds[i];
+            if (tocId == 0 || tocId >= _nextTocId) continue;
+
+            TOC storage toc = _tocs[tocId];
+
+            // All TOCs must belong to same resolver
+            if (resolver == address(0)) {
+                resolver = toc.resolver;
+            }
+            if (msg.sender != toc.resolver) continue;
+
+            uint256 amount = resolverFeeByToc[tocId];
+            if (amount > 0) {
+                resolverFeeByToc[tocId] = 0;
+                totalAmount += amount;
+                emit ResolverFeeClaimed(msg.sender, tocId, amount);
+            }
+        }
+
+        if (totalAmount == 0) revert NoFeesToWithdraw();
+
+        (bool success, ) = msg.sender.call{value: totalAmount}("");
+        if (!success) revert TransferFailed();
     }
 
     // ============ Consumer Result Functions ============
