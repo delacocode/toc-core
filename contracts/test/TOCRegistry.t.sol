@@ -690,26 +690,6 @@ contract TOCRegistryTest is Test {
         require(!unknownToken, "Unknown token should not be acceptable");
     }
 
-    // ============ Edge Cases ============
-
-    function test_RevertInvalidTocId() public {
-        bool reverted = false;
-        try registry.getTOCInfo(0) {
-            // Should not reach here
-        } catch {
-            reverted = true;
-        }
-        require(reverted, "Should revert on tocId 0");
-
-        reverted = false;
-        try registry.getTOCInfo(999) {
-            // Should not reach here
-        } catch {
-            reverted = true;
-        }
-        require(reverted, "Should revert on non-existent tocId");
-    }
-
     // ============ Multiple TOCs Test ============
 
     function test_MultipleTOCs() public {

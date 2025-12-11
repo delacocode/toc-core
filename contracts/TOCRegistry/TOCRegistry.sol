@@ -82,7 +82,6 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     error ResolverAlreadyRegistered(address resolver);
     error ResolverMustBeContract(address resolver);
     error InvalidTemplateId(uint32 templateId);
-    error InvalidTocId(uint256 tocId);
     error InvalidState(TOCState current, TOCState expected);
     error InvalidBond(address token, uint256 amount);
     error DisputeWindowNotPassed(uint256 deadline, uint256 current);
@@ -136,12 +135,6 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         _;
     }
 
-    modifier validTocId(uint256 tocId) {
-        if (tocId == 0 || tocId >= _nextTocId) {
-            revert InvalidTocId(tocId);
-        }
-        _;
-    }
 
     modifier inState(uint256 tocId, TOCState expected) {
         TOCState current = _tocs[tocId].state;
@@ -168,7 +161,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     // ============ Resolver Registration ============
 
     /// @inheritdoc ITOCRegistry
-    function registerResolver(address resolver) external {
+    function registerResolver(address resolver) external nonReentrant {
         if (resolver.code.length == 0) {
             revert ResolverMustBeContract(resolver);
         }
@@ -187,7 +180,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function setResolverTrust(address resolver, ResolverTrust trust) external onlyOwner {
+    function setResolverTrust(address resolver, ResolverTrust trust) external onlyOwner nonReentrant {
         if (_resolverConfigs[resolver].trust == ResolverTrust.NONE) {
             revert ResolverNotRegistered(resolver);
         }
@@ -204,7 +197,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     function addAcceptableResolutionBond(
         address token,
         uint256 minAmount
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
         _acceptableResolutionBonds.push(BondRequirement({
             token: token,
             minAmount: minAmount
@@ -215,7 +208,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     function addAcceptableDisputeBond(
         address token,
         uint256 minAmount
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
         _acceptableDisputeBonds.push(BondRequirement({
             token: token,
             minAmount: minAmount
@@ -223,12 +216,12 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function setDefaultDisputeWindow(uint256 duration) external onlyOwner {
+    function setDefaultDisputeWindow(uint256 duration) external onlyOwner nonReentrant {
         _defaultDisputeWindow = duration;
     }
 
     /// @inheritdoc ITOCRegistry
-    function addWhitelistedTruthKeeper(address tk) external onlyOwner {
+    function addWhitelistedTruthKeeper(address tk) external onlyOwner nonReentrant {
         if (tk == address(0)) revert InvalidTruthKeeper(tk);
         if (_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperAlreadyWhitelisted(tk);
         _whitelistedTruthKeepers.add(tk);
@@ -236,14 +229,14 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function removeWhitelistedTruthKeeper(address tk) external onlyOwner {
+    function removeWhitelistedTruthKeeper(address tk) external onlyOwner nonReentrant {
         if (!_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperNotWhitelisted(tk);
         _whitelistedTruthKeepers.remove(tk);
         emit TruthKeeperRemovedFromWhitelist(tk);
     }
 
     /// @inheritdoc ITOCRegistry
-    function addAcceptableEscalationBond(address token, uint256 minAmount) external onlyOwner {
+    function addAcceptableEscalationBond(address token, uint256 minAmount) external onlyOwner nonReentrant {
         _acceptableEscalationBonds.push(BondRequirement({
             token: token,
             minAmount: minAmount
@@ -251,25 +244,25 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function setTreasury(address _treasury) external onlyOwner {
+    function setTreasury(address _treasury) external onlyOwner nonReentrant {
         treasury = _treasury;
         emit TreasurySet(_treasury);
     }
 
     /// @inheritdoc ITOCRegistry
-    function setProtocolFeeMinimum(uint256 amount) external onlyOwner {
+    function setProtocolFeeMinimum(uint256 amount) external onlyOwner nonReentrant {
         protocolFeeMinimum = amount;
         emit ProtocolFeeUpdated(protocolFeeMinimum, protocolFeeStandard);
     }
 
     /// @inheritdoc ITOCRegistry
-    function setProtocolFeeStandard(uint256 amount) external onlyOwner {
+    function setProtocolFeeStandard(uint256 amount) external onlyOwner nonReentrant {
         protocolFeeStandard = amount;
         emit ProtocolFeeUpdated(protocolFeeMinimum, protocolFeeStandard);
     }
 
     /// @inheritdoc ITOCRegistry
-    function setTKSharePercent(AccountabilityTier tier, uint256 basisPoints) external onlyOwner {
+    function setTKSharePercent(AccountabilityTier tier, uint256 basisPoints) external onlyOwner nonReentrant {
         require(basisPoints <= 10000, "Basis points cannot exceed 100%");
         tkSharePercent[tier] = basisPoints;
         emit TKShareUpdated(tier, basisPoints);
@@ -282,7 +275,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 tocId,
         DisputeResolution resolution,
         bytes calldata correctedResult
-    ) external nonReentrant validTocId(tocId) onlyTruthKeeper(tocId) {
+    ) external nonReentrant onlyTruthKeeper(tocId) {
         TOC storage toc = _tocs[tocId];
 
         if (toc.state != TOCState.DISPUTED_ROUND_1) {
@@ -323,7 +316,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 escalationWindow,
         uint256 postResolutionWindow,
         address truthKeeper
-    ) external payable returns (uint256 tocId) {
+    ) external payable nonReentrant returns (uint256 tocId) {
         // Check resolver is registered
         ResolverTrust trust = _resolverConfigs[resolver].trust;
         if (trust == ResolverTrust.NONE) {
@@ -398,7 +391,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         address bondToken,
         uint256 bondAmount,
         bytes calldata payload
-    ) external payable nonReentrant validTocId(tocId) inState(tocId, TOCState.ACTIVE) {
+    ) external payable nonReentrant inState(tocId, TOCState.ACTIVE) {
         TOC storage toc = _tocs[tocId];
 
         // Bond is required only if any dispute window > 0
@@ -484,7 +477,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function finalizeTOC(uint256 tocId) external nonReentrant validTocId(tocId) inState(tocId, TOCState.RESOLVING) {
+    function finalizeTOC(uint256 tocId) external nonReentrant inState(tocId, TOCState.RESOLVING) {
         TOC storage toc = _tocs[tocId];
 
         // Check dispute window has passed
@@ -530,7 +523,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         string calldata reason,
         string calldata evidenceURI,
         bytes calldata proposedResult
-    ) external payable nonReentrant validTocId(tocId) {
+    ) external payable nonReentrant {
         TOC storage toc = _tocs[tocId];
 
         // Check not already disputed
@@ -604,7 +597,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         string calldata reason,
         string calldata evidenceURI,
         bytes calldata proposedResult
-    ) external payable nonReentrant validTocId(tocId) {
+    ) external payable nonReentrant {
         TOC storage toc = _tocs[tocId];
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
@@ -651,7 +644,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function finalizeAfterTruthKeeper(uint256 tocId) external nonReentrant validTocId(tocId) {
+    function finalizeAfterTruthKeeper(uint256 tocId) external nonReentrant {
         TOC storage toc = _tocs[tocId];
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
@@ -679,7 +672,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function escalateTruthKeeperTimeout(uint256 tocId) external nonReentrant validTocId(tocId) {
+    function escalateTruthKeeperTimeout(uint256 tocId) external nonReentrant {
         TOC storage toc = _tocs[tocId];
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
@@ -708,7 +701,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 tocId,
         DisputeResolution resolution,
         bytes calldata correctedResult
-    ) external onlyOwner nonReentrant validTocId(tocId) {
+    ) external onlyOwner nonReentrant {
         TOC storage toc = _tocs[tocId];
 
         if (toc.state != TOCState.DISPUTED_ROUND_2) {
@@ -772,7 +765,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 tocId,
         DisputeResolution resolution,
         bytes calldata correctedResult
-    ) external onlyOwner nonReentrant validTocId(tocId) {
+    ) external onlyOwner nonReentrant {
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
         // Validate dispute exists
@@ -859,13 +852,13 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     // ============ Resolver Callbacks ============
 
     /// @inheritdoc ITOCRegistry
-    function approveTOC(uint256 tocId) external validTocId(tocId) onlyResolver(tocId) inState(tocId, TOCState.PENDING) {
+    function approveTOC(uint256 tocId) external nonReentrant onlyResolver(tocId) inState(tocId, TOCState.PENDING) {
         _tocs[tocId].state = TOCState.ACTIVE;
         emit TOCApproved(tocId);
     }
 
     /// @inheritdoc ITOCRegistry
-    function rejectTOC(uint256 tocId, string calldata reason) external validTocId(tocId) onlyResolver(tocId) inState(tocId, TOCState.PENDING) {
+    function rejectTOC(uint256 tocId, string calldata reason) external nonReentrant onlyResolver(tocId) inState(tocId, TOCState.PENDING) {
         _tocs[tocId].state = TOCState.REJECTED;
         emit TOCRejected(tocId, reason);
     }
@@ -878,7 +871,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function getTOCInfo(uint256 tocId) external view validTocId(tocId) returns (TOCInfo memory info) {
+    function getTOCInfo(uint256 tocId) external view returns (TOCInfo memory info) {
         TOC storage toc = _tocs[tocId];
 
         info = TOCInfo({
@@ -906,7 +899,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     /// @inheritdoc ITOCRegistry
     function getTocDetails(
         uint256 tocId
-    ) external view validTocId(tocId) returns (uint32 templateId, bytes memory creationPayload) {
+    ) external view returns (uint32 templateId, bytes memory creationPayload) {
         TOC storage toc = _tocs[tocId];
         return ITOCResolver(toc.resolver).getTocDetails(tocId);
     }
@@ -914,7 +907,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     /// @inheritdoc ITOCRegistry
     function getTocQuestion(
         uint256 tocId
-    ) external view validTocId(tocId) returns (string memory question) {
+    ) external view returns (string memory question) {
         TOC storage toc = _tocs[tocId];
         return ITOCResolver(toc.resolver).getTocQuestion(tocId);
     }
@@ -959,7 +952,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function getTOCResult(uint256 tocId) external view validTocId(tocId) returns (TOCResult memory result) {
+    function getTOCResult(uint256 tocId) external view returns (TOCResult memory result) {
         TOC storage toc = _tocs[tocId];
         result = TOCResult({
             answerType: toc.answerType,
@@ -969,12 +962,12 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function getResult(uint256 tocId) external view validTocId(tocId) returns (bytes memory result) {
+    function getResult(uint256 tocId) external view returns (bytes memory result) {
         return _results[tocId];
     }
 
     /// @inheritdoc ITOCRegistry
-    function getOriginalResult(uint256 tocId) external view validTocId(tocId) returns (bytes memory result) {
+    function getOriginalResult(uint256 tocId) external view returns (bytes memory result) {
         return _resolutions[tocId].proposedResult;
     }
 
@@ -1042,7 +1035,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     // ============ Flexible Dispute Window View Functions ============
 
     /// @inheritdoc ITOCRegistry
-    function isFullyFinalized(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    function isFullyFinalized(uint256 tocId) external view returns (bool) {
         TOC storage toc = _tocs[tocId];
 
         if (toc.state != TOCState.RESOLVED) {
@@ -1065,13 +1058,13 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function isContested(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    function isContested(uint256 tocId) external view returns (bool) {
         DisputeInfo storage disputeInfo = _disputes[tocId];
         return disputeInfo.phase == DisputePhase.POST_RESOLUTION && disputeInfo.disputer != address(0);
     }
 
     /// @inheritdoc ITOCRegistry
-    function hasCorrectedResult(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    function hasCorrectedResult(uint256 tocId) external view returns (bool) {
         return _hasCorrectedResult[tocId];
     }
 
@@ -1083,7 +1076,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function getEscalationInfo(uint256 tocId) external view validTocId(tocId) returns (EscalationInfo memory) {
+    function getEscalationInfo(uint256 tocId) external view returns (EscalationInfo memory) {
         return _escalations[tocId];
     }
 
@@ -1095,7 +1088,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     // ============ Resolver Fee Functions ============
 
     /// @inheritdoc ITOCRegistry
-    function setResolverFee(uint32 templateId, uint256 amount) external {
+    function setResolverFee(uint32 templateId, uint256 amount) external nonReentrant {
         if (_resolverConfigs[msg.sender].trust == ResolverTrust.NONE) {
             revert ResolverNotRegistered(msg.sender);
         }
@@ -1111,7 +1104,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     // ============ Fee Withdrawal Functions ============
 
     /// @inheritdoc ITOCRegistry
-    function withdrawProtocolFees() external onlyTreasury returns (uint256 creationFees, uint256 slashingFees) {
+    function withdrawProtocolFees() external onlyTreasury nonReentrant returns (uint256 creationFees, uint256 slashingFees) {
         creationFees = protocolBalances[FeeCategory.CREATION];
         slashingFees = protocolBalances[FeeCategory.SLASHING];
 
@@ -1128,7 +1121,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function withdrawProtocolFeesByCategory(FeeCategory category) external onlyTreasury returns (uint256 amount) {
+    function withdrawProtocolFeesByCategory(FeeCategory category) external onlyTreasury nonReentrant returns (uint256 amount) {
         amount = protocolBalances[category];
         if (amount == 0) revert NoFeesToWithdraw();
 
@@ -1145,7 +1138,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function withdrawTKFees() external {
+    function withdrawTKFees() external nonReentrant {
         uint256 amount = tkBalances[msg.sender];
         if (amount == 0) revert NoFeesToWithdraw();
 
@@ -1158,7 +1151,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function claimResolverFee(uint256 tocId) external validTocId(tocId) {
+    function claimResolverFee(uint256 tocId) external nonReentrant {
         TOC storage toc = _tocs[tocId];
         if (msg.sender != toc.resolver) {
             revert NotResolverForToc(msg.sender, tocId);
@@ -1176,7 +1169,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function claimResolverFees(uint256[] calldata tocIds) external {
+    function claimResolverFees(uint256[] calldata tocIds) external nonReentrant {
         uint256 totalAmount = 0;
         address resolver = address(0);
 
@@ -1209,7 +1202,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     // ============ Consumer Result Functions ============
 
     /// @inheritdoc ITOCRegistry
-    function getExtensiveResult(uint256 tocId) external view validTocId(tocId) returns (ExtensiveResult memory result) {
+    function getExtensiveResult(uint256 tocId) external view returns (ExtensiveResult memory result) {
         TOC storage toc = _tocs[tocId];
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
@@ -1226,7 +1219,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function getExtensiveResultStrict(uint256 tocId) external view validTocId(tocId) returns (ExtensiveResult memory result) {
+    function getExtensiveResultStrict(uint256 tocId) external view returns (ExtensiveResult memory result) {
         TOC storage toc = _tocs[tocId];
 
         // Must be fully finalized
