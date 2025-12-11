@@ -93,6 +93,17 @@ interface ITOCRegistry {
     event DisputeBondReturned(uint256 indexed tocId, address indexed to, address token, uint256 amount);
     event BondSlashed(uint256 indexed tocId, address indexed from, address token, uint256 amount);
 
+    // Fee events
+    event TreasurySet(address indexed treasury);
+    event ProtocolFeeUpdated(uint256 minimum, uint256 standard);
+    event TKShareUpdated(AccountabilityTier indexed tier, uint256 basisPoints);
+    event ResolverFeeSet(address indexed resolver, uint32 indexed templateId, uint256 amount);
+    event CreationFeesCollected(uint256 indexed tocId, uint256 protocolFee, uint256 tkFee, uint256 resolverFee);
+    event SlashingFeesCollected(uint256 indexed tocId, uint256 protocolFee, uint256 tkFee);
+    event ProtocolFeesWithdrawn(address indexed treasury, uint256 creationFees, uint256 slashingFees);
+    event TKFeesWithdrawn(address indexed tk, uint256 amount);
+    event ResolverFeeClaimed(address indexed resolver, uint256 indexed tocId, uint256 amount);
+
     // ============ Resolver Registration ============
 
     /// @notice Register a resolver (permissionless, must be contract)
