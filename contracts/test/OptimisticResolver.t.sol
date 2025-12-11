@@ -56,6 +56,11 @@ contract OptimisticResolverTest is Test {
         // Whitelist TruthKeeper
         registry.addWhitelistedTruthKeeper(truthKeeper);
 
+        // Configure fees
+        registry.setProtocolFeeStandard(0.001 ether);
+        registry.setTKSharePercent(AccountabilityTier.TK_GUARANTEED, 4000); // 40%
+        registry.setTKSharePercent(AccountabilityTier.SYSTEM, 6000); // 60%
+
         // Register resolver
         registry.registerResolver(address(resolver));
     }
@@ -70,7 +75,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 365 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0, // TEMPLATE_ARBITRARY
             abi.encode(payload),
@@ -96,7 +101,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 30 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -121,7 +126,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -155,7 +160,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -184,7 +189,7 @@ contract OptimisticResolverTest is Test {
         });
 
         bool reverted = false;
-        try registry.createTOC(
+        try registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -210,7 +215,7 @@ contract OptimisticResolverTest is Test {
         });
 
         bool reverted = false;
-        try registry.createTOC(
+        try registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -239,7 +244,7 @@ contract OptimisticResolverTest is Test {
             line: 0
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             1, // TEMPLATE_SPORTS
             abi.encode(payload),
@@ -269,7 +274,7 @@ contract OptimisticResolverTest is Test {
             line: -35e17 // -3.5 points
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             1,
             abi.encode(payload),
@@ -294,7 +299,7 @@ contract OptimisticResolverTest is Test {
             line: 0
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             1,
             abi.encode(payload),
@@ -324,7 +329,7 @@ contract OptimisticResolverTest is Test {
             deadline: block.timestamp + 30 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             2, // TEMPLATE_EVENT
             abi.encode(payload),
@@ -350,7 +355,7 @@ contract OptimisticResolverTest is Test {
             deadline: block.timestamp + 30 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             2,
             abi.encode(payload),
@@ -383,7 +388,7 @@ contract OptimisticResolverTest is Test {
 
         // Create TOC as creator (prank sets both msg.sender and tx.origin)
         vm.prank(creator, creator);
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -417,7 +422,7 @@ contract OptimisticResolverTest is Test {
 
         // Create TOC as creator
         vm.prank(creator, creator);
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -452,7 +457,7 @@ contract OptimisticResolverTest is Test {
 
         // Create TOC as creator
         vm.prank(creator, creator);
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -477,7 +482,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -503,7 +508,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 1 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
@@ -540,7 +545,7 @@ contract OptimisticResolverTest is Test {
             resolutionTime: block.timestamp + 30 days
         });
 
-        uint256 tocId = registry.createTOC(
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             abi.encode(payload),
