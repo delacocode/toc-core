@@ -384,6 +384,17 @@ interface ITOCRegistry {
     /// @return Duration in seconds
     function defaultDisputeWindow() external view returns (uint256);
 
+    /// @notice Get the total creation fee for a TOC
+    /// @param resolver The resolver address
+    /// @param templateId The template ID
+    /// @return protocolFee The protocol fee portion
+    /// @return resolverFee The resolver fee portion
+    /// @return total The total fee required
+    function getCreationFee(
+        address resolver,
+        uint32 templateId
+    ) external view returns (uint256 protocolFee, uint256 resolverFee, uint256 total);
+
     // ============ Flexible Dispute Window View Functions ============
 
     /// @notice Check if a TOC is fully finalized (resolved and all dispute windows closed)

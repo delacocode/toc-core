@@ -995,6 +995,15 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         return _defaultDisputeWindow;
     }
 
+    /// @inheritdoc ITOCRegistry
+    function getCreationFee(
+        address resolver,
+        uint32 templateId
+    ) external view returns (uint256 protocolFee, uint256 resolverFee, uint256 total) {
+        protocolFee = protocolFeeStandard;
+        resolverFee = resolverTemplateFees[resolver][templateId];
+        total = protocolFee + resolverFee;
+    }
 
     // ============ Flexible Dispute Window View Functions ============
 
