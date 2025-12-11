@@ -1224,7 +1224,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         }
     }
 
-    /// @notice Slash bond with 50% to winner, 50% to contract
+    /// @notice Slash bond with 50% to winner, 50% to contract (shared with TK)
     function _slashBondWithReward(
         uint256 tocId,
         address winner,
@@ -1238,7 +1238,23 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         // Transfer winner's share
         _transferBondOut(winner, token, winnerShare);
 
-        // Contract keeps the rest
+        // Split contract share with TK based on tier
+        TOC storage toc = _tocs[tocId];
+        uint256 tkShare = (contractShare * tkSharePercent[toc.tierAtCreation]) / 10000;
+        uint256 protocolKeeps = contractShare - tkShare;
+
+        // Store protocol portion
+        protocolBalances[FeeCategory.SLASHING] += protocolKeeps;
+
+        // Store TK portion (only if ETH - for now we only support ETH fees)
+        if (tkShare > 0 && token == address(0)) {
+            tkBalances[toc.truthKeeper] += tkShare;
+        } else if (tkShare > 0) {
+            // For non-ETH tokens, protocol keeps the TK share for now
+            protocolBalances[FeeCategory.SLASHING] += tkShare;
+        }
+
+        emit SlashingFeesCollected(tocId, protocolKeeps, tkShare);
         emit BondSlashed(tocId, loser, token, contractShare);
     }
 
