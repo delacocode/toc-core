@@ -395,6 +395,31 @@ interface ITOCRegistry {
         uint32 templateId
     ) external view returns (uint256 protocolFee, uint256 resolverFee, uint256 total);
 
+    /// @notice Get protocol fee configuration
+    /// @return minimum The minimum protocol fee
+    /// @return standard The standard protocol fee
+    function getProtocolFees() external view returns (uint256 minimum, uint256 standard);
+
+    /// @notice Get TK share percentage for a tier
+    /// @param tier The accountability tier
+    /// @return basisPoints The percentage in basis points
+    function getTKSharePercent(AccountabilityTier tier) external view returns (uint256 basisPoints);
+
+    /// @notice Get protocol balance by category
+    /// @param category The fee category
+    /// @return balance The balance in wei
+    function getProtocolBalance(FeeCategory category) external view returns (uint256 balance);
+
+    /// @notice Get TK balance
+    /// @param tk The TruthKeeper address
+    /// @return balance The balance in wei
+    function getTKBalance(address tk) external view returns (uint256 balance);
+
+    /// @notice Get resolver fee for a specific TOC
+    /// @param tocId The TOC ID
+    /// @return amount The fee amount in wei
+    function getResolverFeeByToc(uint256 tocId) external view returns (uint256 amount);
+
     // ============ Flexible Dispute Window View Functions ============
 
     /// @notice Check if a TOC is fully finalized (resolved and all dispute windows closed)

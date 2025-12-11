@@ -1014,6 +1014,31 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         total = protocolFee + resolverFee;
     }
 
+    /// @inheritdoc ITOCRegistry
+    function getProtocolFees() external view returns (uint256 minimum, uint256 standard) {
+        return (protocolFeeMinimum, protocolFeeStandard);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getTKSharePercent(AccountabilityTier tier) external view returns (uint256) {
+        return tkSharePercent[tier];
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getProtocolBalance(FeeCategory category) external view returns (uint256) {
+        return protocolBalances[category];
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getTKBalance(address tk) external view returns (uint256) {
+        return tkBalances[tk];
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getResolverFeeByToc(uint256 tocId) external view returns (uint256) {
+        return resolverFeeByToc[tocId];
+    }
+
     // ============ Flexible Dispute Window View Functions ============
 
     /// @inheritdoc ITOCRegistry
