@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
+import "forge-std/Test.sol";
 import "../TOCRegistry/TOCRegistry.sol";
 import "../TOCRegistry/TOCTypes.sol";
 import "./MockResolver.sol";
@@ -10,7 +11,7 @@ import "../libraries/TOCResultCodec.sol";
 
 /// @title TOCRegistryTest
 /// @notice Comprehensive tests for TOCRegistry contract
-contract TOCRegistryTest {
+contract TOCRegistryTest is Test {
     TOCRegistry registry;
     MockResolver resolver;
     MockERC20 bondToken;
@@ -1266,6 +1267,170 @@ contract TOCRegistryTest {
             reverted = true;
         }
         require(reverted, "Should revert when TK rejects resolver2");
+    }
+
+    // ============ Fee System Tests ============
+
+    function test_CreationFeesCollected() public {
+        registry.registerResolver(address(resolver));
+
+        bytes memory payload = abi.encode("test payload");
+        uint256 totalFee = 0.001 ether; // protocol fee only (no resolver fee set)
+
+        uint256 tocId = registry.createTOC{value: totalFee}(
+            address(resolver),
+            0,
+            payload,
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        // Check protocol balance (60% of 0.001 = 0.0006 ether)
+        uint256 protocolBalance = registry.getProtocolBalance(FeeCategory.CREATION);
+        require(protocolBalance == 0.0006 ether, "Protocol should get 60% of fee");
+
+        // Check TK balance (40% of 0.001 = 0.0004 ether)
+        uint256 tkBalance = registry.getTKBalance(truthKeeper);
+        require(tkBalance == 0.0004 ether, "TK should get 40% of fee");
+    }
+
+    function test_WithdrawProtocolFees() public {
+        registry.registerResolver(address(resolver));
+        registry.setTreasury(address(this));
+
+        bytes memory payload = abi.encode("test payload");
+
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            0,
+            payload,
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        uint256 balanceBefore = address(this).balance;
+        (uint256 creation, uint256 slashing) = registry.withdrawProtocolFees();
+
+        require(creation == 0.0006 ether, "Creation fees should be 0.0006 ether");
+        require(slashing == 0, "Slashing fees should be 0");
+        require(address(this).balance == balanceBefore + creation, "Treasury should receive fees");
+    }
+
+    function test_RevertInsufficientFee() public {
+        registry.registerResolver(address(resolver));
+
+        bytes memory payload = abi.encode("test payload");
+
+        bool reverted = false;
+        try registry.createTOC{value: 0.0001 ether}(
+            address(resolver),
+            0,
+            payload,
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        ) {
+            // Should not reach here
+        } catch {
+            reverted = true;
+        }
+        require(reverted, "Should revert with insufficient fee");
+    }
+
+    function test_ExcessFeeRefunded() public {
+        registry.registerResolver(address(resolver));
+
+        bytes memory payload = abi.encode("test payload");
+        uint256 excessAmount = 0.01 ether;
+        uint256 requiredFee = 0.001 ether;
+
+        uint256 balanceBefore = address(this).balance;
+
+        registry.createTOC{value: excessAmount}(
+            address(resolver),
+            0,
+            payload,
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        uint256 expectedBalance = balanceBefore - requiredFee;
+        require(address(this).balance == expectedBalance, "Excess should be refunded");
+    }
+
+    function test_SlashingFeesDistributedToTK() public {
+        registry.registerResolver(address(resolver));
+        registry.setTreasury(address(this));
+
+        bytes memory payload = abi.encode("test payload");
+
+        // Create TOC
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            0,
+            payload,
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        // Resolve and dispute
+        resolver.setDefaultBooleanResult(true);
+        registry.resolveTOC{value: MIN_RESOLUTION_BOND}(
+            tocId,
+            address(0),
+            MIN_RESOLUTION_BOND,
+            ""
+        );
+
+        // Dispute
+        registry.dispute{value: MIN_DISPUTE_BOND}(
+            tocId,
+            address(0),
+            MIN_DISPUTE_BOND,
+            "Wrong answer",
+            "",
+            abi.encode(false)
+        );
+
+        // TK resolves dispute (uphold = slash proposer)
+        truthKeeperContract.resolveDispute(
+            address(registry),
+            tocId,
+            DisputeResolution.UPHOLD_DISPUTE,
+            abi.encode(false)
+        );
+
+        // Skip escalation window
+        vm.warp(block.timestamp + DEFAULT_ESCALATION_WINDOW + 1);
+
+        // Finalize
+        registry.finalizeAfterTruthKeeper(tocId);
+
+        // Check slashing fees went to protocol and TK
+        uint256 slashingBalance = registry.getProtocolBalance(FeeCategory.SLASHING);
+        uint256 tkBalance = registry.getTKBalance(truthKeeper);
+
+        // Half of resolution bond (0.05 ether) goes to contract
+        // TK gets 40% of that = 0.02 ether
+        // Protocol gets 60% = 0.03 ether
+        require(slashingBalance == 0.03 ether, "Protocol should get 60% of slashed amount");
+
+        // TK already had 0.0004 from creation, now adds 0.02
+        require(tkBalance == 0.0004 ether + 0.02 ether, "TK should get 40% of slashed amount");
     }
 
     // ============ Helpers ============

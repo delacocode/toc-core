@@ -2,7 +2,8 @@
 pragma solidity ^0.8.29;
 
 import {ITruthKeeper} from "../TOCRegistry/ITruthKeeper.sol";
-import {TKApprovalResponse} from "../TOCRegistry/TOCTypes.sol";
+import {ITOCRegistry} from "../TOCRegistry/ITOCRegistry.sol";
+import {TKApprovalResponse, DisputeResolution} from "../TOCRegistry/TOCTypes.sol";
 
 /// @title MockTruthKeeper
 /// @notice Mock TruthKeeper for testing the TOCRegistry
@@ -111,4 +112,21 @@ contract MockTruthKeeper is ITruthKeeper {
         // Return default
         return defaultResponse;
     }
+
+    // ============ Helper Functions for Testing ============
+
+    function resolveDispute(
+        address registryAddr,
+        uint256 tocId,
+        DisputeResolution resolution,
+        bytes calldata correctedResult
+    ) external {
+        ITOCRegistry(registryAddr).resolveTruthKeeperDispute(tocId, resolution, correctedResult);
+    }
+
+    function withdrawFees(address registryAddr) external {
+        ITOCRegistry(registryAddr).withdrawTKFees();
+    }
+
+    receive() external payable {}
 }
