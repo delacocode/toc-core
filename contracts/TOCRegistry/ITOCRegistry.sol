@@ -144,6 +144,23 @@ interface ITOCRegistry {
     /// @param minAmount Minimum amount required (should be higher than dispute bonds)
     function addAcceptableEscalationBond(address token, uint256 minAmount) external;
 
+    /// @notice Set the treasury address for protocol fee withdrawals
+    /// @param _treasury The treasury address
+    function setTreasury(address _treasury) external;
+
+    /// @notice Set the minimum protocol fee (when no TK or TK soft-rejects)
+    /// @param amount Fee amount in wei
+    function setProtocolFeeMinimum(uint256 amount) external;
+
+    /// @notice Set the standard protocol fee (when TK approves)
+    /// @param amount Fee amount in wei
+    function setProtocolFeeStandard(uint256 amount) external;
+
+    /// @notice Set TK share percentage for an accountability tier
+    /// @param tier The accountability tier
+    /// @param basisPoints Percentage in basis points (e.g., 4000 = 40%)
+    function setTKSharePercent(AccountabilityTier tier, uint256 basisPoints) external;
+
     // ============ TruthKeeper Functions ============
 
     /// @notice TruthKeeper resolves a Round 1 dispute

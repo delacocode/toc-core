@@ -244,6 +244,31 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         }));
     }
 
+    /// @inheritdoc ITOCRegistry
+    function setTreasury(address _treasury) external onlyOwner {
+        treasury = _treasury;
+        emit TreasurySet(_treasury);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function setProtocolFeeMinimum(uint256 amount) external onlyOwner {
+        protocolFeeMinimum = amount;
+        emit ProtocolFeeUpdated(protocolFeeMinimum, protocolFeeStandard);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function setProtocolFeeStandard(uint256 amount) external onlyOwner {
+        protocolFeeStandard = amount;
+        emit ProtocolFeeUpdated(protocolFeeMinimum, protocolFeeStandard);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function setTKSharePercent(AccountabilityTier tier, uint256 basisPoints) external onlyOwner {
+        require(basisPoints <= 10000, "Basis points cannot exceed 100%");
+        tkSharePercent[tier] = basisPoints;
+        emit TKShareUpdated(tier, basisPoints);
+    }
+
     // ============ TruthKeeper Functions ============
 
     /// @inheritdoc ITOCRegistry
