@@ -317,7 +317,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 escalationWindow,
         uint256 postResolutionWindow,
         address truthKeeper
-    ) external returns (uint256 tocId) {
+    ) external payable returns (uint256 tocId) {
         // Check resolver is registered
         ResolverTrust trust = _resolverConfigs[resolver].trust;
         if (trust == ResolverTrust.NONE) {
@@ -376,6 +376,9 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
 
         // Calculate tier with approval status
         toc.tierAtCreation = _calculateAccountabilityTier(resolver, truthKeeper, tkApproved);
+
+        // Collect fees
+        _collectCreationFees(tocId, resolver, templateId, truthKeeper, toc.tierAtCreation);
 
         // Call resolver to create TOC (may set initial state)
         toc.state = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload);
@@ -1122,6 +1125,45 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     // ============ Internal Functions ============
+
+    /// @notice Collect creation fees and distribute to protocol, TK, and resolver
+    function _collectCreationFees(
+        uint256 tocId,
+        address resolver,
+        uint32 templateId,
+        address tk,
+        AccountabilityTier tier
+    ) internal {
+        uint256 protocolFee = protocolFeeStandard;
+        uint256 resolverFee = resolverTemplateFees[resolver][templateId];
+        uint256 totalFee = protocolFee + resolverFee;
+
+        // Check sufficient payment
+        if (msg.value < totalFee) {
+            revert InsufficientFee(msg.value, totalFee);
+        }
+
+        // Calculate TK share from protocol fee
+        uint256 tkShare = (protocolFee * tkSharePercent[tier]) / 10000;
+        uint256 protocolKeeps = protocolFee - tkShare;
+
+        // Store fees
+        protocolBalances[FeeCategory.CREATION] += protocolKeeps;
+        if (tkShare > 0) {
+            tkBalances[tk] += tkShare;
+        }
+        if (resolverFee > 0) {
+            resolverFeeByToc[tocId] = resolverFee;
+        }
+
+        // Refund excess
+        if (msg.value > totalFee) {
+            (bool success, ) = msg.sender.call{value: msg.value - totalFee}("");
+            if (!success) revert TransferFailed();
+        }
+
+        emit CreationFeesCollected(tocId, protocolKeeps, tkShare, resolverFee);
+    }
 
     /// @notice Check if a bond is acceptable for resolution
     function _isAcceptableResolutionBond(

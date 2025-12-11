@@ -194,7 +194,7 @@ interface ITOCRegistry {
         uint256 escalationWindow,
         uint256 postResolutionWindow,
         address truthKeeper
-    ) external returns (uint256 tocId);
+    ) external payable returns (uint256 tocId);
 
     /// @notice Propose resolution for a TOC (requires bond)
     /// @param tocId The TOC to resolve
