@@ -1049,6 +1049,22 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         return _isAcceptableEscalationBond(token, amount);
     }
 
+    // ============ Resolver Fee Functions ============
+
+    /// @inheritdoc ITOCRegistry
+    function setResolverFee(uint32 templateId, uint256 amount) external {
+        if (_resolverConfigs[msg.sender].trust == ResolverTrust.NONE) {
+            revert ResolverNotRegistered(msg.sender);
+        }
+        resolverTemplateFees[msg.sender][templateId] = amount;
+        emit ResolverFeeSet(msg.sender, templateId, amount);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getResolverFee(address resolver, uint32 templateId) external view returns (uint256) {
+        return resolverTemplateFees[resolver][templateId];
+    }
+
     // ============ Consumer Result Functions ============
 
     /// @inheritdoc ITOCRegistry

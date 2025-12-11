@@ -419,6 +419,19 @@ interface ITOCRegistry {
     /// @return True if acceptable
     function isAcceptableEscalationBond(address token, uint256 amount) external view returns (bool);
 
+    // ============ Resolver Fee Functions ============
+
+    /// @notice Set resolver fee for a specific template
+    /// @param templateId The template ID
+    /// @param amount Fee amount in wei
+    function setResolverFee(uint32 templateId, uint256 amount) external;
+
+    /// @notice Get resolver fee for a specific resolver and template
+    /// @param resolver The resolver address
+    /// @param templateId The template ID
+    /// @return amount The fee amount in wei
+    function getResolverFee(address resolver, uint32 templateId) external view returns (uint256 amount);
+
     // ============ Consumer Result Functions ============
 
     /// @notice Get result with full resolution context
