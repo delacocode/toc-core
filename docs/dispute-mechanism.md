@@ -48,12 +48,12 @@ Round 1 is the fast path. A domain-expert TruthKeeper reviews the dispute and ma
 
 ### Step 1: Dispute Filed
 
-**Function:** `dispute(popId, bondToken, bondAmount, reason, evidenceURI, proposedResult)`
+**Function:** `dispute(tocId, bondToken, bondAmount, reason, evidenceURI, proposedResult)`
 
 **Who can call:** Anyone
 
 **Requirements:**
-- POP is in `RESOLVING` state (pre-resolution dispute) or `RESOLVED` state (post-resolution dispute)
+- TOC is in `RESOLVING` state (pre-resolution dispute) or `RESOLVED` state (post-resolution dispute)
 - Within the dispute window
 - Valid dispute bond posted
 
@@ -70,7 +70,7 @@ Round 1 is the fast path. A domain-expert TruthKeeper reviews the dispute and ma
 ```solidity
 // Example: File a dispute
 registry.dispute{value: 0.05 ether}(
-    popId,
+    tocId,
     address(0),           // ETH bond
     0.05 ether,          // bond amount
     "Result is incorrect, actual outcome was NO",
@@ -81,12 +81,12 @@ registry.dispute{value: 0.05 ether}(
 
 ### Step 2: TruthKeeper Decides
 
-**Function:** `resolveTruthKeeperDispute(popId, resolution, correctedResult)`
+**Function:** `resolveTruthKeeperDispute(tocId, resolution, correctedResult)`
 
-**Who can call:** Only the assigned TruthKeeper for this POP
+**Who can call:** Only the assigned TruthKeeper for this TOC
 
 **Requirements:**
-- POP is in `DISPUTED_ROUND_1` state
+- TOC is in `DISPUTED_ROUND_1` state
 - TK hasn't already decided
 - Within TruthKeeper window
 
@@ -95,7 +95,7 @@ registry.dispute{value: 0.05 ether}(
 |------------|---------|
 | `UPHOLD_DISPUTE` | Disputer is right, proposer was wrong |
 | `REJECT_DISPUTE` | Proposer is right, disputer was wrong |
-| `CANCEL_POP` | Question is invalid, void everything |
+| `CANCEL_TOC` | Question is invalid, void everything |
 | `TOO_EARLY` | Cannot determine yet, return to ACTIVE |
 
 **What happens:**
@@ -106,7 +106,7 @@ registry.dispute{value: 0.05 ether}(
 ```solidity
 // Example: TruthKeeper upholds the dispute
 registry.resolveTruthKeeperDispute(
-    popId,
+    tocId,
     DisputeResolution.UPHOLD_DISPUTE,
     abi.encode(false)  // corrected result
 );
@@ -114,12 +114,12 @@ registry.resolveTruthKeeperDispute(
 
 ### Step 3a: No Challenge - Finalize
 
-**Function:** `finalizeAfterTruthKeeper(popId)`
+**Function:** `finalizeAfterTruthKeeper(tocId)`
 
 **Who can call:** Anyone
 
 **Requirements:**
-- POP is in `DISPUTED_ROUND_1` state
+- TOC is in `DISPUTED_ROUND_1` state
 - TruthKeeper has decided
 - Escalation window has passed
 - No escalation filed
@@ -131,17 +131,17 @@ registry.resolveTruthKeeperDispute(
 
 ```solidity
 // Example: Finalize after escalation window passes
-registry.finalizeAfterTruthKeeper(popId);
+registry.finalizeAfterTruthKeeper(tocId);
 ```
 
 ### Step 3b: TruthKeeper Timeout - Auto Escalate
 
-**Function:** `escalateTruthKeeperTimeout(popId)`
+**Function:** `escalateTruthKeeperTimeout(tocId)`
 
 **Who can call:** Anyone
 
 **Requirements:**
-- POP is in `DISPUTED_ROUND_1` state
+- TOC is in `DISPUTED_ROUND_1` state
 - TruthKeeper has NOT decided
 - TruthKeeper window has passed
 
@@ -151,7 +151,7 @@ registry.finalizeAfterTruthKeeper(popId);
 
 ```solidity
 // Example: TK didn't respond in time
-registry.escalateTruthKeeperTimeout(popId);
+registry.escalateTruthKeeperTimeout(tocId);
 ```
 
 ---
@@ -164,12 +164,12 @@ Round 2 is the appeals court. It handles cases where:
 
 ### Step 4: Challenge TK Decision
 
-**Function:** `challengeTruthKeeperDecision(popId, bondToken, bondAmount, reason, evidenceURI, proposedResult)`
+**Function:** `challengeTruthKeeperDecision(tocId, bondToken, bondAmount, reason, evidenceURI, proposedResult)`
 
 **Who can call:** Anyone (typically the losing party from Round 1)
 
 **Requirements:**
-- POP is in `DISPUTED_ROUND_1` state
+- TOC is in `DISPUTED_ROUND_1` state
 - TruthKeeper has decided
 - Within escalation window
 - Valid escalation bond posted (higher than dispute bond)
@@ -182,7 +182,7 @@ Round 2 is the appeals court. It handles cases where:
 ```solidity
 // Example: Challenge TK's decision
 registry.challengeTruthKeeperDecision{value: 0.15 ether}(
-    popId,
+    tocId,
     address(0),           // ETH bond
     0.15 ether,          // escalation bond (higher than dispute)
     "TK decision was incorrect, here's why...",
@@ -193,12 +193,12 @@ registry.challengeTruthKeeperDecision{value: 0.15 ether}(
 
 ### Step 5: Admin Resolves
 
-**Function:** `resolveEscalation(popId, resolution, correctedResult)`
+**Function:** `resolveEscalation(tocId, resolution, correctedResult)`
 
 **Who can call:** Only admin (contract owner)
 
 **Requirements:**
-- POP is in `DISPUTED_ROUND_2` state
+- TOC is in `DISPUTED_ROUND_2` state
 
 **Decision options:** Same as TruthKeeper (UPHOLD, REJECT, CANCEL, TOO_EARLY)
 
@@ -210,7 +210,7 @@ registry.challengeTruthKeeperDecision{value: 0.15 ether}(
 ```solidity
 // Example: Admin upholds the original dispute (challenger wins)
 registry.resolveEscalation(
-    popId,
+    tocId,
     DisputeResolution.UPHOLD_DISPUTE,
     abi.encode(false)  // final corrected result
 );
@@ -244,7 +244,7 @@ Bonds create skin in the game. You can't dispute frivolously because you'll lose
 | Proposer | Resolution bond | Returned in full |
 | Disputer | Dispute bond | 50% to proposer, 50% to protocol |
 
-**CANCEL_POP** - Question invalid:
+**CANCEL_TOC** - Question invalid:
 | Party | Their Bond | Outcome |
 |-------|------------|---------|
 | Proposer | Resolution bond | Returned in full |
@@ -266,7 +266,7 @@ Bonds create skin in the game. You can't dispute frivolously because you'll lose
 | Disputer | Dispute bond | 50% to proposer, 50% to protocol |
 | Challenger | Escalation bond | 50% to disputer, 50% to protocol |
 
-**CANCEL_POP** - Question invalid:
+**CANCEL_TOC** - Question invalid:
 | Party | Their Bond | Outcome |
 |-------|------------|---------|
 | All parties | All bonds | Returned in full |
@@ -281,7 +281,7 @@ When a bond is slashed:
 
 ## Time Windows
 
-Each POP has configurable time windows set at creation:
+Each TOC has configurable time windows set at creation:
 
 | Window | Field | Purpose |
 |--------|-------|---------|
@@ -294,15 +294,15 @@ Each POP has configurable time windows set at creation:
 
 | Deadline | Computed | Stored In |
 |----------|----------|-----------|
-| `disputeDeadline` | `resolutionTime + disputeWindow` | `POP.disputeDeadline` |
-| `truthKeeperDeadline` | `disputeTime + truthKeeperWindow` | `POP.truthKeeperDeadline` |
-| `escalationDeadline` | `tkDecisionTime + escalationWindow` | `POP.escalationDeadline` |
-| `postDisputeDeadline` | `finalizeTime + postResolutionWindow` | `POP.postDisputeDeadline` |
+| `disputeDeadline` | `resolutionTime + disputeWindow` | `TOC.disputeDeadline` |
+| `truthKeeperDeadline` | `disputeTime + truthKeeperWindow` | `TOC.truthKeeperDeadline` |
+| `escalationDeadline` | `tkDecisionTime + escalationWindow` | `TOC.escalationDeadline` |
+| `postDisputeDeadline` | `finalizeTime + postResolutionWindow` | `TOC.postDisputeDeadline` |
 
 ### Example Timeline
 
 ```
-Day 0: POP resolved, disputeWindow = 24h, tkWindow = 24h, escalationWindow = 48h
+Day 0: TOC resolved, disputeWindow = 24h, tkWindow = 24h, escalationWindow = 48h
        └── disputeDeadline = Day 1
 
 Day 0.5: Dispute filed
@@ -322,12 +322,12 @@ Day 4: Admin resolves → REJECT_DISPUTE (TK was right)
 
 ## Post-Resolution Disputes
 
-Even after a POP reaches `RESOLVED` state, it can still be disputed if `postResolutionWindow > 0`.
+Even after a TOC reaches `RESOLVED` state, it can still be disputed if `postResolutionWindow > 0`.
 
 **Why?** Some outcomes might only become verifiably wrong after the fact.
 
 **How it works:**
-1. POP is in `RESOLVED` state
+1. TOC is in `RESOLVED` state
 2. Within `postDisputeDeadline`
 3. Anyone calls `dispute()` with evidence
 4. Same two-round process applies
@@ -361,7 +361,7 @@ Even after a POP reaches `RESOLVED` state, it can still be disputed if `postReso
 |----------|---------|
 | `finalizeAfterTruthKeeper()` | Finalize after escalation window passes |
 | `escalateTruthKeeperTimeout()` | Auto-escalate if TK times out |
-| `finalizePOP()` | Finalize after dispute window passes (no dispute) |
+| `finalizeTOC()` | Finalize after dispute window passes (no dispute) |
 
 ---
 
@@ -417,7 +417,7 @@ struct EscalationInfo {
 
 ```solidity
 // Check if safe to use result
-ExtensiveResult memory result = registry.getExtensiveResult(popId);
+ExtensiveResult memory result = registry.getExtensiveResult(tocId);
 
 if (!result.isFinalized) {
     // Still in dispute or window open - don't rely on result yet
@@ -429,20 +429,20 @@ if (result.wasCorrected) {
 }
 
 // Use the result
-bool answer = POPResultCodec.decodeBoolean(result.result);
+bool answer = TOCResultCodec.decodeBoolean(result.result);
 ```
 
 ### For Disputers
 
 ```solidity
 // 1. Check if disputable
-POP memory pop = registry.getPOP(popId);
-require(pop.state == POPState.RESOLVING, "Not disputable");
-require(block.timestamp < pop.disputeDeadline, "Window passed");
+TOC memory toc = registry.getTOC(tocId);
+require(toc.state == TOCState.RESOLVING, "Not disputable");
+require(block.timestamp < toc.disputeDeadline, "Window passed");
 
 // 2. File dispute with evidence
 registry.dispute{value: MIN_DISPUTE_BOND}(
-    popId,
+    tocId,
     address(0),
     MIN_DISPUTE_BOND,
     "Actual outcome was different",
@@ -455,12 +455,12 @@ registry.dispute{value: MIN_DISPUTE_BOND}(
 
 ```solidity
 // 1. Monitor for disputes assigned to you
-// (Listen for POPDisputed events where pop.truthKeeper == you)
+// (Listen for TOCDisputed events where toc.truthKeeper == you)
 
 // 2. Review evidence and decide
 registry.resolveTruthKeeperDispute(
-    popId,
-    DisputeResolution.UPHOLD_DISPUTE,  // or REJECT_DISPUTE, CANCEL_POP, TOO_EARLY
+    tocId,
+    DisputeResolution.UPHOLD_DISPUTE,  // or REJECT_DISPUTE, CANCEL_TOC, TOO_EARLY
     abi.encode(correctAnswer)
 );
 ```

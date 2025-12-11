@@ -17,7 +17,7 @@
 
 ## Overview
 
-Truth on Chain (TOC) is a modular infrastructure layer for creating, resolving, and disputing verifiable predictions on-chain. The system introduces a **Prediction Option Protocol (POP)** - a standardized unit of truth that can be created, resolved, disputed, and consumed by any protocol.
+Truth on Chain (TOC) is a modular infrastructure layer for creating, resolving, and disputing verifiable predictions on-chain. The system introduces a **Truth Option Contract (TOC)** - a standardized unit of truth that can be created, resolved, disputed, and consumed by any protocol.
 
 ### Core Value Proposition
 
@@ -35,11 +35,11 @@ Every answer in TOC carries:
 
 ## Core Concepts
 
-### POP (Prediction Option Protocol)
+### TOC (Truth Option Contract)
 
-A POP is the fundamental unit in TOC. It represents a question that will be resolved to an answer.
+A TOC is the fundamental unit in TOC. It represents a question that will be resolved to an answer.
 
-**Anatomy of a POP:**
+**Anatomy of a TOC:**
 - **Resolver** → The contract responsible for determining the answer
 - **Template** → A reusable question format defined by the resolver
 - **Payload** → Question-specific parameters (e.g., asset, threshold, deadline)
@@ -59,14 +59,14 @@ Examples:
 ### TruthKeepers
 
 TruthKeepers are whitelisted addresses with domain expertise. They:
-- Get assigned to POPs at creation time
+- Get assigned to TOCs at creation time
 - Adjudicate Round 1 disputes
 - Can declare which resolvers they guarantee (affecting accountability tier)
 - Face timeout penalties if they fail to act
 
 ### Accountability Tiers
 
-Every POP has an immutable accountability tier captured at creation:
+Every TOC has an immutable accountability tier captured at creation:
 
 | Tier | Derivation | Meaning |
 |------|------------|---------|
@@ -88,9 +88,9 @@ Every POP has an immutable accountability tier captured at creation:
                               │ getResult() / getExtensiveResult()
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                        POPRegistry                           │
+│                        TOCRegistry                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   Resolver  │  │     POP     │  │      Dispute        │  │
+│  │   Resolver  │  │     TOC     │  │      Dispute        │  │
 │  │  Management │  │  Lifecycle  │  │     Resolution      │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
@@ -98,7 +98,7 @@ Every POP has an immutable accountability tier captured at creation:
 │  │   System    │  │   Storage   │  │     Management      │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 └─────────────────────────────┬───────────────────────────────┘
-                              │ onPopCreated() / resolvePop()
+                              │ onTocCreated() / resolveToc()
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                         Resolvers                            │
@@ -118,8 +118,8 @@ mapping(address => ResolverConfig) _resolverConfigs;
 // All registered resolvers
 EnumerableSet.AddressSet _registeredResolvers;
 
-// POP state machines
-mapping(uint256 => POP) _pops;
+// TOC state machines
+mapping(uint256 => TOC) _tocs;
 
 // Unified result storage (ABI-encoded bytes)
 mapping(uint256 => bytes) _results;
@@ -136,7 +136,7 @@ mapping(address => EnumerableSet.AddressSet) _tkGuaranteedResolvers;
 
 ---
 
-## POP Lifecycle
+## TOC Lifecycle
 
 ### State Machine
 
@@ -144,7 +144,7 @@ mapping(address => EnumerableSet.AddressSet) _tkGuaranteedResolvers;
                     ┌──────────┐
                     │   NONE   │
                     └────┬─────┘
-                         │ createPOP()
+                         │ createTOC()
                          ▼
                     ┌──────────┐
           ┌─────────│ PENDING  │─────────┐
@@ -154,7 +154,7 @@ mapping(address => EnumerableSet.AddressSet) _tkGuaranteedResolvers;
     ┌──────────┐   ┌──────────┐          │
     │ REJECTED │   │  ACTIVE  │          │
     └──────────┘   └────┬─────┘          │
-                        │ resolvePOP()   │
+                        │ resolveTOC()   │
                         ▼                │
                    ┌───────────┐         │
                    │ RESOLVING │         │
@@ -190,7 +190,7 @@ mapping(address => EnumerableSet.AddressSet) _tkGuaranteedResolvers;
 
 **1. Creation**
 ```solidity
-function createPOP(
+function createTOC(
     address resolver,
     uint32 templateId,
     bytes calldata payload,
@@ -199,18 +199,18 @@ function createPOP(
     uint32 truthKeeperWindow,
     uint32 escalationWindow,
     uint32 postResolutionWindow
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 ```
 
-- Resolver validates payload via `onPopCreated()`
+- Resolver validates payload via `onTocCreated()`
 - Resolver returns initial state (PENDING or ACTIVE)
 - Accountability tier calculated and frozen
 - Time windows stored for later use
 
 **2. Resolution**
 ```solidity
-function resolvePOP(
-    uint256 popId,
+function resolveTOC(
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     bytes calldata payload
@@ -218,14 +218,14 @@ function resolvePOP(
 ```
 
 - Proposer stakes resolution bond
-- Resolver executes `resolvePop()` and returns ABI-encoded result
+- Resolver executes `resolveToc()` and returns ABI-encoded result
 - Dispute window opens
 - State → RESOLVING
 
 **3. Dispute (Optional)**
 ```solidity
-function disputePOP(
-    uint256 popId,
+function disputeTOC(
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount
 ) external;
@@ -237,7 +237,7 @@ function disputePOP(
 
 **4. Finalization**
 ```solidity
-function finalizePOP(uint256 popId) external;
+function finalizeTOC(uint256 tocId) external;
 ```
 
 - Called after dispute window expires (if no dispute)
@@ -253,23 +253,23 @@ function finalizePOP(uint256 popId) external;
 Every resolver must implement:
 
 ```solidity
-interface IPopResolver {
-    // Called when POP is created - validate and store question data
-    function onPopCreated(
-        uint256 popId,
+interface ITOCResolver {
+    // Called when TOC is created - validate and store question data
+    function onTocCreated(
+        uint256 tocId,
         uint32 templateId,
         bytes calldata payload
-    ) external returns (POPState initialState);
+    ) external returns (TOCState initialState);
 
     // Called to resolve - return ABI-encoded result
-    function resolvePop(
-        uint256 popId,
+    function resolveToc(
+        uint256 tocId,
         address caller,
         bytes calldata payload
     ) external returns (bytes memory result);
 
     // Human-readable question for UI/display
-    function getPopQuestion(uint256 popId)
+    function getTocQuestion(uint256 tocId)
         external view returns (string memory);
 
     // Template metadata
@@ -309,7 +309,7 @@ Templates:
 - **Template 1 (Range)**: Is price within [min, max] at deadline?
 - **Template 2 (Reached By)**: Did price reach target before deadline?
 
-All return BOOLEAN results via `POPResultCodec.encodeBoolean()`.
+All return BOOLEAN results via `TOCResultCodec.encodeBoolean()`.
 
 ### Example: OptimisticResolver
 
@@ -348,7 +348,7 @@ Escalation filed → Admin reviews → Final decision
                                         │
                     ┌───────────────────┼───────────────────┐
                     ▼                   ▼                   ▼
-              UPHOLD_DISPUTE      REJECT_DISPUTE       CANCEL_POP
+              UPHOLD_DISPUTE      REJECT_DISPUTE       CANCEL_TOC
 ```
 
 Admin decision is final.
@@ -359,7 +359,7 @@ Admin decision is final.
 enum DisputeResolution {
     UPHOLD_DISPUTE,   // Disputer was right, proposer wrong
     REJECT_DISPUTE,   // Proposer was right, disputer wrong
-    CANCEL_POP,       // Question invalid, void everything
+    CANCEL_TOC,       // Question invalid, void everything
     TOO_EARLY         // Cannot decide yet
 }
 ```
@@ -378,7 +378,7 @@ Even after RESOLVED state, if `postResolutionWindow > 0`:
 
 ### Tier Calculation
 
-At POP creation, accountability tier is calculated and frozen:
+At TOC creation, accountability tier is calculated and frozen:
 
 ```solidity
 function _calculateAccountabilityTier(
@@ -407,17 +407,17 @@ function _calculateAccountabilityTier(
 The tier is captured at creation and never changes because:
 - Consumers know accountability upfront before interacting
 - Prevents retroactive trust downgrades
-- Resolver upgrades don't affect existing POPs
+- Resolver upgrades don't affect existing TOCs
 - Clear audit trail for historical analysis
 
 ### Consumer Usage
 
 ```solidity
 // Simple: just get the answer
-bytes memory result = registry.getResult(popId);
+bytes memory result = registry.getResult(tocId);
 
 // Comprehensive: get answer + context
-ExtensiveResult memory extensive = registry.getExtensiveResult(popId);
+ExtensiveResult memory extensive = registry.getExtensiveResult(tocId);
 // extensive.result - the answer
 // extensive.finalized - is it final?
 // extensive.tier - accountability level
@@ -444,14 +444,14 @@ Bonds create economic incentives for honest behavior:
 | No dispute | Returned in full |
 | Dispute rejected | Returned in full |
 | Dispute upheld | 50% to disputer, 50% to protocol |
-| POP cancelled | Returned in full |
+| TOC cancelled | Returned in full |
 
 **Dispute Bond (posted by disputer):**
 | Outcome | Disputer's Bond |
 |---------|-----------------|
 | Dispute upheld | Returned in full |
 | Dispute rejected | 50% to proposer, 50% to protocol |
-| POP cancelled | Returned in full |
+| TOC cancelled | Returned in full |
 
 **Escalation Bond (Round 2):**
 | Outcome | Challenger's Bond |
@@ -487,10 +487,10 @@ bytes memory encoded = abi.encode(price);   // 32 bytes
 bytes memory arbitrary = customData;        // variable length
 ```
 
-### POPResultCodec Helper
+### TOCResultCodec Helper
 
 ```solidity
-library POPResultCodec {
+library TOCResultCodec {
     function encodeBoolean(bool value) internal pure returns (bytes memory) {
         return abi.encode(value);
     }
@@ -612,7 +612,7 @@ Unified approach:
 ## Appendix: Key Types Reference
 
 ```solidity
-enum POPState {
+enum TOCState {
     NONE, PENDING, REJECTED, ACTIVE, RESOLVING,
     DISPUTED_ROUND_1, DISPUTED_ROUND_2, RESOLVED, CANCELLED
 }
@@ -623,15 +623,15 @@ enum ResolverTrust { NONE, PERMISSIONLESS, VERIFIED, SYSTEM }
 
 enum AccountabilityTier { NONE, PERMISSIONLESS, TK_GUARANTEED, SYSTEM }
 
-enum DisputeResolution { UPHOLD_DISPUTE, REJECT_DISPUTE, CANCEL_POP, TOO_EARLY }
+enum DisputeResolution { UPHOLD_DISPUTE, REJECT_DISPUTE, CANCEL_TOC, TOO_EARLY }
 
-struct POP {
+struct TOC {
     address resolver;
     address creator;
     address truthKeeper;
     uint32 templateId;
     AnswerType answerType;
-    POPState state;
+    TOCState state;
     AccountabilityTier tier;
     uint32 disputeWindow;
     uint32 truthKeeperWindow;

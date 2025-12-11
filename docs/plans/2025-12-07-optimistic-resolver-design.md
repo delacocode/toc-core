@@ -7,7 +7,7 @@
 
 ## Overview
 
-The OptimisticResolver enables **human-judgment questions** for prediction markets using an optimistic proposal model. Anyone can propose answers with a bond, and disputes flow through POPRegistry's TruthKeeper system.
+The OptimisticResolver enables **human-judgment questions** for prediction markets using an optimistic proposal model. Anyone can propose answers with a bond, and disputes flow through TOCRegistry's TruthKeeper system.
 
 Key difference from UMA: **No cross-chain needed** - all disputes stay on the same L2.
 
@@ -37,13 +37,13 @@ Key difference from UMA: **No cross-chain needed** - all disputes stay on the sa
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
                               │
-                              │ calls resolvePOP()
+                              │ calls resolveTOC()
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        POPRegistry                                   │
+│                        TOCRegistry                                   │
 │                                                                      │
 │  - Receives proposed answer + bond                                  │
-│  - Opens dispute window (per-POP configured)                        │
+│  - Opens dispute window (per-TOC configured)                        │
 │  - Disputes → TruthKeeper → Admin                                   │
 │  - Handles bond distribution                                        │
 │                                                                      │
@@ -57,21 +57,21 @@ Key difference from UMA: **No cross-chain needed** - all disputes stay on the sa
 ### Happy Path (No Dispute)
 
 ```
-1. POP Created
-   └── User calls POPRegistry.createPOP(optimisticResolver, template, payload, ...)
-   └── OptimisticResolver.onPopCreated() stores question
-   └── POP state: ACTIVE
+1. TOC Created
+   └── User calls TOCRegistry.createTOC(optimisticResolver, template, payload, ...)
+   └── OptimisticResolver.onTocCreated() stores question
+   └── TOC state: ACTIVE
 
 2. Resolution Proposed
-   └── Anyone calls POPRegistry.resolvePOP(popId, bondToken, bondAmount, answerPayload)
-   └── POPRegistry calls OptimisticResolver.resolvePop(popId, caller, answerPayload)
+   └── Anyone calls TOCRegistry.resolveTOC(tocId, bondToken, bondAmount, answerPayload)
+   └── TOCRegistry calls OptimisticResolver.resolveToc(tocId, caller, answerPayload)
    └── OptimisticResolver validates answer format, returns result
-   └── POPRegistry stores proposal, starts dispute window
-   └── POP state: RESOLVING
+   └── TOCRegistry stores proposal, starts dispute window
+   └── TOC state: RESOLVING
 
 3. Dispute Window Passes
-   └── Anyone calls POPRegistry.finalizePOP(popId)
-   └── POP state: RESOLVED
+   └── Anyone calls TOCRegistry.finalizeTOC(tocId)
+   └── TOC state: RESOLVED
    └── Proposer gets bond back
 ```
 
@@ -81,15 +81,15 @@ Key difference from UMA: **No cross-chain needed** - all disputes stay on the sa
 1-2. Same as above...
 
 3. Dispute Filed
-   └── Disputer calls POPRegistry.dispute(popId, bondToken, bondAmount, reason, ...)
-   └── POP state: DISPUTED_ROUND_1
+   └── Disputer calls TOCRegistry.dispute(tocId, bondToken, bondAmount, reason, ...)
+   └── TOC state: DISPUTED_ROUND_1
    └── TruthKeeper reviews
 
 4. TruthKeeper Decision
-   └── TK calls POPRegistry.resolveTruthKeeperDispute(popId, decision, ...)
+   └── TK calls TOCRegistry.resolveTruthKeeperDispute(tocId, decision, ...)
    └── If UPHOLD: Result corrected, disputer wins bond
    └── If REJECT: Original stands, proposer keeps bond
-   └── If TOO_EARLY: POP returns to ACTIVE
+   └── If TOO_EARLY: TOC returns to ACTIVE
 
 5. Optional Escalation
    └── If TK decision challenged → DISPUTED_ROUND_2 → Admin decides
@@ -197,11 +197,11 @@ struct EventPayload {
 ## Storage Design
 
 ```solidity
-contract OptimisticResolver is IPopResolver {
+contract OptimisticResolver is ITOCResolver {
 
     // ============ Storage ============
 
-    /// @notice Core question data for each POP
+    /// @notice Core question data for each TOC
     struct QuestionData {
         uint32 templateId;
         address creator;
@@ -210,11 +210,11 @@ contract OptimisticResolver is IPopResolver {
         string[] clarifications;    // Creator-added clarifications
     }
 
-    /// @notice Mapping from popId to question data
+    /// @notice Mapping from tocId to question data
     mapping(uint256 => QuestionData) private _questions;
 
     /// @notice Registry reference
-    IPOPRegistry public immutable registry;
+    ITOCRegistry public immutable registry;
 
     // ============ Template Constants ============
 
@@ -229,16 +229,16 @@ contract OptimisticResolver is IPopResolver {
 
 ## Key Functions
 
-### onPopCreated
+### onTocCreated
 
-Called by POPRegistry when POP is created.
+Called by TOCRegistry when TOC is created.
 
 ```solidity
-function onPopCreated(
-    uint256 popId,
+function onTocCreated(
+    uint256 tocId,
     uint32 templateId,
     bytes calldata payload
-) external onlyRegistry returns (POPState initialState) {
+) external onlyRegistry returns (TOCState initialState) {
     // Validate template
     if (templateId >= TEMPLATE_COUNT) {
         revert InvalidTemplate(templateId);
@@ -248,7 +248,7 @@ function onPopCreated(
     _validatePayload(templateId, payload);
 
     // Store question data
-    _questions[popId] = QuestionData({
+    _questions[tocId] = QuestionData({
         templateId: templateId,
         creator: tx.origin,  // Original creator, not registry
         createdAt: block.timestamp,
@@ -257,21 +257,21 @@ function onPopCreated(
     });
 
     // All optimistic questions start ACTIVE (no approval needed)
-    return POPState.ACTIVE;
+    return TOCState.ACTIVE;
 }
 ```
 
-### resolvePop
+### resolveToc
 
-Called by POPRegistry when someone proposes resolution.
+Called by TOCRegistry when someone proposes resolution.
 
 ```solidity
-function resolvePop(
-    uint256 popId,
+function resolveToc(
+    uint256 tocId,
     address caller,
     bytes calldata answerPayload
 ) external onlyRegistry returns (bool booleanResult, int256 numericResult, bytes memory genericResult) {
-    QuestionData storage q = _questions[popId];
+    QuestionData storage q = _questions[tocId];
 
     // Validate answer format based on template
     _validateAnswer(q.templateId, answerPayload);
@@ -295,8 +295,8 @@ function resolvePop(
 Allows question creator to add clarifications (like Polymarket's bulletin board).
 
 ```solidity
-function addClarification(uint256 popId, string calldata clarification) external {
-    QuestionData storage q = _questions[popId];
+function addClarification(uint256 tocId, string calldata clarification) external {
+    QuestionData storage q = _questions[tocId];
 
     // Only creator can add clarifications
     if (msg.sender != q.creator) {
@@ -304,9 +304,9 @@ function addClarification(uint256 popId, string calldata clarification) external
     }
 
     // Can only clarify before resolution
-    POP memory pop = registry.getPOP(popId);
-    if (pop.state != POPState.ACTIVE && pop.state != POPState.PENDING) {
-        revert CannotClarifyAfterResolution(pop.state);
+    TOC memory toc = registry.getTOC(tocId);
+    if (toc.state != TOCState.ACTIVE && toc.state != TOCState.PENDING) {
+        revert CannotClarifyAfterResolution(toc.state);
     }
 
     // Add clarification with timestamp
@@ -316,31 +316,31 @@ function addClarification(uint256 popId, string calldata clarification) external
     ));
     q.clarifications.push(timestamped);
 
-    emit ClarificationAdded(popId, msg.sender, clarification);
+    emit ClarificationAdded(tocId, msg.sender, clarification);
 }
 ```
 
-### getPopQuestion
+### getTocQuestion
 
 Returns formatted question with all clarifications.
 
 ```solidity
-function getPopQuestion(uint256 popId) external view returns (string memory question) {
-    QuestionData storage q = _questions[popId];
+function getTocQuestion(uint256 tocId) external view returns (string memory question) {
+    QuestionData storage q = _questions[tocId];
 
     if (q.templateId == TEMPLATE_ARBITRARY) {
-        return _formatArbitraryQuestion(popId, q);
+        return _formatArbitraryQuestion(tocId, q);
     } else if (q.templateId == TEMPLATE_SPORTS) {
-        return _formatSportsQuestion(popId, q);
+        return _formatSportsQuestion(tocId, q);
     } else if (q.templateId == TEMPLATE_EVENT) {
-        return _formatEventQuestion(popId, q);
+        return _formatEventQuestion(tocId, q);
     }
 
     return "Unknown template";
 }
 
 function _formatArbitraryQuestion(
-    uint256 popId,
+    uint256 tocId,
     QuestionData storage q
 ) internal view returns (string memory) {
     ArbitraryQuestionPayload memory p = abi.decode(q.payload, (ArbitraryQuestionPayload));
@@ -371,14 +371,14 @@ function _formatArbitraryQuestion(
 
 ```solidity
 event QuestionCreated(
-    uint256 indexed popId,
+    uint256 indexed tocId,
     uint32 templateId,
     address indexed creator,
     string question
 );
 
 event ClarificationAdded(
-    uint256 indexed popId,
+    uint256 indexed tocId,
     address indexed creator,
     string clarification
 );
@@ -394,7 +394,7 @@ error InvalidPayload();
 error InvalidAnswer();
 error OnlyRegistry();
 error OnlyCreator(address caller, address creator);
-error CannotClarifyAfterResolution(POPState state);
+error CannotClarifyAfterResolution(TOCState state);
 error QuestionTooLong(uint256 length, uint256 max);
 error ResolutionTimeInPast(uint256 resolutionTime, uint256 current);
 ```
@@ -437,14 +437,14 @@ uint256 public constant MAX_QUESTION_LENGTH = 8192; // 8KB
 1. **Question Manipulation:** Creator clarifications could change meaning
    - Mitigation: Clarifications are timestamped, TruthKeepers can reject manipulative clarifications
 
-2. **Spam Questions:** Anyone can create POPs with nonsense
-   - Mitigation: POPRegistry's bond requirements apply
+2. **Spam Questions:** Anyone can create TOCs with nonsense
+   - Mitigation: TOCRegistry's bond requirements apply
 
 3. **Ambiguous Questions:** Poorly worded questions cause disputes
    - Mitigation: Templates encourage structured questions, clarifications allowed
 
 4. **Resolution Time Gaming:** Setting past resolution times
-   - Mitigation: Validate resolutionTime > block.timestamp in onPopCreated
+   - Mitigation: Validate resolutionTime > block.timestamp in onTocCreated
 
 ---
 
@@ -453,7 +453,7 @@ uint256 public constant MAX_QUESTION_LENGTH = 8192; // 8KB
 1. **Phase 1: Core Contract**
    - Implement OptimisticResolver with Template 0 (Arbitrary)
    - Basic question storage and retrieval
-   - Integration with POPRegistry
+   - Integration with TOCRegistry
 
 2. **Phase 2: Clarifications**
    - Add clarification system
@@ -465,7 +465,7 @@ uint256 public constant MAX_QUESTION_LENGTH = 8192; // 8KB
 
 4. **Phase 4: Testing**
    - Unit tests for all templates
-   - Integration tests with POPRegistry
+   - Integration tests with TOCRegistry
    - Dispute flow tests
 
 ---

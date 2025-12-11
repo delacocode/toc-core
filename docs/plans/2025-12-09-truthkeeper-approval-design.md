@@ -2,14 +2,14 @@
 
 ## Summary
 
-Add an active approval layer where TruthKeeper contracts receive callbacks when POPs are created with them assigned. The TK contract decides whether to approve, soft-reject (allow as PERMISSIONLESS), or hard-reject (revert).
+Add an active approval layer where TruthKeeper contracts receive callbacks when TOCs are created with them assigned. The TK contract decides whether to approve, soft-reject (allow as PERMISSIONLESS), or hard-reject (revert).
 
 ## Key Changes
 
 1. **TruthKeepers must be contracts** - EOAs no longer supported
-2. **Per-POP approval replaces resolver guarantees** - Remove `_tkGuaranteedResolvers`
+2. **Per-TOC approval replaces resolver guarantees** - Remove `_tkGuaranteedResolvers`
 3. **Tier calculation based on approval** - TK_GUARANTEED/SYSTEM only if TK approved
-4. **New ITruthKeeper interface** - `canAcceptPop()` view + `onPopAssigned()` callback
+4. **New ITruthKeeper interface** - `canAcceptToc()` view + `onTocAssigned()` callback
 
 ## New Tier Logic
 
@@ -28,28 +28,28 @@ Add an active approval layer where TruthKeeper contracts receive callbacks when 
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-/// @notice Response from TruthKeeper when a POP is assigned
+/// @notice Response from TruthKeeper when a TOC is assigned
 enum TKApprovalResponse {
     APPROVE,        // Accept responsibility, tier upgrades
-    REJECT_SOFT,    // Decline but allow POP as PERMISSIONLESS
-    REJECT_HARD     // Decline and revert POP creation
+    REJECT_SOFT,    // Decline but allow TOC as PERMISSIONLESS
+    REJECT_HARD     // Decline and revert TOC creation
 }
 
 /// @title ITruthKeeper
-/// @notice Interface for TruthKeeper contracts that validate and approve POPs
+/// @notice Interface for TruthKeeper contracts that validate and approve TOCs
 interface ITruthKeeper {
-    /// @notice Pre-check if TK would accept a POP with these parameters
+    /// @notice Pre-check if TK would accept a TOC with these parameters
     /// @dev View function for gas-efficient dry-runs and UI pre-validation
     /// @param resolver The resolver contract address
     /// @param templateId The template ID within the resolver
-    /// @param creator The address creating the POP
+    /// @param creator The address creating the TOC
     /// @param payload The resolver-specific payload (raw bytes)
     /// @param disputeWindow Time window for disputing resolution
     /// @param truthKeeperWindow Time window for TK to decide disputes
     /// @param escalationWindow Time window to challenge TK decision
     /// @param postResolutionWindow Time window for post-resolution disputes
     /// @return response The approval decision TK would make
-    function canAcceptPop(
+    function canAcceptToc(
         address resolver,
         uint32 templateId,
         address creator,
@@ -60,20 +60,20 @@ interface ITruthKeeper {
         uint32 postResolutionWindow
     ) external view returns (TKApprovalResponse response);
 
-    /// @notice Called when a POP is created with this TK assigned
-    /// @dev Can update internal state (track POPs, counters, etc.)
-    /// @param popId The newly created POP ID
+    /// @notice Called when a TOC is created with this TK assigned
+    /// @dev Can update internal state (track TOCs, counters, etc.)
+    /// @param tocId The newly created TOC ID
     /// @param resolver The resolver contract address
     /// @param templateId The template ID within the resolver
-    /// @param creator The address creating the POP
+    /// @param creator The address creating the TOC
     /// @param payload The resolver-specific payload (raw bytes)
     /// @param disputeWindow Time window for disputing resolution
     /// @param truthKeeperWindow Time window for TK to decide disputes
     /// @param escalationWindow Time window to challenge TK decision
     /// @param postResolutionWindow Time window for post-resolution disputes
     /// @return response The approval decision
-    function onPopAssigned(
-        uint256 popId,
+    function onTocAssigned(
+        uint256 tocId,
         address resolver,
         uint32 templateId,
         address creator,
@@ -88,7 +88,7 @@ interface ITruthKeeper {
 
 ---
 
-## POPRegistry Changes
+## TOCRegistry Changes
 
 ### Remove
 
@@ -102,14 +102,14 @@ interface ITruthKeeper {
 ### Add
 
 - New error: `TruthKeeperNotContract(address tk)`
-- New error: `TruthKeeperRejected(address tk, uint256 popId)`
-- New event: `TruthKeeperApproved(uint256 indexed popId, address indexed tk)`
-- New event: `TruthKeeperSoftRejected(uint256 indexed popId, address indexed tk)`
+- New error: `TruthKeeperRejected(address tk, uint256 tocId)`
+- New event: `TruthKeeperApproved(uint256 indexed tocId, address indexed tk)`
+- New event: `TruthKeeperSoftRejected(uint256 indexed tocId, address indexed tk)`
 
-### Modified createPOP Flow
+### Modified createTOC Flow
 
 ```solidity
-function createPOP(..., address truthKeeper) external returns (uint256 popId) {
+function createTOC(..., address truthKeeper) external returns (uint256 tocId) {
     // ... existing validation ...
 
     // NEW: Verify TK is a contract
@@ -117,15 +117,15 @@ function createPOP(..., address truthKeeper) external returns (uint256 popId) {
         revert TruthKeeperNotContract(truthKeeper);
     }
 
-    // Assign popId
-    popId = ++_popCounter;
-    POP storage pop = _pops[popId];
+    // Assign tocId
+    tocId = ++_tocCounter;
+    TOC storage toc = _tocs[tocId];
 
-    // ... set pop fields ...
+    // ... set toc fields ...
 
     // NEW: Call TK for approval
-    TKApprovalResponse tkResponse = ITruthKeeper(truthKeeper).onPopAssigned(
-        popId,
+    TKApprovalResponse tkResponse = ITruthKeeper(truthKeeper).onTocAssigned(
+        tocId,
         resolver,
         templateId,
         msg.sender,
@@ -139,23 +139,23 @@ function createPOP(..., address truthKeeper) external returns (uint256 popId) {
     // NEW: Handle response
     bool tkApproved;
     if (tkResponse == TKApprovalResponse.REJECT_HARD) {
-        revert TruthKeeperRejected(truthKeeper, popId);
+        revert TruthKeeperRejected(truthKeeper, tocId);
     } else if (tkResponse == TKApprovalResponse.APPROVE) {
         tkApproved = true;
-        emit TruthKeeperApproved(popId, truthKeeper);
+        emit TruthKeeperApproved(tocId, truthKeeper);
     } else {
         // REJECT_SOFT
         tkApproved = false;
-        emit TruthKeeperSoftRejected(popId, truthKeeper);
+        emit TruthKeeperSoftRejected(tocId, truthKeeper);
     }
 
     // NEW: Calculate tier with approval status
-    pop.tierAtCreation = _calculateAccountabilityTier(resolver, truthKeeper, tkApproved);
+    toc.tierAtCreation = _calculateAccountabilityTier(resolver, truthKeeper, tkApproved);
 
     // Call resolver (existing)
-    pop.state = IPopResolver(resolver).onPopCreated(popId, templateId, payload);
+    toc.state = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload);
 
-    emit POPCreated(...);
+    emit TOCCreated(...);
 }
 ```
 
@@ -187,7 +187,7 @@ function _calculateAccountabilityTier(
 
 ## Example: ConfigurableTruthKeeper
 
-A reference implementation showing how TK contracts can filter POPs.
+A reference implementation showing how TK contracts can filter TOCs.
 
 ```solidity
 // SPDX-License-Identifier: BUSL-1.1
@@ -196,7 +196,7 @@ pragma solidity ^0.8.29;
 import {ITruthKeeper, TKApprovalResponse} from "./ITruthKeeper.sol";
 
 /// @title ConfigurableTruthKeeper
-/// @notice Example TK that filters POPs based on configurable criteria
+/// @notice Example TK that filters TOCs based on configurable criteria
 contract ConfigurableTruthKeeper is ITruthKeeper {
     address public owner;
     address public registry;
@@ -235,7 +235,7 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
 
     // ============ ITruthKeeper Implementation ============
 
-    function canAcceptPop(
+    function canAcceptToc(
         address resolver,
         uint32 templateId,
         address creator,
@@ -248,8 +248,8 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
         return _evaluate(resolver, templateId, creator, disputeWindow, truthKeeperWindow);
     }
 
-    function onPopAssigned(
-        uint256 /* popId */,
+    function onTocAssigned(
+        uint256 /* tocId */,
         address resolver,
         uint32 templateId,
         address creator,
@@ -259,7 +259,7 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
         uint32 /* escalationWindow */,
         uint32 /* postResolutionWindow */
     ) external onlyRegistry returns (TKApprovalResponse) {
-        // Could track popId internally here if needed
+        // Could track tocId internally here if needed
         return _evaluate(resolver, templateId, creator, disputeWindow, truthKeeperWindow);
     }
 
@@ -331,21 +331,21 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
 
 ## Security Considerations
 
-1. **Reentrancy** - TK callback happens during createPOP; ensure proper ordering and use nonReentrant
+1. **Reentrancy** - TK callback happens during createTOC; ensure proper ordering and use nonReentrant
 2. **Gas griefing** - Malicious TK could consume excessive gas; consider gas limit on callback
 3. **TK contract upgrades** - If TK is upgradeable proxy, approval logic can change
-4. **Registry trust** - TK must verify caller is the registry in onPopAssigned
+4. **Registry trust** - TK must verify caller is the registry in onTocAssigned
 
 ---
 
 ## Files to Create/Modify
 
-1. `contracts/Popregistry/POPTypes.sol` - Add TKApprovalResponse enum
-2. `contracts/Popregistry/ITruthKeeper.sol` - New interface file
-3. `contracts/Popregistry/POPRegistry.sol` - Update createPOP, remove guarantee mappings
-4. `contracts/Popregistry/IPOPRegistry.sol` - Remove guarantee functions from interface
+1. `contracts/TOCregistry/TOCTypes.sol` - Add TKApprovalResponse enum
+2. `contracts/TOCregistry/ITruthKeeper.sol` - New interface file
+3. `contracts/TOCregistry/TOCRegistry.sol` - Update createTOC, remove guarantee mappings
+4. `contracts/TOCregistry/ITOCRegistry.sol` - Remove guarantee functions from interface
 5. `contracts/examples/ConfigurableTruthKeeper.sol` - Reference implementation
-6. `contracts/test/POPRegistry.t.sol` - Update tests for new flow
+6. `contracts/test/TOCRegistry.t.sol` - Update tests for new flow
 
 ---
 
@@ -354,7 +354,7 @@ contract ConfigurableTruthKeeper is ITruthKeeper {
 | Aspect | Before | After |
 |--------|--------|-------|
 | TK type | EOA or Contract | Contract only |
-| Approval | Implicit (resolver guarantee) | Explicit (per-POP callback) |
-| Tier upgrade | TK guarantees resolver | TK approves specific POP |
-| Flexibility | Resolver-level only | Per-POP with full context |
+| Approval | Implicit (resolver guarantee) | Explicit (per-TOC callback) |
+| Tier upgrade | TK guarantees resolver | TK approves specific TOC |
+| Flexibility | Resolver-level only | Per-TOC with full context |
 | Rejection | Not possible | Soft (PERMISSIONLESS) or Hard (revert) |

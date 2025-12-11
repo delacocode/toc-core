@@ -2,21 +2,21 @@
 
 ## Overview
 
-Extend the POP protocol to support user-specified dispute windows, enabling immediate resolution for time-sensitive use cases (binary options) while maintaining dispute protection as an option.
+Extend the TOC protocol to support user-specified dispute windows, enabling immediate resolution for time-sensitive use cases (binary options) while maintaining dispute protection as an option.
 
 ## Key Design Decisions
 
 | Decision | Choice |
 |----------|--------|
-| Dispute windows | User-specified at POP creation (both pre and post) |
+| Dispute windows | User-specified at TOC creation (both pre and post) |
 | System bounds | None - fully permissionless |
 | Bond requirement | Required only if any dispute window > 0 |
 | Post-resolution dispute | State stays RESOLVED, flag as contested, store corrected result |
 | Audit trail | Full on-chain: disputer, time, reason, resolution, corrected result |
-| Multiple disputes | One dispute total per POP (across both phases) |
+| Multiple disputes | One dispute total per TOC (across both phases) |
 | Result getters | Return corrected result if exists, otherwise original |
 | Disputer proposed answer | Optional - disputer can propose, admin can accept or override |
-| Missing corrected answer | If upheld but no correct answer provided → CANCEL_POP |
+| Missing corrected answer | If upheld but no correct answer provided → CANCEL_TOC |
 | Events | Key moments only: PostResolutionDisputeFiled, PostResolutionDisputeResolved |
 
 ## Modes Enabled by User Choices
@@ -32,9 +32,9 @@ Extend the POP protocol to support user-specified dispute windows, enabling imme
 
 ## Implementation Tasks
 
-### Task 1: Update POPTypes.sol
+### Task 1: Update TOCTypes.sol
 
-**File:** `contracts/Popregistry/POPTypes.sol`
+**File:** `contracts/TOCRegistry/TOCTypes.sol`
 
 **Changes:**
 
@@ -47,11 +47,11 @@ enum DisputePhase {
 }
 ```
 
-2. Update `POP` struct:
+2. Update `TOC` struct:
 ```solidity
-struct POP {
+struct TOC {
     address resolver;
-    POPState state;
+    TOCState state;
     AnswerType answerType;
     uint256 resolutionTime;
     uint256 disputeWindow;           // User-specified pre-resolution duration
@@ -79,56 +79,56 @@ struct DisputeInfo {
 }
 ```
 
-4. Update `POPInfo` struct to include new fields for view functions.
+4. Update `TOCInfo` struct to include new fields for view functions.
 
 ---
 
-### Task 2: Update IPOPRegistry.sol
+### Task 2: Update ITOCRegistry.sol
 
-**File:** `contracts/Popregistry/IPOPRegistry.sol`
+**File:** `contracts/TOCRegistry/ITOCRegistry.sol`
 
 **Changes:**
 
 1. Update creation function signatures:
 ```solidity
-function createPOPWithSystemResolver(
+function createTOCWithSystemResolver(
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
     uint256 disputeWindow,
     uint256 postResolutionWindow
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 
-function createPOPWithPublicResolver(
+function createTOCWithPublicResolver(
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
     uint256 disputeWindow,
     uint256 postResolutionWindow
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 ```
 
 2. Add new view functions:
 ```solidity
-function isFullyFinalized(uint256 popId) external view returns (bool);
-function isContested(uint256 popId) external view returns (bool);
-function getCorrectedBooleanResult(uint256 popId) external view returns (bool);
-function getCorrectedNumericResult(uint256 popId) external view returns (int256);
-function getCorrectedGenericResult(uint256 popId) external view returns (bytes memory);
-function hasCorrectedResult(uint256 popId) external view returns (bool);
+function isFullyFinalized(uint256 tocId) external view returns (bool);
+function isContested(uint256 tocId) external view returns (bool);
+function getCorrectedBooleanResult(uint256 tocId) external view returns (bool);
+function getCorrectedNumericResult(uint256 tocId) external view returns (int256);
+function getCorrectedGenericResult(uint256 tocId) external view returns (bytes memory);
+function hasCorrectedResult(uint256 tocId) external view returns (bool);
 ```
 
 3. Add events for post-resolution disputes:
 ```solidity
-event PostResolutionDisputeFiled(uint256 indexed popId, address indexed disputer, string reason);
-event PostResolutionDisputeResolved(uint256 indexed popId, bool resultCorrected);
+event PostResolutionDisputeFiled(uint256 indexed tocId, address indexed disputer, string reason);
+event PostResolutionDisputeResolved(uint256 indexed tocId, bool resultCorrected);
 ```
 
 ---
 
-### Task 3: Update POPRegistry.sol - Storage
+### Task 3: Update TOCRegistry.sol - Storage
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
 **Add new storage:**
 
@@ -142,11 +142,11 @@ mapping(uint256 => bool) private _hasCorrectedResult;
 
 ---
 
-### Task 4: Update POPRegistry.sol - Creation Logic
+### Task 4: Update TOCRegistry.sol - Creation Logic
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
-**Update `_createPOP` function:**
+**Update `_createTOC` function:**
 
 1. Accept new parameters: `disputeWindow`, `postResolutionWindow`
 2. Store user-specified windows in POP struct
@@ -155,21 +155,21 @@ mapping(uint256 => bool) private _hasCorrectedResult;
    - If both = 0 → bond optional
 
 ```solidity
-function _createPOP(
+function _createTOC(
     ResolverType resolverType,
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
     uint256 disputeWindow,
     uint256 postResolutionWindow
-) internal returns (uint256 popId) {
+) internal returns (uint256 tocId) {
     // ... existing validation ...
 
-    popId = _nextPopId++;
+    tocId = _nextTocId++;
 
-    POPState initialState = IPopResolver(resolver).onPopCreated(popId, templateId, payload);
+    TOCState initialState = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload);
 
-    _pops[popId] = POP({
+    _tocs[tocId] = TOC({
         resolver: resolver,
         state: initialState,
         answerType: answerType,
@@ -180,21 +180,21 @@ function _createPOP(
         postDisputeDeadline: 0
     });
 
-    emit POPCreated(popId, resolverType, resolverId, resolver, templateId, answerType, initialState);
+    emit TOCCreated(tocId, resolverType, resolverId, resolver, templateId, answerType, initialState);
 }
 ```
 
 ---
 
-### Task 5: Update POPRegistry.sol - Resolution Logic
+### Task 5: Update TOCRegistry.sol - Resolution Logic
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
-**Update `resolvePOP` function:**
+**Update `resolveTOC` function:**
 
 1. Check bond requirement based on windows:
 ```solidity
-bool requiresBond = pop.disputeWindow > 0 || pop.postResolutionWindow > 0;
+bool requiresBond = toc.disputeWindow > 0 || toc.postResolutionWindow > 0;
 if (requiresBond && !_isAcceptableResolutionBond(bondToken, bondAmount)) {
     revert InvalidBond(bondToken, bondAmount);
 }
@@ -202,113 +202,113 @@ if (requiresBond && !_isAcceptableResolutionBond(bondToken, bondAmount)) {
 
 2. Set deadlines based on user-specified windows:
 ```solidity
-pop.disputeDeadline = pop.disputeWindow > 0
-    ? block.timestamp + pop.disputeWindow
+toc.disputeDeadline = toc.disputeWindow > 0
+    ? block.timestamp + toc.disputeWindow
     : 0;
 ```
 
 3. If `disputeWindow == 0`, immediately transition to RESOLVED and set post-dispute deadline:
 ```solidity
-if (pop.disputeWindow == 0) {
-    pop.state = POPState.RESOLVED;
-    pop.postDisputeDeadline = pop.postResolutionWindow > 0
-        ? block.timestamp + pop.postResolutionWindow
+if (toc.disputeWindow == 0) {
+    toc.state = TOCState.RESOLVED;
+    toc.postDisputeDeadline = toc.postResolutionWindow > 0
+        ? block.timestamp + toc.postResolutionWindow
         : 0;
     // Store result immediately
-    _storeResult(popId, pop.answerType, boolResult, numResult, genResult);
+    _storeResult(tocId, toc.answerType, boolResult, numResult, genResult);
 } else {
-    pop.state = POPState.RESOLVING;
+    toc.state = TOCState.RESOLVING;
 }
 ```
 
 ---
 
-### Task 6: Update POPRegistry.sol - Finalization Logic
+### Task 6: Update TOCRegistry.sol - Finalization Logic
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
-**Update `finalizePOP` function:**
+**Update `finalizeTOC` function:**
 
 1. After finalizing, set post-dispute deadline:
 ```solidity
-function finalizePOP(uint256 popId) external nonReentrant validPopId(popId) inState(popId, POPState.RESOLVING) {
-    POP storage pop = _pops[popId];
+function finalizeTOC(uint256 tocId) external nonReentrant validTocId(tocId) inState(tocId, TOCState.RESOLVING) {
+    TOC storage toc = _tocs[tocId];
 
-    if (block.timestamp < pop.disputeDeadline) {
-        revert DisputeWindowNotPassed(pop.disputeDeadline, block.timestamp);
+    if (block.timestamp < toc.disputeDeadline) {
+        revert DisputeWindowNotPassed(toc.disputeDeadline, block.timestamp);
     }
 
     // Check not already disputed
-    if (_disputes[popId].disputer != address(0)) {
-        revert AlreadyDisputed(popId);
+    if (_disputes[tocId].disputer != address(0)) {
+        revert AlreadyDisputed(tocId);
     }
 
-    pop.state = POPState.RESOLVED;
+    toc.state = TOCState.RESOLVED;
 
     // Set post-resolution dispute deadline
-    pop.postDisputeDeadline = pop.postResolutionWindow > 0
-        ? block.timestamp + pop.postResolutionWindow
+    toc.postDisputeDeadline = toc.postResolutionWindow > 0
+        ? block.timestamp + toc.postResolutionWindow
         : 0;
 
     // Store result
-    ResolutionInfo storage resolution = _resolutions[popId];
-    _storeResult(popId, pop.answerType, resolution.proposedBooleanOutcome, resolution.proposedNumericOutcome, resolution.proposedGenericOutcome);
+    ResolutionInfo storage resolution = _resolutions[tocId];
+    _storeResult(tocId, toc.answerType, resolution.proposedBooleanOutcome, resolution.proposedNumericOutcome, resolution.proposedGenericOutcome);
 
     // Return bond
     _transferBondOut(resolution.proposer, resolution.bondToken, resolution.bondAmount);
 
-    emit POPFinalized(popId, pop.answerType);
+    emit TOCFinalized(tocId, toc.answerType);
 }
 ```
 
 ---
 
-### Task 7: Update POPRegistry.sol - Dispute Logic
+### Task 7: Update TOCRegistry.sol - Dispute Logic
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
 **Update `dispute` function to handle both phases and optional proposed answer:**
 
 ```solidity
 function dispute(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
     bool proposedBooleanResult,
     int256 proposedNumericResult,
     bytes calldata proposedGenericResult
-) external payable nonReentrant validPopId(popId) {
-    POP storage pop = _pops[popId];
+) external payable nonReentrant validTocId(tocId) {
+    TOC storage toc = _tocs[tocId];
 
     // Check not already disputed
-    if (_disputes[popId].disputer != address(0)) {
-        revert AlreadyDisputed(popId);
+    if (_disputes[tocId].disputer != address(0)) {
+        revert AlreadyDisputed(tocId);
     }
 
     DisputePhase phase;
 
-    if (pop.state == POPState.RESOLVING) {
+    if (toc.state == TOCState.RESOLVING) {
         // Pre-resolution dispute
-        if (block.timestamp >= pop.disputeDeadline) {
-            revert DisputeWindowPassed(pop.disputeDeadline, block.timestamp);
+        if (block.timestamp >= toc.disputeDeadline) {
+            revert DisputeWindowPassed(toc.disputeDeadline, block.timestamp);
         }
         phase = DisputePhase.PRE_RESOLUTION;
-        pop.state = POPState.DISPUTED;
+        toc.state = TOCState.DISPUTED;
 
-    } else if (pop.state == POPState.RESOLVED) {
+    } else if (toc.state == TOCState.RESOLVED) {
         // Post-resolution dispute
-        if (pop.postDisputeDeadline == 0) {
+        if (toc.postDisputeDeadline == 0) {
             revert DisputeWindowPassed(0, block.timestamp);
         }
-        if (block.timestamp >= pop.postDisputeDeadline) {
-            revert DisputeWindowPassed(pop.postDisputeDeadline, block.timestamp);
+        if (block.timestamp >= toc.postDisputeDeadline) {
+            revert DisputeWindowPassed(toc.postDisputeDeadline, block.timestamp);
         }
         phase = DisputePhase.POST_RESOLUTION;
         // State stays RESOLVED
 
     } else {
-        revert InvalidState(pop.state, POPState.RESOLVING);
+        revert InvalidState(toc.state, TOCState.RESOLVING);
     }
 
     // Validate and transfer bond
@@ -318,7 +318,7 @@ function dispute(
     _transferBondIn(bondToken, bondAmount);
 
     // Store dispute info with proposed answer
-    _disputes[popId] = DisputeInfo({
+    _disputes[tocId] = DisputeInfo({
         phase: phase,
         disputer: msg.sender,
         bondToken: bondToken,
@@ -332,43 +332,43 @@ function dispute(
         proposedGenericResult: proposedGenericResult
     });
 
-    emit DisputeBondDeposited(popId, msg.sender, bondToken, bondAmount);
+    emit DisputeBondDeposited(tocId, msg.sender, bondToken, bondAmount);
 
     if (phase == DisputePhase.PRE_RESOLUTION) {
-        emit POPDisputed(popId, msg.sender, reason);
+        emit TOCDisputed(tocId, msg.sender, reason);
     } else {
-        emit PostResolutionDisputeFiled(popId, msg.sender, reason);
+        emit PostResolutionDisputeFiled(tocId, msg.sender, reason);
     }
 }
 ```
 
 ---
 
-### Task 8: Update POPRegistry.sol - Dispute Resolution Logic
+### Task 8: Update TOCRegistry.sol - Dispute Resolution Logic
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
 **Update `resolveDispute` function with optional corrected answer:**
 
 ```solidity
 function resolveDispute(
-    uint256 popId,
+    uint256 tocId,
     DisputeResolution resolution,
     bool correctedBooleanResult,
     int256 correctedNumericResult,
     bytes calldata correctedGenericResult
-) external onlyOwner nonReentrant validPopId(popId) {
-    DisputeInfo storage disputeInfo = _disputes[popId];
+) external onlyOwner nonReentrant validTocId(tocId) {
+    DisputeInfo storage disputeInfo = _disputes[tocId];
 
     if (disputeInfo.disputer == address(0)) {
-        revert InvalidPopId(popId); // No dispute exists
+        revert InvalidTocId(tocId); // No dispute exists
     }
     if (disputeInfo.resolvedAt != 0) {
-        revert AlreadyDisputed(popId); // Already resolved
+        revert AlreadyDisputed(tocId); // Already resolved
     }
 
-    POP storage pop = _pops[popId];
-    ResolutionInfo storage resolutionInfo = _resolutions[popId];
+    TOC storage toc = _tocs[tocId];
+    ResolutionInfo storage resolutionInfo = _resolutions[tocId];
 
     disputeInfo.resolvedAt = block.timestamp;
 
@@ -377,14 +377,14 @@ function resolveDispute(
 
         if (disputeInfo.phase == DisputePhase.PRE_RESOLUTION) {
             // Pre-resolution: flip result and finalize
-            pop.state = POPState.RESOLVED;
+            toc.state = TOCState.RESOLVED;
 
-            if (pop.answerType == AnswerType.BOOLEAN) {
-                _booleanResults[popId] = !resolutionInfo.proposedBooleanOutcome;
+            if (toc.answerType == AnswerType.BOOLEAN) {
+                _booleanResults[tocId] = !resolutionInfo.proposedBooleanOutcome;
             }
             // Set post-dispute deadline
-            pop.postDisputeDeadline = pop.postResolutionWindow > 0
-                ? block.timestamp + pop.postResolutionWindow
+            toc.postDisputeDeadline = toc.postResolutionWindow > 0
+                ? block.timestamp + toc.postResolutionWindow
                 : 0;
 
         } else {
@@ -392,26 +392,26 @@ function resolveDispute(
             // Priority: admin's answer > disputer's proposed answer
             // If neither provided for non-boolean, cancel instead
 
-            if (pop.answerType == AnswerType.BOOLEAN) {
+            if (toc.answerType == AnswerType.BOOLEAN) {
                 // For boolean: use admin's if provided, else use disputer's, else flip
-                _correctedBooleanResults[popId] = correctedBooleanResult != false
+                _correctedBooleanResults[tocId] = correctedBooleanResult != false
                     ? correctedBooleanResult
                     : (disputeInfo.proposedBooleanResult != false
                         ? disputeInfo.proposedBooleanResult
-                        : !_booleanResults[popId]);
-                _hasCorrectedResult[popId] = true;
-            } else if (pop.answerType == AnswerType.NUMERIC) {
+                        : !_booleanResults[tocId]);
+                _hasCorrectedResult[tocId] = true;
+            } else if (toc.answerType == AnswerType.NUMERIC) {
                 // Use admin's answer if non-zero, else disputer's
                 int256 corrected = correctedNumericResult != 0
                     ? correctedNumericResult
                     : disputeInfo.proposedNumericResult;
-                if (corrected == 0 && _numericResults[popId] == 0) {
+                if (corrected == 0 && _numericResults[tocId] == 0) {
                     // Ambiguous - no way to know if 0 is intentional
                     // For safety, require explicit answer or cancel
                 }
-                _correctedNumericResults[popId] = corrected;
-                _hasCorrectedResult[popId] = true;
-            } else if (pop.answerType == AnswerType.GENERIC) {
+                _correctedNumericResults[tocId] = corrected;
+                _hasCorrectedResult[tocId] = true;
+            } else if (toc.answerType == AnswerType.GENERIC) {
                 bytes memory corrected = correctedGenericResult.length > 0
                     ? correctedGenericResult
                     : disputeInfo.proposedGenericResult;
@@ -419,67 +419,67 @@ function resolveDispute(
                     // No corrected answer provided - should cancel
                     revert("No corrected answer provided");
                 }
-                _correctedGenericResults[popId] = corrected;
-                _hasCorrectedResult[popId] = true;
+                _correctedGenericResults[tocId] = corrected;
+                _hasCorrectedResult[tocId] = true;
             }
         }
 
         // Slash resolution bond, return dispute bond
-        emit BondSlashed(popId, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+        emit BondSlashed(tocId, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
         _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
 
     } else if (resolution == DisputeResolution.REJECT_DISPUTE) {
         disputeInfo.resultCorrected = false;
 
         if (disputeInfo.phase == DisputePhase.PRE_RESOLUTION) {
-            pop.state = POPState.RESOLVED;
-            _storeResult(popId, pop.answerType, resolutionInfo.proposedBooleanOutcome, resolutionInfo.proposedNumericOutcome, resolutionInfo.proposedGenericOutcome);
-            pop.postDisputeDeadline = pop.postResolutionWindow > 0
-                ? block.timestamp + pop.postResolutionWindow
+            toc.state = TOCState.RESOLVED;
+            _storeResult(tocId, toc.answerType, resolutionInfo.proposedBooleanOutcome, resolutionInfo.proposedNumericOutcome, resolutionInfo.proposedGenericOutcome);
+            toc.postDisputeDeadline = toc.postResolutionWindow > 0
+                ? block.timestamp + toc.postResolutionWindow
                 : 0;
         }
         // Post-resolution: nothing changes, original result stands
 
         // Slash dispute bond, return resolution bond
-        emit BondSlashed(popId, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+        emit BondSlashed(tocId, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
         _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
 
     } else {
-        // CANCEL_POP
-        pop.state = POPState.CANCELLED;
+        // CANCEL_TOC
+        toc.state = TOCState.CANCELLED;
         _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
         _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
-        emit POPCancelled(popId, "Admin cancelled during dispute resolution");
+        emit TOCCancelled(tocId, "Admin cancelled during dispute resolution");
     }
 
-    emit DisputeResolved(popId, resolution, msg.sender);
+    emit DisputeResolved(tocId, resolution, msg.sender);
 }
 ```
 
 ---
 
-### Task 9: Update POPRegistry.sol - View Functions
+### Task 9: Update TOCRegistry.sol - View Functions
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
 **Add new helper functions:**
 
 ```solidity
-function isFullyFinalized(uint256 popId) external view validPopId(popId) returns (bool) {
-    POP storage pop = _pops[popId];
+function isFullyFinalized(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    TOC storage toc = _tocs[tocId];
 
-    if (pop.state != POPState.RESOLVED) {
+    if (toc.state != TOCState.RESOLVED) {
         return false;
     }
 
     // Check no pending dispute windows
-    if (pop.postDisputeDeadline > 0 && block.timestamp < pop.postDisputeDeadline) {
+    if (toc.postDisputeDeadline > 0 && block.timestamp < toc.postDisputeDeadline) {
         // Window still open, check if already disputed
-        if (_disputes[popId].disputer == address(0)) {
+        if (_disputes[tocId].disputer == address(0)) {
             return false; // Can still be disputed
         }
         // Disputed but not yet resolved
-        if (_disputes[popId].resolvedAt == 0) {
+        if (_disputes[tocId].resolvedAt == 0) {
             return false;
         }
     }
@@ -487,50 +487,50 @@ function isFullyFinalized(uint256 popId) external view validPopId(popId) returns
     return true;
 }
 
-function isContested(uint256 popId) external view validPopId(popId) returns (bool) {
-    DisputeInfo storage dispute = _disputes[popId];
+function isContested(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    DisputeInfo storage dispute = _disputes[tocId];
     return dispute.phase == DisputePhase.POST_RESOLUTION && dispute.disputer != address(0);
 }
 
-function hasCorrectedResult(uint256 popId) external view validPopId(popId) returns (bool) {
-    return _hasCorrectedResult[popId];
+function hasCorrectedResult(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    return _hasCorrectedResult[tocId];
 }
 
-function getCorrectedBooleanResult(uint256 popId) external view validPopId(popId) returns (bool) {
-    return _correctedBooleanResults[popId];
+function getCorrectedBooleanResult(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    return _correctedBooleanResults[tocId];
 }
 
-function getCorrectedNumericResult(uint256 popId) external view validPopId(popId) returns (int256) {
-    return _correctedNumericResults[popId];
+function getCorrectedNumericResult(uint256 tocId) external view validTocId(tocId) returns (int256) {
+    return _correctedNumericResults[tocId];
 }
 
-function getCorrectedGenericResult(uint256 popId) external view validPopId(popId) returns (bytes memory) {
-    return _correctedGenericResults[popId];
+function getCorrectedGenericResult(uint256 tocId) external view validTocId(tocId) returns (bytes memory) {
+    return _correctedGenericResults[tocId];
 }
 ```
 
 **Update existing result getters to return corrected if exists:**
 
 ```solidity
-function getBooleanResult(uint256 popId) external view validPopId(popId) returns (bool) {
-    if (_hasCorrectedResult[popId]) {
-        return _correctedBooleanResults[popId];
+function getBooleanResult(uint256 tocId) external view validTocId(tocId) returns (bool) {
+    if (_hasCorrectedResult[tocId]) {
+        return _correctedBooleanResults[tocId];
     }
-    return _booleanResults[popId];
+    return _booleanResults[tocId];
 }
 
-function getNumericResult(uint256 popId) external view validPopId(popId) returns (int256) {
-    if (_hasCorrectedResult[popId]) {
-        return _correctedNumericResults[popId];
+function getNumericResult(uint256 tocId) external view validTocId(tocId) returns (int256) {
+    if (_hasCorrectedResult[tocId]) {
+        return _correctedNumericResults[tocId];
     }
-    return _numericResults[popId];
+    return _numericResults[tocId];
 }
 
-function getGenericResult(uint256 popId) external view validPopId(popId) returns (bytes memory) {
-    if (_hasCorrectedResult[popId]) {
-        return _correctedGenericResults[popId];
+function getGenericResult(uint256 tocId) external view validTocId(tocId) returns (bytes memory) {
+    if (_hasCorrectedResult[tocId]) {
+        return _correctedGenericResults[tocId];
     }
-    return _genericResults[popId];
+    return _genericResults[tocId];
 }
 ```
 
@@ -538,22 +538,22 @@ function getGenericResult(uint256 popId) external view validPopId(popId) returns
 
 ### Task 10: Add Helper Function for Result Storage
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCRegistry/TOCRegistry.sol`
 
 ```solidity
 function _storeResult(
-    uint256 popId,
+    uint256 tocId,
     AnswerType answerType,
     bool boolResult,
     int256 numResult,
     bytes memory genResult
 ) internal {
     if (answerType == AnswerType.BOOLEAN) {
-        _booleanResults[popId] = boolResult;
+        _booleanResults[tocId] = boolResult;
     } else if (answerType == AnswerType.NUMERIC) {
-        _numericResults[popId] = numResult;
+        _numericResults[tocId] = numResult;
     } else if (answerType == AnswerType.GENERIC) {
-        _genericResults[popId] = genResult;
+        _genericResults[tocId] = genResult;
     }
 }
 ```
@@ -562,12 +562,12 @@ function _storeResult(
 
 ### Task 11: Update Tests
 
-**File:** `contracts/test/POPRegistry.t.sol`
+**File:** `contracts/test/TOCRegistry.t.sol`
 
 **Add new tests:**
 
-1. `test_CreatePOPWithCustomDisputeWindows` - User specifies both windows
-2. `test_CreateUndisputablePOP` - Both windows = 0, no bond required
+1. `test_CreateTOCWithCustomDisputeWindows` - User specifies both windows
+2. `test_CreateUndisputableTOC` - Both windows = 0, no bond required
 3. `test_ImmediateResolution` - disputeWindow = 0, goes straight to RESOLVED
 4. `test_PostResolutionDispute` - File dispute after RESOLVED
 5. `test_PostResolutionDisputeUpheld` - Corrected result stored
@@ -585,7 +585,7 @@ function _storeResult(
 
 ### Task 12: Update Documentation
 
-**File:** `docs/POP_SYSTEM_DOCUMENTATION.md`
+**File:** `docs/TOC_SYSTEM_DOCUMENTATION.md`
 
 Add section on:
 - Flexible dispute windows
@@ -598,15 +598,15 @@ Add section on:
 
 ## Implementation Order
 
-1. **POPTypes.sol** - Add new enum and update structs
-2. **IPOPRegistry.sol** - Update interface with new signatures and functions
-3. **POPRegistry.sol** - Storage additions
-4. **POPRegistry.sol** - Creation logic
-5. **POPRegistry.sol** - Resolution logic
-6. **POPRegistry.sol** - Finalization logic
-7. **POPRegistry.sol** - Dispute logic (both phases)
-8. **POPRegistry.sol** - Dispute resolution logic
-9. **POPRegistry.sol** - View functions
+1. **TOCTypes.sol** - Add new enum and update structs
+2. **ITOCRegistry.sol** - Update interface with new signatures and functions
+3. **TOCRegistry.sol** - Storage additions
+4. **TOCRegistry.sol** - Creation logic
+5. **TOCRegistry.sol** - Resolution logic
+6. **TOCRegistry.sol** - Finalization logic
+7. **TOCRegistry.sol** - Dispute logic (both phases)
+8. **TOCRegistry.sol** - Dispute resolution logic
+9. **TOCRegistry.sol** - View functions
 10. **Tests** - Comprehensive test coverage
 11. **Documentation** - Update docs
 
@@ -622,4 +622,4 @@ Add section on:
 
 4. **Disputer proposed answer**: ✅ Optional - disputer can propose, admin can accept or override.
 
-5. **Missing corrected answer**: ✅ If upheld for numeric/generic but no answer provided → revert (admin should use CANCEL_POP instead).
+5. **Missing corrected answer**: ✅ If upheld for numeric/generic but no answer provided → revert (admin should use CANCEL_TOC instead).

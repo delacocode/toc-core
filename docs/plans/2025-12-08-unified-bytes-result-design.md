@@ -27,9 +27,9 @@ Replace the triple-field answer type system (`booleanResult`, `numericResult`, `
 | Encoding | ABI-encoded for bool/int256, raw bytes for generic |
 | AnswerType | Keep enum, include in result structs for decoding context |
 | Structs | Triple fields → single `bytes result` |
-| IPopResolver | Returns `bytes memory result` |
+| ITOCResolver | Returns `bytes memory result` |
 | Typed getters | Remove, replace with `getResult()` + `getOriginalResult()` |
-| Helper library | `POPResultCodec` for encode/decode convenience |
+| Helper library | `TOCResultCodec` for encode/decode convenience |
 
 ---
 
@@ -70,11 +70,11 @@ mapping(uint256 => bool) private _hasCorrectedResult;
 
 ## Struct Changes
 
-### POPResult
+### TOCResult
 
 ```solidity
 // BEFORE
-struct POPResult {
+struct TOCResult {
     AnswerType answerType;
     bool isResolved;
     bool booleanResult;
@@ -83,7 +83,7 @@ struct POPResult {
 }
 
 // AFTER
-struct POPResult {
+struct TOCResult {
     AnswerType answerType;
     bool isResolved;
     bytes result;
@@ -164,7 +164,7 @@ struct ExtensiveResult {
 }
 ```
 
-### POPInfo
+### TOCInfo
 
 Same simplification - triple result fields → single `bytes result`, keep `hasCorrectedResult` flag.
 
@@ -172,40 +172,40 @@ Same simplification - triple result fields → single `bytes result`, keep `hasC
 
 ## Interface Changes
 
-### IPopResolver
+### ITOCResolver
 
 ```solidity
 // BEFORE
-function resolvePop(uint256 popId, address proposer, bytes calldata payload)
+function resolveToc(uint256 tocId, address proposer, bytes calldata payload)
     external returns (bool boolResult, int256 numResult, bytes memory genResult);
 
 // AFTER
-function resolvePop(uint256 popId, address proposer, bytes calldata payload)
+function resolveToc(uint256 tocId, address proposer, bytes calldata payload)
     external returns (bytes memory result);
 ```
 
-### IPOPRegistry - Result Getters
+### ITOCRegistry - Result Getters
 
 ```solidity
 // REMOVE
-function getBooleanResult(uint256 popId) external view returns (bool);
-function getNumericResult(uint256 popId) external view returns (int256);
-function getGenericResult(uint256 popId) external view returns (bytes memory);
-function getCorrectedBooleanResult(uint256 popId) external view returns (bool);
-function getCorrectedNumericResult(uint256 popId) external view returns (int256);
-function getCorrectedGenericResult(uint256 popId) external view returns (bytes memory);
+function getBooleanResult(uint256 tocId) external view returns (bool);
+function getNumericResult(uint256 tocId) external view returns (int256);
+function getGenericResult(uint256 tocId) external view returns (bytes memory);
+function getCorrectedBooleanResult(uint256 tocId) external view returns (bool);
+function getCorrectedNumericResult(uint256 tocId) external view returns (int256);
+function getCorrectedGenericResult(uint256 tocId) external view returns (bytes memory);
 
 // ADD
-function getResult(uint256 popId) external view returns (bytes memory result);
-function getOriginalResult(uint256 popId) external view returns (bytes memory result);
+function getResult(uint256 tocId) external view returns (bytes memory result);
+function getOriginalResult(uint256 tocId) external view returns (bytes memory result);
 ```
 
-### IPOPRegistry - Dispute Functions
+### ITOCRegistry - Dispute Functions
 
 ```solidity
 // BEFORE
 function dispute(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -217,7 +217,7 @@ function dispute(
 
 // AFTER
 function dispute(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -236,15 +236,15 @@ Same simplification for:
 
 ## Helper Library
 
-New file: `contracts/libraries/POPResultCodec.sol`
+New file: `contracts/libraries/TOCResultCodec.sol`
 
 ```solidity
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-/// @title POPResultCodec
-/// @notice Encoding/decoding utilities for POP results
-library POPResultCodec {
+/// @title TOCResultCodec
+/// @notice Encoding/decoding utilities for TOC results
+library TOCResultCodec {
     function encodeBoolean(bool value) internal pure returns (bytes memory) {
         return abi.encode(value);
     }
@@ -267,22 +267,22 @@ library POPResultCodec {
 
 **Resolver returning a price:**
 ```solidity
-import {POPResultCodec} from "../libraries/POPResultCodec.sol";
+import {TOCResultCodec} from "../libraries/TOCResultCodec.sol";
 
-function resolvePop(uint256 popId, address, bytes calldata)
+function resolveToc(uint256 tocId, address, bytes calldata)
     external returns (bytes memory result)
 {
-    int256 price = _fetchPrice(popId);
-    return POPResultCodec.encodeNumeric(price);
+    int256 price = _fetchPrice(tocId);
+    return TOCResultCodec.encodeNumeric(price);
 }
 ```
 
 **Consumer reading a boolean result:**
 ```solidity
-import {POPResultCodec} from "./libraries/POPResultCodec.sol";
+import {TOCResultCodec} from "./libraries/TOCResultCodec.sol";
 
-bytes memory resultData = registry.getResult(popId);
-bool outcome = POPResultCodec.decodeBoolean(resultData);
+bytes memory resultData = registry.getResult(tocId);
+bool outcome = TOCResultCodec.decodeBoolean(resultData);
 ```
 
 ---
@@ -293,11 +293,11 @@ bool outcome = POPResultCodec.decodeBoolean(resultData);
 
 | File | Changes |
 |------|---------|
-| `contracts/libraries/POPResultCodec.sol` | NEW - Helper library |
-| `contracts/Popregistry/POPTypes.sol` | Simplify structs |
-| `contracts/Popregistry/IPopResolver.sol` | Update `resolvePop` return type |
-| `contracts/Popregistry/IPOPRegistry.sol` | Update interface, remove typed getters |
-| `contracts/Popregistry/POPRegistry.sol` | Simplify storage, remove conditionals |
+| `contracts/libraries/TOCResultCodec.sol` | NEW - Helper library |
+| `contracts/TOCregistry/TOCTypes.sol` | Simplify structs |
+| `contracts/TOCregistry/ITOCResolver.sol` | Update `resolveToc` return type |
+| `contracts/TOCregistry/ITOCRegistry.sol` | Update interface, remove typed getters |
+| `contracts/TOCregistry/TOCRegistry.sol` | Simplify storage, remove conditionals |
 | `contracts/resolvers/PythPriceResolver.sol` | Update to new interface |
 | `contracts/test/MockResolver.sol` | Update to new interface |
 
@@ -305,17 +305,17 @@ bool outcome = POPResultCodec.decodeBoolean(resultData);
 
 | File | Changes |
 |------|---------|
-| `contracts/test/POPRegistry.t.sol` | Update to use new getters and encoding |
+| `contracts/test/TOCRegistry.t.sol` | Update to use new getters and encoding |
 
 ---
 
 ## Implementation Order
 
-1. Create `POPResultCodec` library
-2. Update `POPTypes.sol` structs
-3. Update `IPopResolver.sol` interface
-4. Update `IPOPRegistry.sol` interface
-5. Update `POPRegistry.sol` implementation
+1. Create `TOCResultCodec` library
+2. Update `TOCTypes.sol` structs
+3. Update `ITOCResolver.sol` interface
+4. Update `ITOCRegistry.sol` interface
+5. Update `TOCRegistry.sol` implementation
 6. Update resolvers (`PythPriceResolver`, `MockResolver`)
 7. Update tests
 8. Verify contract size reduction with `forge build --sizes`

@@ -7,7 +7,7 @@
 
 ## Overview
 
-Extend the POP protocol with a two-round dispute mechanism inspired by Polymarket/UMA, using TruthKeepers for Round 1 adjudication and Admin/Community for Round 2 escalation.
+Extend the Truth On Chain protocol with a two-round dispute mechanism inspired by Polymarket/UMA, using TruthKeepers for Round 1 adjudication and Admin/Community for Round 2 escalation.
 
 ---
 
@@ -16,14 +16,14 @@ Extend the POP protocol with a two-round dispute mechanism inspired by Polymarke
 | Decision | Choice |
 |----------|--------|
 | Dispute rounds | Two rounds: TruthKeeper → Admin/Community |
-| TruthKeeper assignment | Per-POP from global registry |
+| TruthKeeper assignment | Per-TOC from global registry |
 | TruthKeeper guarantees | TK self-declares which resolvers they guarantee |
 | System accountability | 3 tiers: SYSTEM, TK_GUARANTEED, PERMISSIONLESS |
-| Tier storage | Immutable snapshot at POP creation |
+| Tier storage | Immutable snapshot at TOC creation |
 | TK timeout behavior | Auto-escalate to Round 2 |
 | Escalation bond | Separate configurable list (higher than Round 1) |
 | Bond economics | Winner gets 50% of loser, contract gets 50% |
-| TOO_EARLY outcome | Explicit resolution type, POP returns to ACTIVE |
+| TOO_EARLY outcome | Explicit resolution type, TOC returns to ACTIVE |
 | Evidence | Add `evidenceURI` field for IPFS/Arweave links |
 
 ---
@@ -32,7 +32,7 @@ Extend the POP protocol with a two-round dispute mechanism inspired by Polymarke
 
 **TruthKeeper Accountability (deferred):**
 - TKs should be able to set minimum `truthKeeperWindow` they guarantee to meet
-- If POP creator sets window below TK's minimum → reject or mark non-guaranteed
+- If TOC creator sets window below TK's minimum → reject or mark non-guaranteed
 - Consider staking/slashing mechanism for missed guarantees
 
 ---
@@ -42,7 +42,7 @@ Extend the POP protocol with a two-round dispute mechanism inspired by Polymarke
 ```
 ACTIVE
    │
-   ▼ resolvePOP() - Proposer posts bond
+   ▼ resolveTOC() - Proposer posts bond
 RESOLVING
    │
    ├── No dispute within disputeWindow
@@ -106,7 +106,7 @@ DISPUTED_ROUND_1
 |---------|---------------|---------------|
 | UPHOLD_DISPUTE | 50% to disputer, 50% to contract | Returned |
 | REJECT_DISPUTE | Returned | 50% to proposer, 50% to contract |
-| CANCEL_POP | Returned | Returned |
+| CANCEL_TOC | Returned | Returned |
 | TOO_EARLY | 50% to disputer, 50% to contract | Returned |
 
 ### Round 2 Escalation (vs TK Decision)
@@ -131,11 +131,11 @@ enum AccountabilityTier {
 enum DisputeResolution {
     UPHOLD_DISPUTE,
     REJECT_DISPUTE,
-    CANCEL_POP,
+    CANCEL_TOC,
     TOO_EARLY
 }
 
-enum POPState {
+enum TOCState {
     NONE,
     PENDING,
     REJECTED,
@@ -152,16 +152,16 @@ enum POPState {
 
 ## Updated Structs
 
-### POP Struct
+### TOC Struct
 
 ```solidity
-struct POP {
+struct TOC {
     address resolver;
-    POPState state;
+    TOCState state;
     AnswerType answerType;
     uint256 resolutionTime;
 
-    // Time windows (user-specified per-POP)
+    // Time windows (user-specified per-TOC)
     uint256 disputeWindow;           // Time to dispute initial proposal
     uint256 truthKeeperWindow;       // Time for TK to decide Round 1
     uint256 escalationWindow;        // Time to challenge TK decision
@@ -268,7 +268,7 @@ function removeGuaranteedResolver(address resolver) external;
 
 // TK resolves Round 1 dispute
 function resolveTruthKeeperDispute(
-    uint256 popId,
+    uint256 tocId,
     DisputeResolution resolution,
     bool correctedBooleanResult,
     int256 correctedNumericResult,
@@ -280,7 +280,7 @@ function resolveTruthKeeperDispute(
 
 ```solidity
 // Updated creation with TK and windows
-function createPOPWithSystemResolver(
+function createTOCWithSystemResolver(
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
@@ -289,11 +289,11 @@ function createPOPWithSystemResolver(
     uint256 escalationWindow,
     uint256 postResolutionWindow,
     address truthKeeper
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 
 // Updated dispute with evidence
 function dispute(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -305,7 +305,7 @@ function dispute(
 
 // Challenge TruthKeeper decision (Round 2)
 function challengeTruthKeeperDecision(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -316,10 +316,10 @@ function challengeTruthKeeperDecision(
 ) external payable;
 
 // Finalize after TK decision (if no challenge)
-function finalizeAfterTruthKeeper(uint256 popId) external;
+function finalizeAfterTruthKeeper(uint256 tocId) external;
 
 // Auto-escalate if TK times out
-function escalateTruthKeeperTimeout(uint256 popId) external;
+function escalateTruthKeeperTimeout(uint256 tocId) external;
 ```
 
 ### View Functions
@@ -328,7 +328,7 @@ function escalateTruthKeeperTimeout(uint256 popId) external;
 function isWhitelistedTruthKeeper(address tk) external view returns (bool);
 function isWhitelistedResolver(address resolver) external view returns (bool);
 function getTruthKeeperGuaranteedResolvers(address tk) external view returns (address[] memory);
-function getEscalationInfo(uint256 popId) external view returns (EscalationInfo memory);
+function getEscalationInfo(uint256 tocId) external view returns (EscalationInfo memory);
 function getAccountabilityTier(address resolver, address tk) external view returns (AccountabilityTier);
 ```
 
@@ -346,30 +346,30 @@ event TruthKeeperGuaranteeAdded(address indexed tk, address indexed resolver);
 event TruthKeeperGuaranteeRemoved(address indexed tk, address indexed resolver);
 
 // Dispute flow
-event TruthKeeperDisputeResolved(uint256 indexed popId, address indexed tk, DisputeResolution resolution);
-event TruthKeeperDecisionChallenged(uint256 indexed popId, address indexed challenger, string reason);
-event TruthKeeperTimedOut(uint256 indexed popId, address indexed tk);
-event EscalationResolved(uint256 indexed popId, DisputeResolution resolution, address indexed admin);
+event TruthKeeperDisputeResolved(uint256 indexed tocId, address indexed tk, DisputeResolution resolution);
+event TruthKeeperDecisionChallenged(uint256 indexed tocId, address indexed challenger, string reason);
+event TruthKeeperTimedOut(uint256 indexed tocId, address indexed tk);
+event EscalationResolved(uint256 indexed tocId, DisputeResolution resolution, address indexed admin);
 ```
 
 ---
 
 ## Implementation Order
 
-1. **POPTypes.sol** - Add new enums, update structs
-2. **IPOPRegistry.sol** - Add new function signatures and events
-3. **POPRegistry.sol** - TruthKeeper registry storage and admin functions
-4. **POPRegistry.sol** - Update POP creation with TK and tier
-5. **POPRegistry.sol** - Update dispute() with evidenceURI
-6. **POPRegistry.sol** - Add resolveTruthKeeperDispute() (TK only)
-7. **POPRegistry.sol** - Add challengeTruthKeeperDecision() (Round 2)
-8. **POPRegistry.sol** - Add escalateTruthKeeperTimeout()
-9. **POPRegistry.sol** - Add finalizeAfterTruthKeeper()
-10. **POPRegistry.sol** - Update resolveDispute() for Round 2 with TOO_EARLY
-11. **POPRegistry.sol** - Update bond economics (50/50 split)
-12. **POPRegistry.sol** - Add new view functions
+1. **TOCTypes.sol** - Add new enums, update structs
+2. **ITOCRegistry.sol** - Add new function signatures and events
+3. **TOCRegistry.sol** - TruthKeeper registry storage and admin functions
+4. **TOCRegistry.sol** - Update TOC creation with TK and tier
+5. **TOCRegistry.sol** - Update dispute() with evidenceURI
+6. **TOCRegistry.sol** - Add resolveTruthKeeperDispute() (TK only)
+7. **TOCRegistry.sol** - Add challengeTruthKeeperDecision() (Round 2)
+8. **TOCRegistry.sol** - Add escalateTruthKeeperTimeout()
+9. **TOCRegistry.sol** - Add finalizeAfterTruthKeeper()
+10. **TOCRegistry.sol** - Update resolveDispute() for Round 2 with TOO_EARLY
+11. **TOCRegistry.sol** - Update bond economics (50/50 split)
+12. **TOCRegistry.sol** - Add new view functions
 13. **Tests** - Comprehensive test coverage
-14. **Documentation** - Update POP_SYSTEM_DOCUMENTATION.md
+14. **Documentation** - Update TOC_SYSTEM_DOCUMENTATION.md
 
 ---
 
@@ -381,8 +381,8 @@ event EscalationResolved(uint256 indexed popId, DisputeResolution resolution, ad
 4. Round 1 dispute → TK upholds → Challenge → Admin upholds challenger
 5. Round 1 dispute → TK upholds → Challenge → Admin rejects challenger
 6. Round 1 dispute → TK times out → Auto-escalate → Admin resolves
-7. TOO_EARLY resolution → POP returns to ACTIVE
-8. CANCEL_POP → All bonds returned
+7. TOO_EARLY resolution → TOC returns to ACTIVE
+8. CANCEL_TOC → All bonds returned
 9. Tier calculation: SYSTEM, TK_GUARANTEED, PERMISSIONLESS
 10. Bond economics: 50/50 splits in all scenarios
 11. Escalation bond validation (higher than Round 1)
@@ -392,7 +392,7 @@ event EscalationResolved(uint256 indexed popId, DisputeResolution resolution, ad
 
 ## Comparison to Polymarket/UMA
 
-| Feature | Polymarket/UMA | POP TruthKeeper System |
+| Feature | Polymarket/UMA | Truth On Chain TruthKeeper System |
 |---------|----------------|------------------------|
 | Round 1 | Reset (no adjudication) | TruthKeeper adjudicates |
 | Round 2 | UMA DVM token vote | Admin/Community |
@@ -400,4 +400,4 @@ event EscalationResolved(uint256 indexed popId, DisputeResolution resolution, ad
 | Resolution outcomes | Yes/No/Too Early/Unknown | UPHOLD/REJECT/CANCEL/TOO_EARLY |
 | Accountability | Single tier (UMA-backed) | 3 tiers |
 | Evidence | Discord off-chain | On-chain evidenceURI |
-| Flexibility | Fixed 2-hour window | User-configurable per-POP |
+| Flexibility | Fixed 2-hour window | User-configurable per-TOC |

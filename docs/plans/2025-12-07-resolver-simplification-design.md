@@ -7,7 +7,7 @@
 
 ## Problem
 
-1. **Contract size exceeded** - POPRegistry is 27,178 bytes, 2,602 bytes over the 24,576 EIP-170 limit
+1. **Contract size exceeded** - TOCRegistry is 27,178 bytes, 2,602 bytes over the 24,576 EIP-170 limit
 2. **Duplicate code paths** - Separate System/Public resolver logic doubles storage and functions
 3. **Unnecessary complexity** - Numeric resolver IDs add indirection when addresses work directly
 
@@ -83,8 +83,8 @@ EnumerableSet.AddressSet private _registeredResolvers;
 ```solidity
 // Remove dual functions
 function registerResolver(ResolverType resolverType, address resolver) external onlyOwner;
-function createPOPWithSystemResolver(...) external returns (uint256);
-function createPOPWithPublicResolver(...) external returns (uint256);
+function createTOCWithSystemResolver(...) external returns (uint256);
+function createTOCWithPublicResolver(...) external returns (uint256);
 function getResolverId(ResolverType, address) external view returns (uint256);
 function getResolverAddress(ResolverType, uint256) external view returns (address);
 function getResolverCount(ResolverType) external view returns (uint256);
@@ -123,7 +123,7 @@ function setResolverTrust(address resolver, ResolverTrust trust) external onlyOw
     emit ResolverTrustChanged(resolver, oldTrust, trust);
 }
 
-/// @notice Create a POP with any registered resolver
+/// @notice Create a TOC with any registered resolver
 /// @param resolver The resolver contract address
 /// @param templateId Template within the resolver
 /// @param payload Creation parameters
@@ -132,7 +132,7 @@ function setResolverTrust(address resolver, ResolverTrust trust) external onlyOw
 /// @param escalationWindow Time to challenge TK decision
 /// @param postResolutionWindow Time for post-resolution disputes
 /// @param truthKeeper Assigned TruthKeeper address
-function createPOP(
+function createTOC(
     address resolver,
     uint32 templateId,
     bytes calldata payload,
@@ -141,7 +141,7 @@ function createPOP(
     uint256 escalationWindow,
     uint256 postResolutionWindow,
     address truthKeeper
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 
 /// @notice Get resolver trust level
 function getResolverTrust(address resolver) external view returns (ResolverTrust);
@@ -177,12 +177,12 @@ event ResolverTrustChanged(address indexed resolver, ResolverTrust oldTrust, Res
 
 ---
 
-## POPCreated Event Update
+## TOCCreated Event Update
 
 ```solidity
 // Before
-event POPCreated(
-    uint256 popId,
+event TOCCreated(
+    uint256 tocId,
     ResolverType resolverType,
     uint256 resolverId,
     address resolver,
@@ -190,13 +190,13 @@ event POPCreated(
 );
 
 // After
-event POPCreated(
-    uint256 indexed popId,
+event TOCCreated(
+    uint256 indexed tocId,
     address indexed resolver,
     ResolverTrust trust,
     uint32 templateId,
     AnswerType answerType,
-    POPState initialState,
+    TOCState initialState,
     address indexed truthKeeper,
     AccountabilityTier tier
 );
@@ -204,10 +204,10 @@ event POPCreated(
 
 ---
 
-## POPInfo Struct Update
+## TOCInfo Struct Update
 
 ```solidity
-struct POPInfo {
+struct TOCInfo {
     // ... existing fields ...
 
     // Replace these:
@@ -254,7 +254,7 @@ function _calculateAccountabilityTier(
 If upgrading existing deployment:
 1. Map existing SYSTEM resolvers to `ResolverTrust.SYSTEM`
 2. Map existing PUBLIC resolvers to `ResolverTrust.VERIFIED` or `PERMISSIONLESS`
-3. Existing POPs continue to work (they store resolver address, not ID)
+3. Existing TOCs continue to work (they store resolver address, not ID)
 
 ---
 
@@ -265,16 +265,16 @@ Removing:
 - 6 mappings for ID lookups
 - Duplicate registration logic
 - Duplicate config structs
-- Dual createPOP functions
+- Dual createTOC functions
 
-Estimated savings: **3,000-5,000 bytes** (should bring POPRegistry under limit)
+Estimated savings: **3,000-5,000 bytes** (should bring TOCRegistry under limit)
 
 ---
 
 ## Benefits
 
 1. **Smaller contract** - Under EIP-170 limit
-2. **Simpler API** - One `createPOP()`, direct addresses
+2. **Simpler API** - One `createTOC()`, direct addresses
 3. **Permissionless** - Anyone can register resolvers
 4. **Flexible trust** - Admin can upgrade/downgrade anytime
 5. **Consumer choice** - Check trust level, decide risk tolerance

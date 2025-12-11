@@ -5,14 +5,14 @@
 
 ---
 
-## Task 1: Update POPTypes.sol - Enums
+## Task 1: Update TOCTypes.sol - Enums
 
-**File:** `contracts/Popregistry/POPTypes.sol`
+**File:** `contracts/TOCregistry/TOCTypes.sol`
 
 ### 1.1 Add AccountabilityTier enum (after ResolverType)
 
 ```solidity
-/// @notice Accountability tier for a POP (snapshot at creation)
+/// @notice Accountability tier for a TOC (snapshot at creation)
 enum AccountabilityTier {
     NONE,           // Default/uninitialized
     PERMISSIONLESS, // No guarantees - creator's risk
@@ -21,11 +21,11 @@ enum AccountabilityTier {
 }
 ```
 
-### 1.2 Update POPState enum
+### 1.2 Update TOCState enum
 
 Replace:
 ```solidity
-enum POPState {
+enum TOCState {
     NONE,           // Default/uninitialized
     PENDING,        // Created, awaiting resolver approval
     REJECTED,       // Resolver rejected during creation
@@ -39,7 +39,7 @@ enum POPState {
 
 With:
 ```solidity
-enum POPState {
+enum TOCState {
     NONE,               // Default/uninitialized
     PENDING,            // Created, awaiting resolver approval
     REJECTED,           // Resolver rejected during creation
@@ -59,7 +59,7 @@ Replace:
 enum DisputeResolution {
     UPHOLD_DISPUTE,  // Disputer was right, override outcome
     REJECT_DISPUTE,  // Original outcome stands
-    CANCEL_POP       // Entire POP is invalid, refund all
+    CANCEL_TOC       // Entire TOC is invalid, refund all
 }
 ```
 
@@ -68,25 +68,25 @@ With:
 enum DisputeResolution {
     UPHOLD_DISPUTE,  // Disputer was right, override outcome
     REJECT_DISPUTE,  // Original outcome stands
-    CANCEL_POP,      // Entire POP is invalid, refund all
+    CANCEL_TOC,      // Entire TOC is invalid, refund all
     TOO_EARLY        // Event hasn't occurred, return to ACTIVE
 }
 ```
 
 ---
 
-## Task 2: Update POPTypes.sol - Structs
+## Task 2: Update TOCTypes.sol - Structs
 
-**File:** `contracts/Popregistry/POPTypes.sol`
+**File:** `contracts/TOCregistry/TOCTypes.sol`
 
-### 2.1 Update POP struct
+### 2.1 Update TOC struct
 
 Replace:
 ```solidity
-struct POP {
-    address resolver;           // Which resolver manages this POP
-    POPState state;             // Current state
-    AnswerType answerType;      // Type of answer this POP will return
+struct TOC {
+    address resolver;           // Which resolver manages this TOC
+    TOCState state;             // Current state
+    AnswerType answerType;      // Type of answer this TOC will return
     uint256 resolutionTime;     // Timestamp when resolved
     uint256 disputeWindow;      // User-specified pre-resolution dispute duration
     uint256 postResolutionWindow; // User-specified post-resolution dispute duration
@@ -97,13 +97,13 @@ struct POP {
 
 With:
 ```solidity
-struct POP {
-    address resolver;               // Which resolver manages this POP
-    POPState state;                 // Current state
-    AnswerType answerType;          // Type of answer this POP will return
+struct TOC {
+    address resolver;               // Which resolver manages this TOC
+    TOCState state;                 // Current state
+    AnswerType answerType;          // Type of answer this TOC will return
     uint256 resolutionTime;         // Timestamp when resolved
 
-    // Time windows (user-specified per-POP)
+    // Time windows (user-specified per-TOC)
     uint256 disputeWindow;          // Time to dispute initial proposal (Round 1)
     uint256 truthKeeperWindow;      // Time for TruthKeeper to decide
     uint256 escalationWindow;       // Time to challenge TruthKeeper decision
@@ -116,7 +116,7 @@ struct POP {
     uint256 postDisputeDeadline;    // End of post-resolution dispute window
 
     // TruthKeeper
-    address truthKeeper;            // Assigned TruthKeeper for this POP
+    address truthKeeper;            // Assigned TruthKeeper for this TOC
     AccountabilityTier tierAtCreation; // Immutable snapshot of tier
 }
 ```
@@ -185,14 +185,14 @@ struct EscalationInfo {
 }
 ```
 
-### 2.4 Update POPInfo struct
+### 2.4 Update TOCInfo struct
 
 Replace:
 ```solidity
-struct POPInfo {
-    // POP fields
+struct TOCInfo {
+    // TOC fields
     address resolver;
-    POPState state;
+    TOCState state;
     AnswerType answerType;
     uint256 resolutionTime;
     uint256 disputeWindow;
@@ -218,10 +218,10 @@ struct POPInfo {
 
 With:
 ```solidity
-struct POPInfo {
-    // POP fields
+struct TOCInfo {
+    // TOC fields
     address resolver;
-    POPState state;
+    TOCState state;
     AnswerType answerType;
     uint256 resolutionTime;
 
@@ -262,9 +262,9 @@ struct POPInfo {
 
 ---
 
-## Task 3: Update IPOPRegistry.sol - Events
+## Task 3: Update ITOCRegistry.sol - Events
 
-**File:** `contracts/Popregistry/IPOPRegistry.sol`
+**File:** `contracts/TOCregistry/ITOCRegistry.sol`
 
 ### 3.1 Add TruthKeeper registry events (after existing Resolver events)
 
@@ -283,51 +283,51 @@ event TruthKeeperGuaranteeRemoved(address indexed tk, address indexed resolver);
 ```solidity
 // TruthKeeper dispute flow
 event TruthKeeperDisputeResolved(
-    uint256 indexed popId,
+    uint256 indexed tocId,
     address indexed tk,
     DisputeResolution resolution
 );
 event TruthKeeperDecisionChallenged(
-    uint256 indexed popId,
+    uint256 indexed tocId,
     address indexed challenger,
     string reason
 );
 event TruthKeeperTimedOut(
-    uint256 indexed popId,
+    uint256 indexed tocId,
     address indexed tk
 );
 event EscalationResolved(
-    uint256 indexed popId,
+    uint256 indexed tocId,
     DisputeResolution resolution,
     address indexed admin
 );
 ```
 
-### 3.3 Update POPCreated event
+### 3.3 Update TOCCreated event
 
 Replace:
 ```solidity
-event POPCreated(
-    uint256 indexed popId,
+event TOCCreated(
+    uint256 indexed tocId,
     ResolverType indexed resolverType,
     uint256 indexed resolverId,
     address resolver,
     uint32 templateId,
     AnswerType answerType,
-    POPState initialState
+    TOCState initialState
 );
 ```
 
 With:
 ```solidity
-event POPCreated(
-    uint256 indexed popId,
+event TOCCreated(
+    uint256 indexed tocId,
     ResolverType indexed resolverType,
     uint256 indexed resolverId,
     address resolver,
     uint32 templateId,
     AnswerType answerType,
-    POPState initialState,
+    TOCState initialState,
     address truthKeeper,
     AccountabilityTier tier
 );
@@ -335,9 +335,9 @@ event POPCreated(
 
 ---
 
-## Task 4: Update IPOPRegistry.sol - Admin Functions
+## Task 4: Update ITOCRegistry.sol - Admin Functions
 
-**File:** `contracts/Popregistry/IPOPRegistry.sol`
+**File:** `contracts/TOCregistry/ITOCRegistry.sol`
 
 ### 4.1 Add TruthKeeper whitelist admin functions
 
@@ -366,9 +366,9 @@ function addAcceptableEscalationBond(address token, uint256 minAmount) external;
 
 ---
 
-## Task 5: Update IPOPRegistry.sol - TruthKeeper Functions
+## Task 5: Update ITOCRegistry.sol - TruthKeeper Functions
 
-**File:** `contracts/Popregistry/IPOPRegistry.sol`
+**File:** `contracts/TOCregistry/ITOCRegistry.sol`
 
 ### 5.1 Add TruthKeeper self-management functions
 
@@ -384,13 +384,13 @@ function addGuaranteedResolver(address resolver) external;
 function removeGuaranteedResolver(address resolver) external;
 
 /// @notice TruthKeeper resolves a Round 1 dispute
-/// @param popId The disputed POP
-/// @param resolution How to resolve (UPHOLD_DISPUTE, REJECT_DISPUTE, CANCEL_POP, TOO_EARLY)
+/// @param tocId The disputed TOC
+/// @param resolution How to resolve (UPHOLD_DISPUTE, REJECT_DISPUTE, CANCEL_TOC, TOO_EARLY)
 /// @param correctedBooleanResult Corrected boolean result (if upholding)
 /// @param correctedNumericResult Corrected numeric result (if upholding)
 /// @param correctedGenericResult Corrected generic result (if upholding)
 function resolveTruthKeeperDispute(
-    uint256 popId,
+    uint256 tocId,
     DisputeResolution resolution,
     bool correctedBooleanResult,
     int256 correctedNumericResult,
@@ -400,26 +400,26 @@ function resolveTruthKeeperDispute(
 
 ---
 
-## Task 6: Update IPOPRegistry.sol - POP Creation
+## Task 6: Update ITOCRegistry.sol - TOC Creation
 
-**File:** `contracts/Popregistry/IPOPRegistry.sol`
+**File:** `contracts/TOCregistry/ITOCRegistry.sol`
 
-### 6.1 Update createPOPWithSystemResolver
+### 6.1 Update createTOCWithSystemResolver
 
 Replace:
 ```solidity
-function createPOPWithSystemResolver(
+function createTOCWithSystemResolver(
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
     uint256 disputeWindow,
     uint256 postResolutionWindow
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 ```
 
 With:
 ```solidity
-function createPOPWithSystemResolver(
+function createTOCWithSystemResolver(
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
@@ -428,25 +428,25 @@ function createPOPWithSystemResolver(
     uint256 escalationWindow,
     uint256 postResolutionWindow,
     address truthKeeper
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 ```
 
-### 6.2 Update createPOPWithPublicResolver
+### 6.2 Update createTOCWithPublicResolver
 
 Replace:
 ```solidity
-function createPOPWithPublicResolver(
+function createTOCWithPublicResolver(
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
     uint256 disputeWindow,
     uint256 postResolutionWindow
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 ```
 
 With:
 ```solidity
-function createPOPWithPublicResolver(
+function createTOCWithPublicResolver(
     uint256 resolverId,
     uint32 templateId,
     bytes calldata payload,
@@ -455,21 +455,21 @@ function createPOPWithPublicResolver(
     uint256 escalationWindow,
     uint256 postResolutionWindow,
     address truthKeeper
-) external returns (uint256 popId);
+) external returns (uint256 tocId);
 ```
 
 ---
 
-## Task 7: Update IPOPRegistry.sol - Dispute Functions
+## Task 7: Update ITOCRegistry.sol - Dispute Functions
 
-**File:** `contracts/Popregistry/IPOPRegistry.sol`
+**File:** `contracts/TOCregistry/ITOCRegistry.sol`
 
 ### 7.1 Update dispute function
 
 Replace:
 ```solidity
 function dispute(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -482,7 +482,7 @@ function dispute(
 With:
 ```solidity
 function dispute(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -497,7 +497,7 @@ function dispute(
 
 ```solidity
 /// @notice Challenge a TruthKeeper's decision (escalate to Round 2)
-/// @param popId The POP with TK decision to challenge
+/// @param tocId The TOC with TK decision to challenge
 /// @param bondToken Token for escalation bond (must be acceptable)
 /// @param bondAmount Amount of escalation bond (higher than dispute bond)
 /// @param reason Reason for challenging TK decision
@@ -506,7 +506,7 @@ function dispute(
 /// @param proposedNumericResult Challenger's proposed numeric result
 /// @param proposedGenericResult Challenger's proposed generic result
 function challengeTruthKeeperDecision(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -516,22 +516,22 @@ function challengeTruthKeeperDecision(
     bytes calldata proposedGenericResult
 ) external payable;
 
-/// @notice Finalize a POP after TruthKeeper decision (if no challenge)
-/// @param popId The POP to finalize
-function finalizeAfterTruthKeeper(uint256 popId) external;
+/// @notice Finalize a TOC after TruthKeeper decision (if no challenge)
+/// @param tocId The TOC to finalize
+function finalizeAfterTruthKeeper(uint256 tocId) external;
 
 /// @notice Escalate to Round 2 if TruthKeeper times out
-/// @param popId The POP where TK timed out
-function escalateTruthKeeperTimeout(uint256 popId) external;
+/// @param tocId The TOC where TK timed out
+function escalateTruthKeeperTimeout(uint256 tocId) external;
 
 /// @notice Admin resolves a Round 2 escalation
-/// @param popId The escalated POP
+/// @param tocId The escalated TOC
 /// @param resolution How to resolve the escalation
 /// @param correctedBooleanResult Admin's corrected boolean result
 /// @param correctedNumericResult Admin's corrected numeric result
 /// @param correctedGenericResult Admin's corrected generic result
 function resolveEscalation(
-    uint256 popId,
+    uint256 tocId,
     DisputeResolution resolution,
     bool correctedBooleanResult,
     int256 correctedNumericResult,
@@ -541,9 +541,9 @@ function resolveEscalation(
 
 ---
 
-## Task 8: Update IPOPRegistry.sol - View Functions
+## Task 8: Update ITOCRegistry.sol - View Functions
 
-**File:** `contracts/Popregistry/IPOPRegistry.sol`
+**File:** `contracts/TOCregistry/ITOCRegistry.sol`
 
 ### 8.1 Add TruthKeeper view functions
 
@@ -571,10 +571,10 @@ function getTruthKeeperGuaranteedResolvers(address tk) external view returns (ad
 /// @return True if TK guarantees this resolver
 function isTruthKeeperGuaranteedResolver(address tk, address resolver) external view returns (bool);
 
-/// @notice Get escalation info for a POP
-/// @param popId The POP identifier
+/// @notice Get escalation info for a TOC
+/// @param tocId The TOC identifier
 /// @return info The escalation information
-function getEscalationInfo(uint256 popId) external view returns (EscalationInfo memory info);
+function getEscalationInfo(uint256 tocId) external view returns (EscalationInfo memory info);
 
 /// @notice Calculate accountability tier for a resolver + TK combination
 /// @param resolver Resolver address
@@ -591,9 +591,9 @@ function isAcceptableEscalationBond(address token, uint256 amount) external view
 
 ---
 
-## Task 9: Update POPRegistry.sol - Storage
+## Task 9: Update TOCRegistry.sol - Storage
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCregistry/TOCRegistry.sol`
 
 ### 9.1 Add new storage variables (after existing storage)
 
@@ -624,23 +624,23 @@ error ResolverNotWhitelistedForSystem(address resolver);
 error TruthKeeperWindowNotPassed(uint256 deadline, uint256 current);
 error EscalationWindowNotPassed(uint256 deadline, uint256 current);
 error EscalationWindowPassed(uint256 deadline, uint256 current);
-error NotInDisputedRound1State(POPState currentState);
-error NotInDisputedRound2State(POPState currentState);
-error TruthKeeperAlreadyDecided(uint256 popId);
-error AlreadyEscalated(uint256 popId);
+error NotInDisputedRound1State(TOCState currentState);
+error NotInDisputedRound2State(TOCState currentState);
+error TruthKeeperAlreadyDecided(uint256 tocId);
+error AlreadyEscalated(uint256 tocId);
 error InvalidTruthKeeper(address tk);
 ```
 
 ---
 
-## Task 10: Update POPRegistry.sol - Admin Functions
+## Task 10: Update TOCRegistry.sol - Admin Functions
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCregistry/TOCRegistry.sol`
 
 ### 10.1 Add TruthKeeper whitelist management
 
 ```solidity
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function addWhitelistedTruthKeeper(address tk) external onlyOwner {
     if (tk == address(0)) revert InvalidTruthKeeper(tk);
     if (_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperAlreadyWhitelisted(tk);
@@ -648,27 +648,27 @@ function addWhitelistedTruthKeeper(address tk) external onlyOwner {
     emit TruthKeeperWhitelisted(tk);
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function removeWhitelistedTruthKeeper(address tk) external onlyOwner {
     if (!_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperNotWhitelisted(tk);
     _whitelistedTruthKeepers.remove(tk);
     emit TruthKeeperRemovedFromWhitelist(tk);
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function addWhitelistedResolver(address resolver) external onlyOwner {
     if (resolver == address(0)) revert ResolverNotRegistered(resolver);
     _whitelistedResolvers.add(resolver);
     emit ResolverAddedToWhitelist(resolver);
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function removeWhitelistedResolver(address resolver) external onlyOwner {
     _whitelistedResolvers.remove(resolver);
     emit ResolverRemovedFromWhitelist(resolver);
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function addAcceptableEscalationBond(address token, uint256 minAmount) external onlyOwner {
     _acceptableEscalationBonds.push(BondRequirement({
         token: token,
@@ -679,17 +679,17 @@ function addAcceptableEscalationBond(address token, uint256 minAmount) external 
 
 ---
 
-## Task 11: Update POPRegistry.sol - TruthKeeper Functions
+## Task 11: Update TOCRegistry.sol - TruthKeeper Functions
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCregistry/TOCRegistry.sol`
 
 ### 11.1 Add modifier for TruthKeeper
 
 ```solidity
-modifier onlyTruthKeeper(uint256 popId) {
-    POP storage pop = _pops[popId];
-    if (msg.sender != pop.truthKeeper) {
-        revert NotTruthKeeper(msg.sender, pop.truthKeeper);
+modifier onlyTruthKeeper(uint256 tocId) {
+    TOC storage toc = _tocs[tocId];
+    if (msg.sender != toc.truthKeeper) {
+        revert NotTruthKeeper(msg.sender, toc.truthKeeper);
     }
     _;
 }
@@ -698,13 +698,13 @@ modifier onlyTruthKeeper(uint256 popId) {
 ### 11.2 Add TruthKeeper guarantee management
 
 ```solidity
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function addGuaranteedResolver(address resolver) external {
     _tkGuaranteedResolvers[msg.sender].add(resolver);
     emit TruthKeeperGuaranteeAdded(msg.sender, resolver);
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function removeGuaranteedResolver(address resolver) external {
     _tkGuaranteedResolvers[msg.sender].remove(resolver);
     emit TruthKeeperGuaranteeRemoved(msg.sender, resolver);
@@ -714,24 +714,24 @@ function removeGuaranteedResolver(address resolver) external {
 ### 11.3 Add TruthKeeper dispute resolution
 
 ```solidity
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function resolveTruthKeeperDispute(
-    uint256 popId,
+    uint256 tocId,
     DisputeResolution resolution,
     bool correctedBooleanResult,
     int256 correctedNumericResult,
     bytes calldata correctedGenericResult
-) external nonReentrant validPopId(popId) onlyTruthKeeper(popId) {
-    POP storage pop = _pops[popId];
+) external nonReentrant validTocId(tocId) onlyTruthKeeper(tocId) {
+    TOC storage toc = _tocs[tocId];
 
-    if (pop.state != POPState.DISPUTED_ROUND_1) {
-        revert NotInDisputedRound1State(pop.state);
+    if (toc.state != TOCState.DISPUTED_ROUND_1) {
+        revert NotInDisputedRound1State(toc.state);
     }
 
-    DisputeInfo storage disputeInfo = _disputes[popId];
+    DisputeInfo storage disputeInfo = _disputes[tocId];
 
     if (disputeInfo.tkDecidedAt != 0) {
-        revert TruthKeeperAlreadyDecided(popId);
+        revert TruthKeeperAlreadyDecided(tocId);
     }
 
     // Record TK decision
@@ -739,30 +739,30 @@ function resolveTruthKeeperDispute(
     disputeInfo.tkDecidedAt = block.timestamp;
 
     // Set escalation deadline
-    pop.escalationDeadline = block.timestamp + pop.escalationWindow;
+    toc.escalationDeadline = block.timestamp + toc.escalationWindow;
 
     // Handle TOO_EARLY specially - immediately return to ACTIVE
     if (resolution == DisputeResolution.TOO_EARLY) {
-        _handleTooEarlyResolution(popId, pop, disputeInfo);
+        _handleTooEarlyResolution(tocId, toc, disputeInfo);
     }
     // Other resolutions wait for escalation window
 
-    emit TruthKeeperDisputeResolved(popId, msg.sender, resolution);
+    emit TruthKeeperDisputeResolved(tocId, msg.sender, resolution);
 }
 ```
 
 ---
 
-## Task 12: Update POPRegistry.sol - POP Creation
+## Task 12: Update TOCRegistry.sol - TOC Creation
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCregistry/TOCRegistry.sol`
 
-### 12.1 Update _createPOP function
+### 12.1 Update _createTOC function
 
 Update the function signature and implementation to include TruthKeeper and new windows. Key changes:
 
 ```solidity
-function _createPOP(
+function _createTOC(
     ResolverType resolverType,
     uint256 resolverId,
     uint32 templateId,
@@ -772,17 +772,17 @@ function _createPOP(
     uint256 escalationWindow,
     uint256 postResolutionWindow,
     address truthKeeper
-) internal returns (uint256 popId) {
+) internal returns (uint256 tocId) {
     // ... existing resolver validation ...
 
     // Calculate accountability tier
     AccountabilityTier tier = _calculateAccountabilityTier(resolver, truthKeeper);
 
-    popId = _nextPopId++;
+    tocId = _nextTocId++;
 
-    POPState initialState = IPopResolver(resolver).onPopCreated(popId, templateId, payload);
+    TOCState initialState = ITocResolver(resolver).onTocCreated(tocId, templateId, payload);
 
-    _pops[popId] = POP({
+    _tocs[tocId] = TOC({
         resolver: resolver,
         state: initialState,
         answerType: answerType,
@@ -799,15 +799,15 @@ function _createPOP(
         tierAtCreation: tier
     });
 
-    emit POPCreated(popId, resolverType, resolverId, resolver, templateId, answerType, initialState, truthKeeper, tier);
+    emit TOCCreated(tocId, resolverType, resolverId, resolver, templateId, answerType, initialState, truthKeeper, tier);
 }
 ```
 
 ---
 
-## Task 13: Update POPRegistry.sol - Dispute Flow
+## Task 13: Update TOCRegistry.sol - Dispute Flow
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCregistry/TOCRegistry.sol`
 
 ### 13.1 Update dispute function
 
@@ -819,9 +819,9 @@ Update to:
 ### 13.2 Add challengeTruthKeeperDecision
 
 ```solidity
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function challengeTruthKeeperDecision(
-    uint256 popId,
+    uint256 tocId,
     address bondToken,
     uint256 bondAmount,
     string calldata reason,
@@ -829,26 +829,26 @@ function challengeTruthKeeperDecision(
     bool proposedBooleanResult,
     int256 proposedNumericResult,
     bytes calldata proposedGenericResult
-) external payable nonReentrant validPopId(popId) {
-    POP storage pop = _pops[popId];
-    DisputeInfo storage disputeInfo = _disputes[popId];
+) external payable nonReentrant validTocId(tocId) {
+    TOC storage toc = _tocs[tocId];
+    DisputeInfo storage disputeInfo = _disputes[tocId];
 
     // Must be in DISPUTED_ROUND_1 with TK decision made
-    if (pop.state != POPState.DISPUTED_ROUND_1) {
-        revert NotInDisputedRound1State(pop.state);
+    if (toc.state != TOCState.DISPUTED_ROUND_1) {
+        revert NotInDisputedRound1State(toc.state);
     }
     if (disputeInfo.tkDecidedAt == 0) {
-        revert TruthKeeperAlreadyDecided(popId); // Not decided yet
+        revert TruthKeeperAlreadyDecided(tocId); // Not decided yet
     }
 
     // Check escalation window
-    if (block.timestamp >= pop.escalationDeadline) {
-        revert EscalationWindowPassed(pop.escalationDeadline, block.timestamp);
+    if (block.timestamp >= toc.escalationDeadline) {
+        revert EscalationWindowPassed(toc.escalationDeadline, block.timestamp);
     }
 
     // Check not already escalated
-    if (_escalations[popId].challenger != address(0)) {
-        revert AlreadyEscalated(popId);
+    if (_escalations[tocId].challenger != address(0)) {
+        revert AlreadyEscalated(tocId);
     }
 
     // Validate escalation bond (higher than dispute bond)
@@ -858,7 +858,7 @@ function challengeTruthKeeperDecision(
     _transferBondIn(bondToken, bondAmount);
 
     // Store escalation info
-    _escalations[popId] = EscalationInfo({
+    _escalations[tocId] = EscalationInfo({
         challenger: msg.sender,
         bondToken: bondToken,
         bondAmount: bondAmount,
@@ -872,78 +872,78 @@ function challengeTruthKeeperDecision(
     });
 
     // Move to Round 2
-    pop.state = POPState.DISPUTED_ROUND_2;
+    toc.state = TOCState.DISPUTED_ROUND_2;
 
-    emit TruthKeeperDecisionChallenged(popId, msg.sender, reason);
+    emit TruthKeeperDecisionChallenged(tocId, msg.sender, reason);
 }
 ```
 
 ### 13.3 Add finalizeAfterTruthKeeper
 
 ```solidity
-/// @inheritdoc IPOPRegistry
-function finalizeAfterTruthKeeper(uint256 popId) external nonReentrant validPopId(popId) {
-    POP storage pop = _pops[popId];
-    DisputeInfo storage disputeInfo = _disputes[popId];
+/// @inheritdoc ITOCRegistry
+function finalizeAfterTruthKeeper(uint256 tocId) external nonReentrant validTocId(tocId) {
+    TOC storage toc = _tocs[tocId];
+    DisputeInfo storage disputeInfo = _disputes[tocId];
 
-    if (pop.state != POPState.DISPUTED_ROUND_1) {
-        revert NotInDisputedRound1State(pop.state);
+    if (toc.state != TOCState.DISPUTED_ROUND_1) {
+        revert NotInDisputedRound1State(toc.state);
     }
 
     // TK must have decided
     if (disputeInfo.tkDecidedAt == 0) {
-        revert TruthKeeperAlreadyDecided(popId);
+        revert TruthKeeperAlreadyDecided(tocId);
     }
 
     // Escalation window must have passed
-    if (block.timestamp < pop.escalationDeadline) {
-        revert EscalationWindowNotPassed(pop.escalationDeadline, block.timestamp);
+    if (block.timestamp < toc.escalationDeadline) {
+        revert EscalationWindowNotPassed(toc.escalationDeadline, block.timestamp);
     }
 
     // Must not have been escalated
-    if (_escalations[popId].challenger != address(0)) {
-        revert AlreadyEscalated(popId);
+    if (_escalations[tocId].challenger != address(0)) {
+        revert AlreadyEscalated(tocId);
     }
 
     // Apply TK's decision
-    _applyDisputeResolution(popId, disputeInfo.tkDecision, ...);
+    _applyDisputeResolution(tocId, disputeInfo.tkDecision, ...);
 }
 ```
 
 ### 13.4 Add escalateTruthKeeperTimeout
 
 ```solidity
-/// @inheritdoc IPOPRegistry
-function escalateTruthKeeperTimeout(uint256 popId) external nonReentrant validPopId(popId) {
-    POP storage pop = _pops[popId];
-    DisputeInfo storage disputeInfo = _disputes[popId];
+/// @inheritdoc ITOCRegistry
+function escalateTruthKeeperTimeout(uint256 tocId) external nonReentrant validTocId(tocId) {
+    TOC storage toc = _tocs[tocId];
+    DisputeInfo storage disputeInfo = _disputes[tocId];
 
-    if (pop.state != POPState.DISPUTED_ROUND_1) {
-        revert NotInDisputedRound1State(pop.state);
+    if (toc.state != TOCState.DISPUTED_ROUND_1) {
+        revert NotInDisputedRound1State(toc.state);
     }
 
     // TK must NOT have decided
     if (disputeInfo.tkDecidedAt != 0) {
-        revert TruthKeeperAlreadyDecided(popId);
+        revert TruthKeeperAlreadyDecided(tocId);
     }
 
     // TK window must have passed
-    if (block.timestamp < pop.truthKeeperDeadline) {
-        revert TruthKeeperWindowNotPassed(pop.truthKeeperDeadline, block.timestamp);
+    if (block.timestamp < toc.truthKeeperDeadline) {
+        revert TruthKeeperWindowNotPassed(toc.truthKeeperDeadline, block.timestamp);
     }
 
     // Auto-escalate to Round 2
-    pop.state = POPState.DISPUTED_ROUND_2;
+    toc.state = TOCState.DISPUTED_ROUND_2;
 
-    emit TruthKeeperTimedOut(popId, pop.truthKeeper);
+    emit TruthKeeperTimedOut(tocId, toc.truthKeeper);
 }
 ```
 
 ---
 
-## Task 14: Update POPRegistry.sol - Bond Economics
+## Task 14: Update TOCRegistry.sol - Bond Economics
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCregistry/TOCRegistry.sol`
 
 ### 14.1 Update bond distribution to 50/50 split
 
@@ -972,39 +972,39 @@ Update all dispute resolution logic to use this pattern.
 
 ---
 
-## Task 15: Update POPRegistry.sol - View Functions
+## Task 15: Update TOCRegistry.sol - View Functions
 
-**File:** `contracts/Popregistry/POPRegistry.sol`
+**File:** `contracts/TOCregistry/TOCRegistry.sol`
 
 ### 15.1 Add new view functions
 
 ```solidity
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function isWhitelistedTruthKeeper(address tk) external view returns (bool) {
     return _whitelistedTruthKeepers.contains(tk);
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function isWhitelistedResolver(address resolver) external view returns (bool) {
     return _whitelistedResolvers.contains(resolver);
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function getTruthKeeperGuaranteedResolvers(address tk) external view returns (address[] memory) {
     return _tkGuaranteedResolvers[tk].values();
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function isTruthKeeperGuaranteedResolver(address tk, address resolver) external view returns (bool) {
     return _tkGuaranteedResolvers[tk].contains(resolver);
 }
 
-/// @inheritdoc IPOPRegistry
-function getEscalationInfo(uint256 popId) external view returns (EscalationInfo memory) {
-    return _escalations[popId];
+/// @inheritdoc ITOCRegistry
+function getEscalationInfo(uint256 tocId) external view returns (EscalationInfo memory) {
+    return _escalations[tocId];
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function calculateAccountabilityTier(address resolver, address tk) external view returns (AccountabilityTier) {
     return _calculateAccountabilityTier(resolver, tk);
 }
@@ -1019,7 +1019,7 @@ function _calculateAccountabilityTier(address resolver, address tk) internal vie
     return AccountabilityTier.PERMISSIONLESS;
 }
 
-/// @inheritdoc IPOPRegistry
+/// @inheritdoc ITOCRegistry
 function isAcceptableEscalationBond(address token, uint256 amount) external view returns (bool) {
     return _isAcceptableEscalationBond(token, amount);
 }
@@ -1039,7 +1039,7 @@ function _isAcceptableEscalationBond(address token, uint256 amount) internal vie
 
 ## Task 16: Update Tests
 
-**File:** `contracts/test/POPRegistry.t.sol`
+**File:** `contracts/test/TOCRegistry.t.sol`
 
 ### New Test Scenarios
 
@@ -1052,8 +1052,8 @@ function _isAcceptableEscalationBond(address token, uint256 amount) internal vie
    - `test_CalculateAccountabilityTier_TKGuaranteed`
    - `test_CalculateAccountabilityTier_Permissionless`
 
-2. **POP Creation with TruthKeeper**
-   - `test_CreatePOPWithTruthKeeper`
+2. **TOC Creation with TruthKeeper**
+   - `test_CreateTOCWithTruthKeeper`
    - `test_TierSnapshotAtCreation`
 
 3. **Round 1 Dispute Flow**
@@ -1087,7 +1087,7 @@ function _isAcceptableEscalationBond(address token, uint256 amount) internal vie
 
 ## Task 17: Update Documentation
 
-**File:** `docs/POP_SYSTEM_DOCUMENTATION.md`
+**File:** `docs/TOC_SYSTEM_DOCUMENTATION.md`
 
 Add new sections:
 - TruthKeeper System
@@ -1101,20 +1101,20 @@ Add new sections:
 
 ## Implementation Order Summary
 
-1. POPTypes.sol - Enums (Task 1)
-2. POPTypes.sol - Structs (Task 2)
-3. IPOPRegistry.sol - Events (Task 3)
-4. IPOPRegistry.sol - Admin Functions (Task 4)
-5. IPOPRegistry.sol - TruthKeeper Functions (Task 5)
-6. IPOPRegistry.sol - POP Creation (Task 6)
-7. IPOPRegistry.sol - Dispute Functions (Task 7)
-8. IPOPRegistry.sol - View Functions (Task 8)
-9. POPRegistry.sol - Storage (Task 9)
-10. POPRegistry.sol - Admin Functions (Task 10)
-11. POPRegistry.sol - TruthKeeper Functions (Task 11)
-12. POPRegistry.sol - POP Creation (Task 12)
-13. POPRegistry.sol - Dispute Flow (Task 13)
-14. POPRegistry.sol - Bond Economics (Task 14)
-15. POPRegistry.sol - View Functions (Task 15)
+1. TOCTypes.sol - Enums (Task 1)
+2. TOCTypes.sol - Structs (Task 2)
+3. ITOCRegistry.sol - Events (Task 3)
+4. ITOCRegistry.sol - Admin Functions (Task 4)
+5. ITOCRegistry.sol - TruthKeeper Functions (Task 5)
+6. ITOCRegistry.sol - TOC Creation (Task 6)
+7. ITOCRegistry.sol - Dispute Functions (Task 7)
+8. ITOCRegistry.sol - View Functions (Task 8)
+9. TOCRegistry.sol - Storage (Task 9)
+10. TOCRegistry.sol - Admin Functions (Task 10)
+11. TOCRegistry.sol - TruthKeeper Functions (Task 11)
+12. TOCRegistry.sol - TOC Creation (Task 12)
+13. TOCRegistry.sol - Dispute Flow (Task 13)
+14. TOCRegistry.sol - Bond Economics (Task 14)
+15. TOCRegistry.sol - View Functions (Task 15)
 16. Tests (Task 16)
 17. Documentation (Task 17)
