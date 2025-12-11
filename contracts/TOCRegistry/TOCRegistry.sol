@@ -54,6 +54,28 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     // Escalation info storage
     mapping(uint256 => EscalationInfo) private _escalations;
 
+    // ============ Fee System Storage ============
+
+    // Protocol configuration
+    address public treasury;
+    uint256 public protocolFeeMinimum;      // Fee when TK == address(0) - NOT USED currently (TK required)
+    uint256 public protocolFeeStandard;     // Fee when TK assigned
+
+    // TK share percentages (basis points, e.g., 4000 = 40%)
+    mapping(AccountabilityTier => uint256) public tkSharePercent;
+
+    // Protocol balances by category
+    mapping(FeeCategory => uint256) public protocolBalances;
+
+    // TK balances (aggregate per TK)
+    mapping(address => uint256) public tkBalances;
+
+    // Resolver fees (per TOC)
+    mapping(uint256 => uint256) public resolverFeeByToc;
+
+    // Resolver fee configuration (per resolver, per template)
+    mapping(address => mapping(uint32 => uint256)) public resolverTemplateFees;
+
     // ============ Errors ============
 
     error ResolverNotRegistered(address resolver);
