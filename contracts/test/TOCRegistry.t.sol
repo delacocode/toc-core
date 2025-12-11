@@ -1277,7 +1277,7 @@ contract TOCRegistryTest is Test {
         bytes memory payload = abi.encode("test payload");
         uint256 totalFee = 0.001 ether; // protocol fee only (no resolver fee set)
 
-        uint256 tocId = registry.createTOC{value: totalFee}(
+        registry.createTOC{value: totalFee}(
             address(resolver),
             0,
             payload,
