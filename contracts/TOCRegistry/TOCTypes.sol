@@ -197,3 +197,9 @@ struct ExtensiveResult {
     AccountabilityTier tier;    // SYSTEM/TK_GUARANTEED/PERMISSIONLESS
     ResolverTrust resolverTrust; // Trust level of resolver
 }
+
+/// @notice Categories of protocol fees for tracking
+enum FeeCategory {
+    CREATION,   // Fees from TOC creation
+    SLASHING    // Fees from bond slashing
+}
