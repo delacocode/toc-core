@@ -111,6 +111,14 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     error TruthKeeperNotContract(address tk);
     error TruthKeeperRejected(address tk, uint256 tocId);
 
+    // Fee errors
+    error TreasuryNotSet();
+    error NotTreasury(address caller, address expected);
+    error InsufficientFee(uint256 sent, uint256 required);
+    error NoFeesToWithdraw();
+    error NoResolverFee(uint256 tocId);
+    error NotResolverForToc(address caller, uint256 tocId);
+
     // ============ Constructor ============
 
     constructor() Ownable(msg.sender) {
