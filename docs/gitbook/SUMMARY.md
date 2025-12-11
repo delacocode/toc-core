@@ -19,6 +19,11 @@
 * [Result Storage](architecture/result-storage.md)
 * [Design Decisions](architecture/design-decisions.md)
 
+## Integration
+
+* [Consumer Guide](../integration/consumer-guide.md)
+* [ITOCConsumer.sol](../integration/ITOCConsumer.sol)
+
 ## Reference
 
 * [Type Reference](reference/types.md)
