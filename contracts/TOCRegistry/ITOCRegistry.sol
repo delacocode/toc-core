@@ -95,14 +95,16 @@ interface ITOCRegistry {
 
     // Fee events
     event TreasurySet(address indexed treasury);
-    event ProtocolFeeUpdated(uint256 minimum, uint256 standard);
+    event MinFeeSet(address indexed token, uint256 amount);
+    event ProtocolFeePercentSet(ResolverTrust indexed trust, uint256 basisPoints);
     event TKShareUpdated(AccountabilityTier indexed tier, uint256 basisPoints);
-    event ResolverFeeSet(address indexed resolver, uint32 indexed templateId, uint256 amount);
-    event CreationFeesCollected(uint256 indexed tocId, uint256 protocolFee, uint256 tkFee, uint256 resolverFee);
-    event SlashingFeesCollected(uint256 indexed tocId, uint256 protocolFee, uint256 tkFee);
-    event ProtocolFeesWithdrawn(address indexed treasury, uint256 creationFees, uint256 slashingFees);
-    event TKFeesWithdrawn(address indexed tk, uint256 amount);
-    event ResolverFeeClaimed(address indexed resolver, uint256 indexed tocId, uint256 amount);
+    event ResolverDefaultFeeSet(address indexed resolver, address indexed token, uint256 amount);
+    event ResolverFeeSet(address indexed resolver, uint32 indexed templateId, address indexed token, uint256 amount);
+    event CreationFeesCollected(uint256 indexed tocId, address indexed token, uint256 protocolFee, uint256 tkFee, uint256 resolverFee);
+    event SlashingFeesCollected(uint256 indexed tocId, address indexed token, uint256 protocolFee, uint256 tkFee);
+    event ProtocolFeesWithdrawn(address indexed treasury, address indexed token, uint256 creationFees, uint256 slashingFees);
+    event TKFeesWithdrawn(address indexed tk, address indexed token, uint256 amount);
+    event ResolverFeeClaimed(address indexed resolver, uint256 indexed tocId, address indexed token, uint256 amount);
 
     // ============ Resolver Registration ============
 
@@ -148,13 +150,15 @@ interface ITOCRegistry {
     /// @param _treasury The treasury address
     function setTreasury(address _treasury) external;
 
-    /// @notice Set the minimum protocol fee (when no TK or TK soft-rejects)
-    /// @param amount Fee amount in wei
-    function setProtocolFeeMinimum(uint256 amount) external;
+    /// @notice Set minimum fee for a token (also adds/removes from whitelist)
+    /// @param token Token address (address(0) for ETH)
+    /// @param amount Minimum fee (0 to remove from whitelist)
+    function setMinFee(address token, uint256 amount) external;
 
-    /// @notice Set the standard protocol fee (when TK approves)
-    /// @param amount Fee amount in wei
-    function setProtocolFeeStandard(uint256 amount) external;
+    /// @notice Set protocol fee percentage for a resolver trust level
+    /// @param trust The resolver trust level
+    /// @param basisPoints Percentage in basis points (e.g., 4000 = 40%)
+    function setProtocolFeePercent(ResolverTrust trust, uint256 basisPoints) external;
 
     /// @notice Set TK share percentage for an accountability tier
     /// @param tier The accountability tier
@@ -184,6 +188,7 @@ interface ITOCRegistry {
     /// @param escalationWindow Time to challenge TruthKeeper decision
     /// @param postResolutionWindow Post-resolution dispute window duration in seconds (0 for no post-resolution disputes)
     /// @param truthKeeper Address of the TruthKeeper for this TOC
+    /// @param feeToken Token address for fee payment (address(0) for ETH)
     /// @return tocId The unique identifier for the new TOC
     function createTOC(
         address resolver,
@@ -193,7 +198,8 @@ interface ITOCRegistry {
         uint256 truthKeeperWindow,
         uint256 escalationWindow,
         uint256 postResolutionWindow,
-        address truthKeeper
+        address truthKeeper,
+        address feeToken
     ) external payable returns (uint256 tocId);
 
     /// @notice Propose resolution for a TOC (requires bond)
@@ -384,36 +390,51 @@ interface ITOCRegistry {
     /// @return Duration in seconds
     function defaultDisputeWindow() external view returns (uint256);
 
+    /// @notice Get minimum fee for a token
+    /// @param token Token address (address(0) for ETH)
+    /// @return The minimum fee amount
+    function getMinFee(address token) external view returns (uint256);
+
+    /// @notice Get protocol fee percentage for a resolver trust level
+    /// @param trust The resolver trust level
+    /// @return The percentage in basis points
+    function getProtocolFeePercent(ResolverTrust trust) external view returns (uint256);
+
+    /// @notice Get resolver default fee for a token
+    /// @param resolver The resolver address
+    /// @param token Token address
+    /// @return The default fee amount
+    function getResolverDefaultFee(address resolver, address token) external view returns (uint256);
+
     /// @notice Get the total creation fee for a TOC
     /// @param resolver The resolver address
     /// @param templateId The template ID
-    /// @return protocolFee The protocol fee portion
-    /// @return resolverFee The resolver fee portion
+    /// @param token Token address (address(0) for ETH)
+    /// @return protocolCut The protocol fee portion
+    /// @return resolverShare The resolver fee portion
     /// @return total The total fee required
     function getCreationFee(
         address resolver,
-        uint32 templateId
-    ) external view returns (uint256 protocolFee, uint256 resolverFee, uint256 total);
-
-    /// @notice Get protocol fee configuration
-    /// @return minimum The minimum protocol fee
-    /// @return standard The standard protocol fee
-    function getProtocolFees() external view returns (uint256 minimum, uint256 standard);
+        uint32 templateId,
+        address token
+    ) external view returns (uint256 protocolCut, uint256 resolverShare, uint256 total);
 
     /// @notice Get TK share percentage for a tier
     /// @param tier The accountability tier
     /// @return basisPoints The percentage in basis points
     function getTKSharePercent(AccountabilityTier tier) external view returns (uint256 basisPoints);
 
-    /// @notice Get protocol balance by category
+    /// @notice Get protocol balance by category and token
     /// @param category The fee category
-    /// @return balance The balance in wei
-    function getProtocolBalance(FeeCategory category) external view returns (uint256 balance);
+    /// @param token Token address (address(0) for ETH)
+    /// @return balance The balance
+    function getProtocolBalance(FeeCategory category, address token) external view returns (uint256 balance);
 
-    /// @notice Get TK balance
+    /// @notice Get TK balance for a token
     /// @param tk The TruthKeeper address
-    /// @return balance The balance in wei
-    function getTKBalance(address tk) external view returns (uint256 balance);
+    /// @param token Token address (address(0) for ETH)
+    /// @return balance The balance
+    function getTKBalance(address tk, address token) external view returns (uint256 balance);
 
     /// @notice Get resolver fee for a specific TOC
     /// @param tocId The TOC ID
@@ -457,16 +478,23 @@ interface ITOCRegistry {
 
     // ============ Resolver Fee Functions ============
 
-    /// @notice Set resolver fee for a specific template
-    /// @param templateId The template ID
-    /// @param amount Fee amount in wei
-    function setResolverFee(uint32 templateId, uint256 amount) external;
+    /// @notice Set default fee for a token (resolver calls this)
+    /// @param token Token address
+    /// @param amount Fee amount (0 = unset, MAX = free)
+    function setResolverDefaultFee(address token, uint256 amount) external;
 
-    /// @notice Get resolver fee for a specific resolver and template
+    /// @notice Set fee for specific template + token (resolver calls this)
+    /// @param templateId The template ID
+    /// @param token Token address
+    /// @param amount Fee amount (0 = unset/use default, MAX = free)
+    function setResolverFee(uint32 templateId, address token, uint256 amount) external;
+
+    /// @notice Get resolver fee for a specific resolver, template, and token
     /// @param resolver The resolver address
     /// @param templateId The template ID
+    /// @param token Token address
     /// @return amount The fee amount in wei
-    function getResolverFee(address resolver, uint32 templateId) external view returns (uint256 amount);
+    function getResolverFee(address resolver, uint32 templateId, address token) external view returns (uint256 amount);
 
     // ============ Consumer Result Functions ============
 
@@ -483,17 +511,20 @@ interface ITOCRegistry {
     // ============ Fee Withdrawal Functions ============
 
     /// @notice Withdraw all protocol fees to treasury (treasury only)
+    /// @param token Token address (address(0) for ETH)
     /// @return creationFees Amount of creation fees withdrawn
     /// @return slashingFees Amount of slashing fees withdrawn
-    function withdrawProtocolFees() external returns (uint256 creationFees, uint256 slashingFees);
+    function withdrawProtocolFees(address token) external returns (uint256 creationFees, uint256 slashingFees);
 
     /// @notice Withdraw protocol fees by category (treasury only)
     /// @param category The fee category to withdraw
+    /// @param token Token address (address(0) for ETH)
     /// @return amount Amount withdrawn
-    function withdrawProtocolFeesByCategory(FeeCategory category) external returns (uint256 amount);
+    function withdrawProtocolFeesByCategory(FeeCategory category, address token) external returns (uint256 amount);
 
     /// @notice Withdraw accumulated TK fees (called by TK)
-    function withdrawTKFees() external;
+    /// @param token Token address (address(0) for ETH)
+    function withdrawTKFees(address token) external;
 
     /// @notice Claim resolver fee for a specific TOC
     /// @param tocId The TOC ID

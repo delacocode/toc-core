@@ -58,23 +58,33 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
 
     // Protocol configuration
     address public treasury;
-    uint256 public protocolFeeMinimum;      // Fee when TK == address(0) - NOT USED currently (TK required)
-    uint256 public protocolFeeStandard;     // Fee when TK assigned
 
     // TK share percentages (basis points, e.g., 4000 = 40%)
     mapping(AccountabilityTier => uint256) public tkSharePercent;
 
-    // Protocol balances by category
-    mapping(FeeCategory => uint256) public protocolBalances;
+    // Token minimum fees (also serves as whitelist - value > 0 means supported)
+    mapping(address => uint256) public minFeeByToken;
 
-    // TK balances (aggregate per TK)
-    mapping(address => uint256) public tkBalances;
+    // Protocol fee percentage by resolver trust (basis points)
+    mapping(ResolverTrust => uint256) public protocolFeePercent;
+
+    // Resolver default fees per token
+    mapping(address => mapping(address => uint256)) public resolverDefaultFee;
+
+    // Resolver template fees per token
+    mapping(address => mapping(uint32 => mapping(address => uint256))) public resolverTemplateFees;
+
+    // Protocol balances by category by token
+    mapping(FeeCategory => mapping(address => uint256)) public protocolBalances;
+
+    // TK balances by token
+    mapping(address => mapping(address => uint256)) public tkBalances;
 
     // Resolver fees (per TOC)
     mapping(uint256 => uint256) public resolverFeeByToc;
 
-    // Resolver fee configuration (per resolver, per template)
-    mapping(address => mapping(uint32 => uint256)) public resolverTemplateFees;
+    // Resolver fee token per TOC
+    mapping(uint256 => address) public resolverFeeTokenByToc;
 
     // ============ Errors ============
 
@@ -117,6 +127,9 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     error NoFeesToWithdraw();
     error NoResolverFee(uint256 tocId);
     error NotResolverForToc(address caller, uint256 tocId);
+    error TokenNotSupported(address token);
+    error TokenNotSupportedByResolver(address resolver, address token);
+    error InvalidFeePercent(uint256 basisPoints);
 
     // ============ Constructor ============
 
@@ -249,16 +262,21 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         emit TreasurySet(_treasury);
     }
 
-    /// @inheritdoc ITOCRegistry
-    function setProtocolFeeMinimum(uint256 amount) external onlyOwner nonReentrant {
-        protocolFeeMinimum = amount;
-        emit ProtocolFeeUpdated(protocolFeeMinimum, protocolFeeStandard);
+    /// @notice Set minimum fee for a token (also adds/removes from whitelist)
+    /// @param token Token address (address(0) for ETH)
+    /// @param amount Minimum fee (0 to remove from whitelist)
+    function setMinFee(address token, uint256 amount) external onlyOwner nonReentrant {
+        minFeeByToken[token] = amount;
+        emit MinFeeSet(token, amount);
     }
 
-    /// @inheritdoc ITOCRegistry
-    function setProtocolFeeStandard(uint256 amount) external onlyOwner nonReentrant {
-        protocolFeeStandard = amount;
-        emit ProtocolFeeUpdated(protocolFeeMinimum, protocolFeeStandard);
+    /// @notice Set protocol fee percentage for a resolver trust level
+    /// @param trust The resolver trust level
+    /// @param basisPoints Percentage in basis points (e.g., 4000 = 40%)
+    function setProtocolFeePercent(ResolverTrust trust, uint256 basisPoints) external onlyOwner nonReentrant {
+        if (basisPoints > 10000) revert InvalidFeePercent(basisPoints);
+        protocolFeePercent[trust] = basisPoints;
+        emit ProtocolFeePercentSet(trust, basisPoints);
     }
 
     /// @inheritdoc ITOCRegistry
@@ -315,7 +333,8 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 truthKeeperWindow,
         uint256 escalationWindow,
         uint256 postResolutionWindow,
-        address truthKeeper
+        address truthKeeper,
+        address feeToken
     ) external payable nonReentrant returns (uint256 tocId) {
         // Check resolver is registered
         ResolverTrust trust = _resolverConfigs[resolver].trust;
@@ -377,7 +396,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         toc.tierAtCreation = _calculateAccountabilityTier(resolver, truthKeeper, tkApproved);
 
         // Collect fees
-        _collectCreationFees(tocId, resolver, templateId, truthKeeper, toc.tierAtCreation);
+        _collectCreationFees(tocId, resolver, templateId, truthKeeper, toc.tierAtCreation, feeToken);
 
         // Call resolver to create TOC (may set initial state)
         toc.state = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload);
@@ -998,33 +1017,59 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITOCRegistry
-    function getCreationFee(
-        address resolver,
-        uint32 templateId
-    ) external view returns (uint256 protocolFee, uint256 resolverFee, uint256 total) {
-        protocolFee = protocolFeeStandard;
-        resolverFee = resolverTemplateFees[resolver][templateId];
-        total = protocolFee + resolverFee;
-    }
-
-    /// @inheritdoc ITOCRegistry
-    function getProtocolFees() external view returns (uint256 minimum, uint256 standard) {
-        return (protocolFeeMinimum, protocolFeeStandard);
-    }
-
-    /// @inheritdoc ITOCRegistry
     function getTKSharePercent(AccountabilityTier tier) external view returns (uint256) {
         return tkSharePercent[tier];
     }
 
     /// @inheritdoc ITOCRegistry
-    function getProtocolBalance(FeeCategory category) external view returns (uint256) {
-        return protocolBalances[category];
+    function getMinFee(address token) external view returns (uint256) {
+        return minFeeByToken[token];
     }
 
     /// @inheritdoc ITOCRegistry
-    function getTKBalance(address tk) external view returns (uint256) {
-        return tkBalances[tk];
+    function getProtocolFeePercent(ResolverTrust trust) external view returns (uint256) {
+        return protocolFeePercent[trust];
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getResolverDefaultFee(address resolver, address token) external view returns (uint256) {
+        return resolverDefaultFee[resolver][token];
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getCreationFee(
+        address resolver,
+        uint32 templateId,
+        address token
+    ) external view returns (uint256 protocolCut, uint256 resolverShare, uint256 total) {
+        uint256 minFee = minFeeByToken[token];
+        if (minFee == 0) revert TokenNotSupported(token);
+
+        // Get resolver fee (may revert if not supported)
+        uint256 resolverFee = _getResolverFee(resolver, templateId, token);
+
+        // Calculate protocol cut
+        ResolverTrust trust = _resolverConfigs[resolver].trust;
+        uint256 percentageCut = (resolverFee * protocolFeePercent[trust]) / 10000;
+
+        if (trust == ResolverTrust.SYSTEM) {
+            protocolCut = percentageCut;
+        } else {
+            protocolCut = percentageCut > minFee ? percentageCut : minFee;
+        }
+
+        resolverShare = resolverFee > protocolCut ? resolverFee - protocolCut : 0;
+        total = protocolCut + resolverShare;
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getProtocolBalance(FeeCategory category, address token) external view returns (uint256) {
+        return protocolBalances[category][token];
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function getTKBalance(address tk, address token) external view returns (uint256) {
+        return tkBalances[tk][token];
     }
 
     /// @inheritdoc ITOCRegistry
@@ -1087,67 +1132,79 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
 
     // ============ Resolver Fee Functions ============
 
-    /// @inheritdoc ITOCRegistry
-    function setResolverFee(uint32 templateId, uint256 amount) external nonReentrant {
+    /// @notice Set default fee for a token (resolver calls this)
+    /// @param token Token address
+    /// @param amount Fee amount (0 = unset, MAX = free)
+    function setResolverDefaultFee(address token, uint256 amount) external nonReentrant {
         if (_resolverConfigs[msg.sender].trust == ResolverTrust.NONE) {
             revert ResolverNotRegistered(msg.sender);
         }
-        resolverTemplateFees[msg.sender][templateId] = amount;
-        emit ResolverFeeSet(msg.sender, templateId, amount);
+        resolverDefaultFee[msg.sender][token] = amount;
+        emit ResolverDefaultFeeSet(msg.sender, token, amount);
+    }
+
+    /// @notice Set fee for specific template + token (resolver calls this)
+    /// @param templateId Template ID
+    /// @param token Token address
+    /// @param amount Fee amount (0 = unset/use default, MAX = free)
+    function setResolverFee(uint32 templateId, address token, uint256 amount) external nonReentrant {
+        if (_resolverConfigs[msg.sender].trust == ResolverTrust.NONE) {
+            revert ResolverNotRegistered(msg.sender);
+        }
+        resolverTemplateFees[msg.sender][templateId][token] = amount;
+        emit ResolverFeeSet(msg.sender, templateId, token, amount);
     }
 
     /// @inheritdoc ITOCRegistry
-    function getResolverFee(address resolver, uint32 templateId) external view returns (uint256) {
-        return resolverTemplateFees[resolver][templateId];
+    function getResolverFee(address resolver, uint32 templateId, address token) external view returns (uint256) {
+        return resolverTemplateFees[resolver][templateId][token];
     }
 
     // ============ Fee Withdrawal Functions ============
 
     /// @inheritdoc ITOCRegistry
-    function withdrawProtocolFees() external onlyTreasury nonReentrant returns (uint256 creationFees, uint256 slashingFees) {
-        creationFees = protocolBalances[FeeCategory.CREATION];
-        slashingFees = protocolBalances[FeeCategory.SLASHING];
+    function withdrawProtocolFees(address token) external onlyTreasury nonReentrant returns (uint256 creationFees, uint256 slashingFees) {
+        creationFees = protocolBalances[FeeCategory.CREATION][token];
+        slashingFees = protocolBalances[FeeCategory.SLASHING][token];
 
         uint256 total = creationFees + slashingFees;
         if (total == 0) revert NoFeesToWithdraw();
 
-        protocolBalances[FeeCategory.CREATION] = 0;
-        protocolBalances[FeeCategory.SLASHING] = 0;
+        protocolBalances[FeeCategory.CREATION][token] = 0;
+        protocolBalances[FeeCategory.SLASHING][token] = 0;
 
-        (bool success, ) = msg.sender.call{value: total}("");
-        if (!success) revert TransferFailed();
+        _transferOut(token, msg.sender, total);
 
-        emit ProtocolFeesWithdrawn(msg.sender, creationFees, slashingFees);
+        emit ProtocolFeesWithdrawn(msg.sender, token, creationFees, slashingFees);
     }
 
     /// @inheritdoc ITOCRegistry
-    function withdrawProtocolFeesByCategory(FeeCategory category) external onlyTreasury nonReentrant returns (uint256 amount) {
-        amount = protocolBalances[category];
+    function withdrawProtocolFeesByCategory(FeeCategory category, address token) external onlyTreasury nonReentrant returns (uint256 amount) {
+        amount = protocolBalances[category][token];
         if (amount == 0) revert NoFeesToWithdraw();
 
-        protocolBalances[category] = 0;
+        protocolBalances[category][token] = 0;
 
-        (bool success, ) = msg.sender.call{value: amount}("");
-        if (!success) revert TransferFailed();
+        _transferOut(token, msg.sender, amount);
 
         emit ProtocolFeesWithdrawn(
             msg.sender,
+            token,
             category == FeeCategory.CREATION ? amount : 0,
             category == FeeCategory.SLASHING ? amount : 0
         );
     }
 
     /// @inheritdoc ITOCRegistry
-    function withdrawTKFees() external nonReentrant {
-        uint256 amount = tkBalances[msg.sender];
+    function withdrawTKFees(address token) external nonReentrant {
+        uint256 amount = tkBalances[msg.sender][token];
         if (amount == 0) revert NoFeesToWithdraw();
 
-        tkBalances[msg.sender] = 0;
+        tkBalances[msg.sender][token] = 0;
 
-        (bool success, ) = msg.sender.call{value: amount}("");
-        if (!success) revert TransferFailed();
+        _transferOut(token, msg.sender, amount);
 
-        emit TKFeesWithdrawn(msg.sender, amount);
+        emit TKFeesWithdrawn(msg.sender, token, amount);
     }
 
     /// @inheritdoc ITOCRegistry
@@ -1160,43 +1217,32 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 amount = resolverFeeByToc[tocId];
         if (amount == 0) revert NoResolverFee(tocId);
 
+        address token = resolverFeeTokenByToc[tocId];
         resolverFeeByToc[tocId] = 0;
 
-        (bool success, ) = msg.sender.call{value: amount}("");
-        if (!success) revert TransferFailed();
+        _transferOut(token, msg.sender, amount);
 
-        emit ResolverFeeClaimed(msg.sender, tocId, amount);
+        emit ResolverFeeClaimed(msg.sender, tocId, token, amount);
     }
 
     /// @inheritdoc ITOCRegistry
     function claimResolverFees(uint256[] calldata tocIds) external nonReentrant {
-        uint256 totalAmount = 0;
-        address resolver = address(0);
-
+        // Process each TOC individually to handle different tokens
         for (uint256 i = 0; i < tocIds.length; i++) {
             uint256 tocId = tocIds[i];
             if (tocId == 0 || tocId >= _nextTocId) continue;
 
             TOC storage toc = _tocs[tocId];
-
-            // All TOCs must belong to same resolver
-            if (resolver == address(0)) {
-                resolver = toc.resolver;
-            }
             if (msg.sender != toc.resolver) continue;
 
             uint256 amount = resolverFeeByToc[tocId];
             if (amount > 0) {
+                address token = resolverFeeTokenByToc[tocId];
                 resolverFeeByToc[tocId] = 0;
-                totalAmount += amount;
-                emit ResolverFeeClaimed(msg.sender, tocId, amount);
+                _transferOut(token, msg.sender, amount);
+                emit ResolverFeeClaimed(msg.sender, tocId, token, amount);
             }
         }
-
-        if (totalAmount == 0) revert NoFeesToWithdraw();
-
-        (bool success, ) = msg.sender.call{value: totalAmount}("");
-        if (!success) revert TransferFailed();
     }
 
     // ============ Consumer Result Functions ============
@@ -1248,43 +1294,93 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
 
     // ============ Internal Functions ============
 
+    /// @notice Get resolver fee for a template + token, following lookup order
+    /// @dev Returns 0 for MAX sentinel, reverts if token not supported by resolver
+    function _getResolverFee(
+        address resolver,
+        uint32 templateId,
+        address token
+    ) internal view returns (uint256) {
+        // Check template-specific fee first
+        uint256 templateFee = resolverTemplateFees[resolver][templateId][token];
+        if (templateFee != 0) {
+            // MAX means free
+            return templateFee == type(uint256).max ? 0 : templateFee;
+        }
+
+        // Fall back to default fee
+        uint256 defaultFee = resolverDefaultFee[resolver][token];
+        if (defaultFee != 0) {
+            return defaultFee == type(uint256).max ? 0 : defaultFee;
+        }
+
+        // No fee set = resolver doesn't support this token
+        revert TokenNotSupportedByResolver(resolver, token);
+    }
+
     /// @notice Collect creation fees and distribute to protocol, TK, and resolver
     function _collectCreationFees(
         uint256 tocId,
         address resolver,
         uint32 templateId,
         address tk,
-        AccountabilityTier tier
+        AccountabilityTier tier,
+        address token
     ) internal {
-        uint256 protocolFee = protocolFeeStandard;
-        uint256 resolverFee = resolverTemplateFees[resolver][templateId];
-        uint256 totalFee = protocolFee + resolverFee;
+        // Validate token is supported
+        uint256 minFee = minFeeByToken[token];
+        if (minFee == 0) revert TokenNotSupported(token);
 
-        // Check sufficient payment
-        if (msg.value < totalFee) {
-            revert InsufficientFee(msg.value, totalFee);
+        // Get resolver fee (reverts if resolver doesn't support token)
+        uint256 resolverFee = _getResolverFee(resolver, templateId, token);
+
+        // Calculate protocol cut
+        ResolverTrust trust = _resolverConfigs[resolver].trust;
+        uint256 percentageCut = (resolverFee * protocolFeePercent[trust]) / 10000;
+
+        uint256 protocolCut;
+        if (trust == ResolverTrust.SYSTEM) {
+            // SYSTEM resolvers exempt from minimum
+            protocolCut = percentageCut;
+        } else {
+            // Others pay at least minimum
+            protocolCut = percentageCut > minFee ? percentageCut : minFee;
         }
 
-        // Calculate TK share from protocol fee
-        uint256 tkShare = (protocolFee * tkSharePercent[tier]) / 10000;
-        uint256 protocolKeeps = protocolFee - tkShare;
+        // Calculate splits
+        uint256 resolverShare = resolverFee > protocolCut ? resolverFee - protocolCut : 0;
+        uint256 tkShare = (protocolCut * tkSharePercent[tier]) / 10000;
+        uint256 protocolKeeps = protocolCut - tkShare;
 
-        // Store fees
-        protocolBalances[FeeCategory.CREATION] += protocolKeeps;
+        // Total to collect
+        uint256 totalFee = protocolCut + resolverShare;
+
+        // Transfer in
+        if (token == address(0)) {
+            // ETH
+            if (msg.value < totalFee) revert InsufficientFee(msg.value, totalFee);
+        } else {
+            // ERC20
+            IERC20(token).safeTransferFrom(msg.sender, address(this), totalFee);
+        }
+
+        // Store balances
+        protocolBalances[FeeCategory.CREATION][token] += protocolKeeps;
         if (tkShare > 0) {
-            tkBalances[tk] += tkShare;
+            tkBalances[tk][token] += tkShare;
         }
-        if (resolverFee > 0) {
-            resolverFeeByToc[tocId] = resolverFee;
+        if (resolverShare > 0) {
+            resolverFeeByToc[tocId] = resolverShare;
+            resolverFeeTokenByToc[tocId] = token;
         }
 
-        // Refund excess
-        if (msg.value > totalFee) {
+        // Refund excess ETH
+        if (token == address(0) && msg.value > totalFee) {
             (bool success, ) = msg.sender.call{value: msg.value - totalFee}("");
             if (!success) revert TransferFailed();
         }
 
-        emit CreationFeesCollected(tocId, protocolKeeps, tkShare, resolverFee);
+        emit CreationFeesCollected(tocId, token, protocolKeeps, tkShare, resolverShare);
     }
 
     /// @notice Check if a bond is acceptable for resolution
@@ -1346,6 +1442,16 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         }
     }
 
+    /// @notice Transfer token out (ETH or ERC20)
+    function _transferOut(address token, address to, uint256 amount) internal {
+        if (token == address(0)) {
+            (bool success, ) = to.call{value: amount}("");
+            if (!success) revert TransferFailed();
+        } else {
+            IERC20(token).safeTransfer(to, amount);
+        }
+    }
+
     /// @notice Slash bond with 50% to winner, 50% to contract (shared with TK)
     function _slashBondWithReward(
         uint256 tocId,
@@ -1365,18 +1471,13 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         uint256 tkShare = (contractShare * tkSharePercent[toc.tierAtCreation]) / 10000;
         uint256 protocolKeeps = contractShare - tkShare;
 
-        // Store protocol portion
-        protocolBalances[FeeCategory.SLASHING] += protocolKeeps;
-
-        // Store TK portion (only if ETH - for now we only support ETH fees)
-        if (tkShare > 0 && token == address(0)) {
-            tkBalances[toc.truthKeeper] += tkShare;
-        } else if (tkShare > 0) {
-            // For non-ETH tokens, protocol keeps the TK share for now
-            protocolBalances[FeeCategory.SLASHING] += tkShare;
+        // Store in multi-token balances
+        protocolBalances[FeeCategory.SLASHING][token] += protocolKeeps;
+        if (tkShare > 0) {
+            tkBalances[toc.truthKeeper][token] += tkShare;
         }
 
-        emit SlashingFeesCollected(tocId, protocolKeeps, tkShare);
+        emit SlashingFeesCollected(tocId, token, protocolKeeps, tkShare);
         emit BondSlashed(tocId, loser, token, contractShare);
     }
 
