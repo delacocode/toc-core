@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../TOCRegistry/TOCRegistry.sol";
 import "../TOCRegistry/TOCTypes.sol";
 import "../resolvers/OptimisticResolver.sol";
+import "../resolvers/IClarifiable.sol";
 import "../libraries/TOCResultCodec.sol";
 import "./MockTruthKeeper.sol";
 
@@ -610,4 +611,135 @@ contract OptimisticResolverTest is Test {
     }
 
     receive() external payable {}
+
+    // ============ IClarifiable Interface Tests ============
+
+    function test_RequestClarificationReturnsAccept() public {
+        OptimisticResolver.ArbitraryPayload memory payload = OptimisticResolver.ArbitraryPayload({
+            question: "Will X happen?",
+            description: "Description",
+            resolutionSource: "Source",
+            resolutionTime: block.timestamp + 30 days
+        });
+
+        // Create TOC as creator
+        vm.prank(creator, creator);
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            0,
+            abi.encode(payload),
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        // Request clarification as creator
+        vm.prank(creator);
+        (ClarificationResponse response, uint256 clarificationId) = resolver.requestClarification(tocId, "Clarifying text");
+
+        // OptimisticResolver auto-accepts
+        require(response == ClarificationResponse.ACCEPT, "Should return ACCEPT");
+        require(clarificationId == 0, "First clarification should have ID 0");
+
+        // Verify clarification was added
+        string[] memory clarifications = resolver.getClarifications(tocId);
+        require(clarifications.length == 1, "Should have 1 clarification");
+    }
+
+    function test_RequestClarificationIncrementsId() public {
+        OptimisticResolver.ArbitraryPayload memory payload = OptimisticResolver.ArbitraryPayload({
+            question: "Will X happen?",
+            description: "Description",
+            resolutionSource: "Source",
+            resolutionTime: block.timestamp + 30 days
+        });
+
+        vm.prank(creator, creator);
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            0,
+            abi.encode(payload),
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        // Request multiple clarifications
+        vm.prank(creator);
+        (, uint256 id1) = resolver.requestClarification(tocId, "First");
+        vm.prank(creator);
+        (, uint256 id2) = resolver.requestClarification(tocId, "Second");
+        vm.prank(creator);
+        (, uint256 id3) = resolver.requestClarification(tocId, "Third");
+
+        require(id1 == 0, "First ID should be 0");
+        require(id2 == 1, "Second ID should be 1");
+        require(id3 == 2, "Third ID should be 2");
+    }
+
+    function test_RevertRequestClarificationNotCreator() public {
+        OptimisticResolver.ArbitraryPayload memory payload = OptimisticResolver.ArbitraryPayload({
+            question: "Will X happen?",
+            description: "Description",
+            resolutionSource: "Source",
+            resolutionTime: block.timestamp + 30 days
+        });
+
+        vm.prank(creator, creator);
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            0,
+            abi.encode(payload),
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        // Try to request clarification as non-creator
+        address notCreator = address(0x999);
+        bool reverted = false;
+        vm.prank(notCreator);
+        try resolver.requestClarification(tocId, "Unauthorized clarification") {
+            // Should not reach here
+        } catch {
+            reverted = true;
+        }
+        require(reverted, "Should revert when not creator");
+    }
+
+    function test_GetPendingClarificationsEmpty() public {
+        OptimisticResolver.ArbitraryPayload memory payload = OptimisticResolver.ArbitraryPayload({
+            question: "Will X happen?",
+            description: "Description",
+            resolutionSource: "Source",
+            resolutionTime: block.timestamp + 30 days
+        });
+
+        vm.prank(creator, creator);
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            0,
+            abi.encode(payload),
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            DEFAULT_ESCALATION_WINDOW,
+            DEFAULT_POST_RESOLUTION_WINDOW,
+            truthKeeper
+        );
+
+        // OptimisticResolver auto-accepts, so pending should always be empty
+        (uint256[] memory ids, string[] memory texts) = resolver.getPendingClarifications(tocId);
+        require(ids.length == 0, "Should have no pending clarifications");
+        require(texts.length == 0, "Should have no pending texts");
+    }
+
+    function test_ResolverOwnerIsDeployer() public {
+        require(resolver.owner() == address(this), "Owner should be test contract (deployer)");
+    }
 }

@@ -5,6 +5,7 @@ import "../TOCRegistry/ITOCResolver.sol";
 import "../TOCRegistry/ITOCRegistry.sol";
 import "../TOCRegistry/TOCTypes.sol";
 import "../libraries/TOCResultCodec.sol";
+import "./IClarifiable.sol";
 
 /// @title OptimisticResolver
 /// @notice Resolver for human-judgment questions using optimistic proposal model
@@ -12,7 +13,7 @@ import "../libraries/TOCResultCodec.sol";
 ///   - Template 0: Arbitrary Question - Free-form YES/NO questions
 ///   - Template 1: Sports Outcome - Structured sports event questions
 ///   - Template 2: Event Occurrence - Did a specific event occur?
-contract OptimisticResolver is ITOCResolver {
+contract OptimisticResolver is ITOCResolver, IClarifiable {
     // ============ Constants ============
 
     uint32 public constant TEMPLATE_ARBITRARY = 0;
@@ -26,6 +27,7 @@ contract OptimisticResolver is ITOCResolver {
     // ============ Immutables ============
 
     ITOCRegistry public immutable registry;
+    address public immutable owner;
 
     // ============ Enums ============
 
@@ -82,8 +84,17 @@ contract OptimisticResolver is ITOCResolver {
     /// @notice Question data for each TOC
     mapping(uint256 => QuestionData) private _questions;
 
-    /// @notice Clarifications for each TOC (append-only)
+    /// @notice Accepted clarifications for each TOC
     mapping(uint256 => string[]) private _clarifications;
+
+    /// @notice Pending clarifications for each TOC
+    mapping(uint256 => mapping(uint256 => string)) private _pendingClarifications;
+
+    /// @notice Status of each clarification (true = pending, false = processed)
+    mapping(uint256 => mapping(uint256 => bool)) private _isPending;
+
+    /// @notice Next clarification ID for each TOC
+    mapping(uint256 => uint256) private _nextClarificationId;
 
     // ============ Events ============
 
@@ -94,11 +105,8 @@ contract OptimisticResolver is ITOCResolver {
         string questionPreview
     );
 
-    event ClarificationAdded(
-        uint256 indexed tocId,
-        address indexed creator,
-        string clarification
-    );
+    // Note: ClarificationRequested, ClarificationAccepted, ClarificationRejected
+    // are inherited from IClarifiable
 
     // ============ Errors ============
 
@@ -111,6 +119,8 @@ contract OptimisticResolver is ITOCResolver {
     error ResolutionTimeInPast(uint256 resolutionTime, uint256 current);
     error TocNotManaged(uint256 tocId);
     error EmptyQuestion();
+    error ClarificationNotPending(uint256 tocId, uint256 clarificationId);
+    error NotOwner(address caller);
 
     // ============ Modifiers ============
 
@@ -121,10 +131,18 @@ contract OptimisticResolver is ITOCResolver {
         _;
     }
 
+    modifier onlyOwner() {
+        if (msg.sender != owner) {
+            revert NotOwner(msg.sender);
+        }
+        _;
+    }
+
     // ============ Constructor ============
 
     constructor(address _registry) {
         registry = ITOCRegistry(_registry);
+        owner = msg.sender;
     }
 
     // ============ ITOCResolver Implementation ============
@@ -221,26 +239,26 @@ contract OptimisticResolver is ITOCResolver {
         return AnswerType.BOOLEAN;
     }
 
-    // ============ Clarification Functions ============
+    // ============ IClarifiable Implementation ============
 
-    /// @notice Add a clarification to an existing question
-    /// @dev Only the original creator can add clarifications, and only before resolution
-    /// @param tocId The TOC identifier
-    /// @param clarification The clarification text to add
-    function addClarification(uint256 tocId, string calldata clarification) external {
+    /// @inheritdoc IClarifiable
+    function requestClarification(
+        uint256 tocId,
+        string calldata text
+    ) external returns (ClarificationResponse response, uint256 clarificationId) {
         QuestionData storage q = _questions[tocId];
         if (q.createdAt == 0) {
             revert TocNotManaged(tocId);
         }
 
-        // Only creator can add clarifications
+        // Only creator can request clarifications
         if (msg.sender != q.creator) {
             revert OnlyCreator(msg.sender, q.creator);
         }
 
         // Check text length
-        if (bytes(clarification).length > MAX_TEXT_LENGTH) {
-            revert TextTooLong(bytes(clarification).length, MAX_TEXT_LENGTH);
+        if (bytes(text).length > MAX_TEXT_LENGTH) {
+            revert TextTooLong(bytes(text).length, MAX_TEXT_LENGTH);
         }
 
         // Can only clarify while TOC is ACTIVE or PENDING
@@ -249,7 +267,121 @@ contract OptimisticResolver is ITOCResolver {
             revert CannotClarifyAfterResolution(toc.state);
         }
 
+        // Assign clarification ID
+        clarificationId = _nextClarificationId[tocId]++;
+
+        emit ClarificationRequested(tocId, msg.sender, clarificationId, text);
+
+        // OptimisticResolver auto-accepts all clarifications
+        // Other resolvers can implement different logic (PENDING, REJECT)
+        response = ClarificationResponse.ACCEPT;
+
+        // Add timestamped clarification immediately
+        string memory timestamped = string(abi.encodePacked(
+            "[",
+            _formatTimestamp(block.timestamp),
+            "] ",
+            text
+        ));
+        _clarifications[tocId].push(timestamped);
+
+        emit ClarificationAccepted(tocId, clarificationId);
+    }
+
+    /// @inheritdoc IClarifiable
+    function approveClarification(uint256 tocId, uint256 clarificationId) external onlyOwner {
+        if (!_isPending[tocId][clarificationId]) {
+            revert ClarificationNotPending(tocId, clarificationId);
+        }
+
+        string memory text = _pendingClarifications[tocId][clarificationId];
+
         // Add timestamped clarification
+        string memory timestamped = string(abi.encodePacked(
+            "[",
+            _formatTimestamp(block.timestamp),
+            "] ",
+            text
+        ));
+        _clarifications[tocId].push(timestamped);
+
+        // Clear pending
+        _isPending[tocId][clarificationId] = false;
+        delete _pendingClarifications[tocId][clarificationId];
+
+        emit ClarificationAccepted(tocId, clarificationId);
+    }
+
+    /// @inheritdoc IClarifiable
+    function rejectClarification(uint256 tocId, uint256 clarificationId) external onlyOwner {
+        if (!_isPending[tocId][clarificationId]) {
+            revert ClarificationNotPending(tocId, clarificationId);
+        }
+
+        // Clear pending
+        _isPending[tocId][clarificationId] = false;
+        delete _pendingClarifications[tocId][clarificationId];
+
+        emit ClarificationRejected(tocId, clarificationId);
+    }
+
+    /// @inheritdoc IClarifiable
+    function getClarifications(uint256 tocId) external view returns (string[] memory) {
+        return _clarifications[tocId];
+    }
+
+    /// @inheritdoc IClarifiable
+    function getPendingClarifications(
+        uint256 tocId
+    ) external view returns (uint256[] memory ids, string[] memory texts) {
+        // Count pending clarifications
+        uint256 count = 0;
+        uint256 nextId = _nextClarificationId[tocId];
+        for (uint256 i = 0; i < nextId; i++) {
+            if (_isPending[tocId][i]) {
+                count++;
+            }
+        }
+
+        // Allocate arrays
+        ids = new uint256[](count);
+        texts = new string[](count);
+
+        // Fill arrays
+        uint256 index = 0;
+        for (uint256 i = 0; i < nextId; i++) {
+            if (_isPending[tocId][i]) {
+                ids[index] = i;
+                texts[index] = _pendingClarifications[tocId][i];
+                index++;
+            }
+        }
+    }
+
+    // ============ Legacy Compatibility ============
+
+    /// @notice Legacy function for backwards compatibility
+    /// @dev Calls requestClarification internally
+    function addClarification(uint256 tocId, string calldata clarification) external {
+        QuestionData storage q = _questions[tocId];
+        if (q.createdAt == 0) {
+            revert TocNotManaged(tocId);
+        }
+        if (msg.sender != q.creator) {
+            revert OnlyCreator(msg.sender, q.creator);
+        }
+        if (bytes(clarification).length > MAX_TEXT_LENGTH) {
+            revert TextTooLong(bytes(clarification).length, MAX_TEXT_LENGTH);
+        }
+        TOC memory toc = registry.getTOC(tocId);
+        if (toc.state != TOCState.ACTIVE && toc.state != TOCState.PENDING) {
+            revert CannotClarifyAfterResolution(toc.state);
+        }
+
+        uint256 clarificationId = _nextClarificationId[tocId]++;
+        emit ClarificationRequested(tocId, msg.sender, clarificationId, clarification);
+
+        // Auto-accept
         string memory timestamped = string(abi.encodePacked(
             "[",
             _formatTimestamp(block.timestamp),
@@ -257,15 +389,7 @@ contract OptimisticResolver is ITOCResolver {
             clarification
         ));
         _clarifications[tocId].push(timestamped);
-
-        emit ClarificationAdded(tocId, msg.sender, clarification);
-    }
-
-    /// @notice Get all clarifications for a TOC
-    /// @param tocId The TOC identifier
-    /// @return clarifications Array of clarification strings
-    function getClarifications(uint256 tocId) external view returns (string[] memory) {
-        return _clarifications[tocId];
+        emit ClarificationAccepted(tocId, clarificationId);
     }
 
     /// @notice Get question data for a TOC
