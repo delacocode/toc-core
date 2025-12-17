@@ -124,8 +124,8 @@ contract MockTruthKeeper is ITruthKeeper {
         ITOCRegistry(registryAddr).resolveTruthKeeperDispute(tocId, resolution, correctedResult);
     }
 
-    function withdrawFees(address registryAddr, address token) external {
-        ITOCRegistry(registryAddr).withdrawTKFees(token);
+    function withdrawFees(address registryAddr) external {
+        ITOCRegistry(registryAddr).withdrawTKFees();
     }
 
     receive() external payable {}

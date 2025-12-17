@@ -57,19 +57,12 @@ contract OptimisticResolverTest is Test {
         registry.addWhitelistedTruthKeeper(truthKeeper);
 
         // Configure fees
-        registry.setMinFee(address(0), 0.001 ether); // ETH minimum fee
-        registry.setProtocolFeePercent(ResolverTrust.RESOLVER, 6000); // 60%
-        registry.setProtocolFeePercent(ResolverTrust.VERIFIED, 4000); // 40%
-        registry.setProtocolFeePercent(ResolverTrust.SYSTEM, 2000); // 20%
+        registry.setProtocolFeeStandard(0.001 ether);
         registry.setTKSharePercent(AccountabilityTier.TK_GUARANTEED, 4000); // 40%
         registry.setTKSharePercent(AccountabilityTier.SYSTEM, 6000); // 60%
 
         // Register resolver
         registry.registerResolver(address(resolver));
-
-        // Set resolver default fee
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
     }
 
     // ============ Template 0: Arbitrary Question Tests ============
@@ -90,8 +83,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         require(tocId == 1, "First TOC should have ID 1");
@@ -117,8 +109,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         string memory question = registry.getTocQuestion(tocId);
@@ -143,8 +134,7 @@ contract OptimisticResolverTest is Test {
             0,
             0,
             0,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Create answer payload
@@ -175,8 +165,7 @@ contract OptimisticResolverTest is Test {
             0,
             abi.encode(payload),
             0, 0, 0, 0,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         OptimisticResolver.AnswerPayload memory answer = OptimisticResolver.AnswerPayload({
@@ -208,8 +197,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         ) {
             // Should not reach here
         } catch {
@@ -235,8 +223,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         ) {
             // Should not reach here
         } catch {
@@ -265,8 +252,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -296,8 +282,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         string memory question = registry.getTocQuestion(tocId);
@@ -319,8 +304,7 @@ contract OptimisticResolverTest is Test {
             1,
             abi.encode(payload),
             0, 0, 0, 0, // No dispute windows
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Chiefs win!
@@ -353,8 +337,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -377,8 +360,7 @@ contract OptimisticResolverTest is Test {
             2,
             abi.encode(payload),
             0, 0, 0, 0,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Event did NOT occur
@@ -414,8 +396,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Add clarification as creator
@@ -449,8 +430,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Add clarifications as creator
@@ -485,8 +465,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         (uint32 templateId, address tocCreator, uint256 createdAt) = resolver.getQuestionData(tocId);
@@ -511,8 +490,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         (uint32 templateId, bytes memory creationPayload) = resolver.getTocDetails(tocId);
@@ -538,8 +516,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         require(resolver.isTocManaged(tocId), "Created TOC should be managed");
@@ -576,8 +553,7 @@ contract OptimisticResolverTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Propose YES

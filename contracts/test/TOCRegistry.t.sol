@@ -64,10 +64,7 @@ contract TOCRegistryTest is Test {
         registry.addWhitelistedTruthKeeper(truthKeeper);
 
         // Configure fees
-        registry.setMinFee(address(0), 0.001 ether); // ETH minimum fee
-        registry.setProtocolFeePercent(ResolverTrust.RESOLVER, 6000); // 60%
-        registry.setProtocolFeePercent(ResolverTrust.VERIFIED, 4000); // 40%
-        registry.setProtocolFeePercent(ResolverTrust.SYSTEM, 2000); // 20%
+        registry.setProtocolFeeStandard(0.001 ether);
         registry.setTKSharePercent(AccountabilityTier.TK_GUARANTEED, 4000); // 40%
         registry.setTKSharePercent(AccountabilityTier.SYSTEM, 6000); // 60%
     }
@@ -76,9 +73,6 @@ contract TOCRegistryTest is Test {
 
     function test_RegisterResolver() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         ResolverTrust trust = registry.getResolverTrust(address(resolver));
         require(trust == ResolverTrust.RESOLVER, "Resolver trust should be RESOLVER");
@@ -92,9 +86,6 @@ contract TOCRegistryTest is Test {
 
     function test_SetResolverTrust() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Upgrade to VERIFIED
         registry.setResolverTrust(address(resolver), ResolverTrust.VERIFIED);
@@ -117,9 +108,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertRegisterDuplicateResolver() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         bool reverted = false;
         try registry.registerResolver(address(resolver)) {
@@ -132,9 +120,6 @@ contract TOCRegistryTest is Test {
 
     function test_GetResolverConfig() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         ResolverConfig memory config = registry.getResolverConfig(address(resolver));
         require(config.trust == ResolverTrust.RESOLVER, "Trust should be RESOLVER");
@@ -146,8 +131,6 @@ contract TOCRegistryTest is Test {
 
     function test_CreateTOC() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
 
         bytes memory payload = abi.encode("test payload");
 
@@ -159,8 +142,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
         require(tocId == 1, "First TOC should have ID 1");
 
@@ -176,8 +158,6 @@ contract TOCRegistryTest is Test {
     function test_CreateTOCWithSystemResolver() public {
         registry.registerResolver(address(resolver));
         registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
 
         bytes memory payload = abi.encode("test payload");
 
@@ -189,8 +169,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -199,9 +178,6 @@ contract TOCRegistryTest is Test {
 
     function test_CreateTOCWithPendingState() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         resolver.setDefaultInitialState(TOCState.PENDING);
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -212,8 +188,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -222,9 +197,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertCreateTOCWithInvalidTemplate() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         bool reverted = false;
         try registry.createTOC{value: 0.001 ether}(
@@ -235,8 +207,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         ) {
             // Should not reach here
         } catch {
@@ -258,8 +229,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         ) {
             // Should not reach here
         } catch {
@@ -272,9 +242,6 @@ contract TOCRegistryTest is Test {
 
     function test_ApproveAndRejectTOC() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         resolver.setDefaultInitialState(TOCState.PENDING);
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -285,8 +252,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -303,9 +269,6 @@ contract TOCRegistryTest is Test {
 
     function test_ResolveTOCWithETHBond() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -314,8 +277,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve with ETH bond
@@ -337,9 +299,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertResolveWithInsufficientBond() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -348,8 +307,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         bool reverted = false;
@@ -363,9 +321,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertResolveNonActiveTOC() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         resolver.setDefaultInitialState(TOCState.PENDING);
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -376,8 +331,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         bool reverted = false;
@@ -393,9 +347,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertFinalizeBeforeDisputeWindow() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -404,8 +355,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
@@ -424,9 +374,6 @@ contract TOCRegistryTest is Test {
 
     function test_DisputeTOC() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -435,8 +382,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
@@ -462,9 +408,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertDisputeAlreadyDisputed() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -473,8 +416,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
@@ -508,9 +450,6 @@ contract TOCRegistryTest is Test {
 
     function test_ResolveDisputeUphold() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         // Create TOC with no pre-resolution dispute window, only post-resolution
         // This allows immediate resolution, then post-resolution dispute goes to admin
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -521,8 +460,7 @@ contract TOCRegistryTest is Test {
             0,     // no TK window
             0,     // no escalation window
             DEFAULT_POST_RESOLUTION_WINDOW,  // post-resolution disputes go to admin
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve immediately (no bond needed for undisputable pre-resolution)
@@ -556,9 +494,6 @@ contract TOCRegistryTest is Test {
 
     function test_ResolveDisputeReject() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         // Create TOC with no pre-resolution dispute window, only post-resolution
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
@@ -568,8 +503,7 @@ contract TOCRegistryTest is Test {
             0,     // no TK window
             0,     // no escalation window
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
@@ -601,9 +535,6 @@ contract TOCRegistryTest is Test {
 
     function test_ResolveDisputeCancel() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         // Create TOC with no pre-resolution dispute window, only post-resolution
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
@@ -613,8 +544,7 @@ contract TOCRegistryTest is Test {
             0,     // no TK window
             0,     // no escalation window
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
@@ -646,9 +576,6 @@ contract TOCRegistryTest is Test {
         resolver.setDefaultNumericResult(42);
 
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -657,8 +584,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -670,9 +596,6 @@ contract TOCRegistryTest is Test {
         resolver.setDefaultResult(abi.encode("custom result"));
 
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -681,8 +604,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -693,9 +615,6 @@ contract TOCRegistryTest is Test {
 
     function test_GetTOCInfo() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -704,8 +623,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOCInfo memory info = registry.getTOCInfo(tocId);
@@ -718,9 +636,6 @@ contract TOCRegistryTest is Test {
 
     function test_GetTocQuestion() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
@@ -729,8 +644,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         string memory question = registry.getTocQuestion(tocId);
@@ -741,14 +655,11 @@ contract TOCRegistryTest is Test {
         require(registry.nextTocId() == 1, "Initial nextTocId should be 1");
 
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
 
-
-        registry.createTOC{value: 0.001 ether}(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper, address(0));
+        registry.createTOC{value: 0.001 ether}(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
         require(registry.nextTocId() == 2, "nextTocId should be 2 after creating one TOC");
 
-        registry.createTOC{value: 0.001 ether}(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper, address(0));
+        registry.createTOC{value: 0.001 ether}(address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
         require(registry.nextTocId() == 3, "nextTocId should be 3 after creating two TOCs");
     }
 
@@ -783,14 +694,11 @@ contract TOCRegistryTest is Test {
 
     function test_MultipleTOCs() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create multiple TOCs
-        uint256 toc1 = registry.createTOC{value: 0.001 ether}(address(resolver), 0, abi.encode("toc1"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper, address(0));
-        uint256 toc2 = registry.createTOC{value: 0.001 ether}(address(resolver), 1, abi.encode("toc2"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper, address(0));
-        uint256 toc3 = registry.createTOC{value: 0.001 ether}(address(resolver), 2, abi.encode("toc3"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper, address(0));
+        uint256 toc1 = registry.createTOC{value: 0.001 ether}(address(resolver), 0, abi.encode("toc1"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 toc2 = registry.createTOC{value: 0.001 ether}(address(resolver), 1, abi.encode("toc2"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
+        uint256 toc3 = registry.createTOC{value: 0.001 ether}(address(resolver), 2, abi.encode("toc3"), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper);
 
         require(toc1 == 1, "First TOC should be ID 1");
         require(toc2 == 2, "Second TOC should be ID 2");
@@ -810,9 +718,6 @@ contract TOCRegistryTest is Test {
 
     function test_CreateTOCWithCustomDisputeWindows() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         uint256 customDisputeWindow = 12 hours;
         uint256 customPostResolutionWindow = 48 hours;
@@ -825,8 +730,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             customPostResolutionWindow,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -836,9 +740,6 @@ contract TOCRegistryTest is Test {
 
     function test_CreateUndisputableTOC() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create TOC with both windows = 0 (undisputable)
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -849,8 +750,7 @@ contract TOCRegistryTest is Test {
             0,  // no TK window
             0,  // no escalation window
             0,  // no post-resolution dispute
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -861,9 +761,6 @@ contract TOCRegistryTest is Test {
 
     function test_ImmediateResolutionNoBond() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create undisputable TOC
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -871,8 +768,7 @@ contract TOCRegistryTest is Test {
             0,
             "",
             0, 0, 0, 0,  // all windows = 0
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve without bond (should work since undisputable)
@@ -890,9 +786,6 @@ contract TOCRegistryTest is Test {
 
     function test_ImmediateResolutionWithPostResolutionWindow() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create TOC with no pre-resolution dispute but has post-resolution window
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -903,8 +796,7 @@ contract TOCRegistryTest is Test {
             0,           // no TK window
             0,           // no escalation window
             24 hours,    // but has post-resolution dispute window
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve with bond (required since postResolutionWindow > 0)
@@ -924,9 +816,6 @@ contract TOCRegistryTest is Test {
 
     function test_FullyFinalizedWithoutPostResolutionWindow() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create undisputable TOC
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -934,8 +823,7 @@ contract TOCRegistryTest is Test {
             0,
             "",
             0, 0, 0, 0,  // all windows = 0
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve without bond
@@ -949,9 +837,6 @@ contract TOCRegistryTest is Test {
     function test_IsContestedAndHasCorrectedResult() public {
         // Create TOC with post-resolution window
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Pre-resolution = 0, post-resolution = 24h (immediate resolve, then can dispute)
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -962,8 +847,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             24 hours,    // post-resolution dispute window
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve immediately
@@ -1004,9 +888,6 @@ contract TOCRegistryTest is Test {
 
     function test_DisputeOnlyIfDisputeWindowGtZero() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create undisputable TOC (both windows = 0)
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -1014,8 +895,7 @@ contract TOCRegistryTest is Test {
             0,
             "",
             0, 0, 0, 0,  // all windows = 0
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve
@@ -1040,14 +920,10 @@ contract TOCRegistryTest is Test {
 
     function test_DisputeInfoPhaseTracking() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Test pre-resolution dispute phase
         uint256 tocId1 = registry.createTOC{value: 0.001 ether}(
-            address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper,
-            address(0)
+            address(resolver), 0, "", DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper
         );
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId1, address(0), MIN_RESOLUTION_BOND, "");
         registry.dispute{value: MIN_DISPUTE_BOND}(tocId1, address(0), MIN_DISPUTE_BOND, "Pre-res dispute", "", TOCResultCodec.encodeBoolean(false));
@@ -1057,7 +933,7 @@ contract TOCRegistryTest is Test {
 
         // Test post-resolution dispute phase
         uint256 tocId2 = registry.createTOC{value: 0.001 ether}(
-            address(resolver), 0, "", 0, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper, address(0)  // immediate resolution, post-res window
+            address(resolver), 0, "", 0, DEFAULT_TK_WINDOW, DEFAULT_ESCALATION_WINDOW, DEFAULT_POST_RESOLUTION_WINDOW, truthKeeper  // immediate resolution, post-res window
         );
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId2, address(0), MIN_RESOLUTION_BOND, "");
         registry.dispute{value: MIN_DISPUTE_BOND}(tocId2, address(0), MIN_DISPUTE_BOND, "Post-res dispute", "", TOCResultCodec.encodeBoolean(false));
@@ -1071,9 +947,6 @@ contract TOCRegistryTest is Test {
         resolver.setDefaultNumericResult(100);
 
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create TOC with no pre-resolution dispute window, only post-resolution
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -1082,8 +955,7 @@ contract TOCRegistryTest is Test {
             0,     // no TK window
             0,     // no escalation window
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
@@ -1114,17 +986,13 @@ contract TOCRegistryTest is Test {
 
     function test_GetExtensiveResult() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
             0,
             "",
             0, 0, 0, 0,  // undisputable for simplicity
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC(tocId, address(0), 0, "");
@@ -1143,9 +1011,6 @@ contract TOCRegistryTest is Test {
 
     function test_GetExtensiveResultStrict() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create undisputable TOC
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -1153,8 +1018,7 @@ contract TOCRegistryTest is Test {
             0,
             "",
             0, 0, 0, 0,  // all windows = 0
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC(tocId, address(0), 0, "");
@@ -1166,9 +1030,6 @@ contract TOCRegistryTest is Test {
 
     function test_GetExtensiveResultStrictReverts() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create TOC with post-resolution window (not immediately fully finalized)
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -1179,8 +1040,7 @@ contract TOCRegistryTest is Test {
             0,           // no TK window
             0,           // no escalation window
             24 hours,    // post-resolution window - not fully finalized until this passes
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         registry.resolveTOC{value: MIN_RESOLUTION_BOND}(tocId, address(0), MIN_RESOLUTION_BOND, "");
@@ -1202,9 +1062,6 @@ contract TOCRegistryTest is Test {
 
         // Register resolver
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         resolvers = registry.getRegisteredResolvers();
         require(resolvers.length == 1, "Should have 1 resolver");
@@ -1215,9 +1072,6 @@ contract TOCRegistryTest is Test {
 
     function test_TKApprovalGrantsTKGuaranteedTier() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Default TK approves all TOCs
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -1228,8 +1082,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -1243,9 +1096,6 @@ contract TOCRegistryTest is Test {
 
     function test_TKSoftRejectGivesPermissionlessTier() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Set TK to soft reject
         truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_SOFT);
@@ -1258,8 +1108,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -1269,9 +1118,6 @@ contract TOCRegistryTest is Test {
 
     function test_TKHardRejectRevertsCreation() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Set TK to hard reject
         truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_HARD);
@@ -1285,8 +1131,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         ) {
             // Should not reach here
         } catch {
@@ -1298,8 +1143,6 @@ contract TOCRegistryTest is Test {
     function test_TKApprovalWithSystemResolverGivesSystemTier() public {
         registry.registerResolver(address(resolver));
         registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
 
         // TK is whitelisted and approves
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -1310,8 +1153,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -1321,8 +1163,6 @@ contract TOCRegistryTest is Test {
     function test_TKSoftRejectWithSystemResolverGivesPermissionless() public {
         registry.registerResolver(address(resolver));
         registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
 
         // TK soft rejects
         truthKeeperContract.setDefaultResponse(TKApprovalResponse.REJECT_SOFT);
@@ -1335,8 +1175,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         TOC memory toc = registry.getTOC(tocId);
@@ -1346,9 +1185,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertCreateTOCWithEOATruthKeeper() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Try to use an EOA as TK (should fail)
         address eoaTK = address(0x999);
@@ -1362,8 +1198,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            eoaTK,
-            address(0)
+            eoaTK
         ) {
             // Should not reach here
         } catch {
@@ -1374,9 +1209,6 @@ contract TOCRegistryTest is Test {
 
     function test_TKPerResolverFiltering() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         // Create another resolver
         MockResolver resolver2 = new MockResolver(address(registry));
@@ -1394,8 +1226,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
         require(tocId1 == 1, "Should create TOC with resolver1");
 
@@ -1409,8 +1240,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         ) {
             // Should not reach here
         } catch {
@@ -1423,9 +1253,6 @@ contract TOCRegistryTest is Test {
 
     function test_CreationFeesCollected() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         bytes memory payload = abi.encode("test payload");
         uint256 totalFee = 0.001 ether; // protocol fee only (no resolver fee set)
@@ -1438,24 +1265,20 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Check protocol balance (60% of 0.001 = 0.0006 ether)
-        uint256 protocolBalance = registry.getProtocolBalance(FeeCategory.CREATION, address(0));
+        uint256 protocolBalance = registry.getProtocolBalance(FeeCategory.CREATION);
         require(protocolBalance == 0.0006 ether, "Protocol should get 60% of fee");
 
         // Check TK balance (40% of 0.001 = 0.0004 ether)
-        uint256 tkBalance = registry.getTKBalance(truthKeeper, address(0));
+        uint256 tkBalance = registry.getTKBalance(truthKeeper);
         require(tkBalance == 0.0004 ether, "TK should get 40% of fee");
     }
 
     function test_WithdrawProtocolFees() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         registry.setTreasury(address(this));
 
         bytes memory payload = abi.encode("test payload");
@@ -1468,12 +1291,11 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         uint256 balanceBefore = address(this).balance;
-        (uint256 creation, uint256 slashing) = registry.withdrawProtocolFees(address(0));
+        (uint256 creation, uint256 slashing) = registry.withdrawProtocolFees();
 
         require(creation == 0.0006 ether, "Creation fees should be 0.0006 ether");
         require(slashing == 0, "Slashing fees should be 0");
@@ -1482,9 +1304,6 @@ contract TOCRegistryTest is Test {
 
     function test_RevertInsufficientFee() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         bytes memory payload = abi.encode("test payload");
 
@@ -1497,8 +1316,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         ) {
             // Should not reach here
         } catch {
@@ -1509,9 +1327,6 @@ contract TOCRegistryTest is Test {
 
     function test_ExcessFeeRefunded() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
 
         bytes memory payload = abi.encode("test payload");
         uint256 excessAmount = 0.01 ether;
@@ -1527,8 +1342,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         uint256 expectedBalance = balanceBefore - requiredFee;
@@ -1537,9 +1351,6 @@ contract TOCRegistryTest is Test {
 
     function test_SlashingFeesDistributedToTK() public {
         registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
         registry.setTreasury(address(this));
 
         bytes memory payload = abi.encode("test payload");
@@ -1553,8 +1364,7 @@ contract TOCRegistryTest is Test {
             DEFAULT_TK_WINDOW,
             DEFAULT_ESCALATION_WINDOW,
             DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
+            truthKeeper
         );
 
         // Resolve and dispute
@@ -1591,8 +1401,8 @@ contract TOCRegistryTest is Test {
         registry.finalizeAfterTruthKeeper(tocId);
 
         // Check slashing fees went to protocol and TK
-        uint256 slashingBalance = registry.getProtocolBalance(FeeCategory.SLASHING, address(0));
-        uint256 tkBalance = registry.getTKBalance(truthKeeper, address(0));
+        uint256 slashingBalance = registry.getProtocolBalance(FeeCategory.SLASHING);
+        uint256 tkBalance = registry.getTKBalance(truthKeeper);
 
         // Half of resolution bond (0.05 ether) goes to contract
         // TK gets 40% of that = 0.02 ether
@@ -1601,337 +1411,6 @@ contract TOCRegistryTest is Test {
 
         // TK already had 0.0004 from creation, now adds 0.02
         require(tkBalance == 0.0004 ether + 0.02 ether, "TK should get 40% of slashed amount");
-    }
-
-    // ============ Multi-Token Fee Tests ============
-
-    function test_MultiTokenFeesWithERC20() public {
-        registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.002 ether);
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(bondToken), 10e18);
-
-        // Set min fee for ERC20
-        registry.setMinFee(address(bondToken), 5e18);
-
-        // Create TOC with ETH
-        uint256 tocId1 = registry.createTOC{value: 0.002 ether}(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
-        );
-        require(tocId1 == 1, "First TOC should have ID 1");
-
-        // Check ETH balance
-        uint256 ethProtocolBalance = registry.getProtocolBalance(FeeCategory.CREATION, address(0));
-        require(ethProtocolBalance > 0, "Protocol should have ETH balance");
-
-        // Create TOC with ERC20
-        bondToken.mint(address(this), 100e18);
-        bondToken.approve(address(registry), 100e18);
-
-        uint256 tocId2 = registry.createTOC(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(bondToken)
-        );
-        require(tocId2 == 2, "Second TOC should have ID 2");
-
-        // Check ERC20 balance
-        uint256 tokenProtocolBalance = registry.getProtocolBalance(FeeCategory.CREATION, address(bondToken));
-        require(tokenProtocolBalance > 0, "Protocol should have ERC20 balance");
-    }
-
-    function test_ResolverFeeWithMaxSentinel() public {
-        registry.registerResolver(address(resolver));
-
-        // Set fee to MAX (meaning free)
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), type(uint256).max);
-
-        // Get creation fee - should pay minimum since resolver is RESOLVER trust
-        (uint256 protocolCut, uint256 resolverShare, uint256 total) =
-            registry.getCreationFee(address(resolver), 0, address(0));
-
-        require(resolverShare == 0, "Resolver share should be 0 for free template");
-        require(protocolCut == 0.001 ether, "Protocol cut should be minimum fee");
-        require(total == 0.001 ether, "Total should be minimum fee");
-    }
-
-    function test_SystemResolverExemptFromMinimum() public {
-        registry.registerResolver(address(resolver));
-        registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
-
-        // Set fee to MAX (free)
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), type(uint256).max);
-
-        // Get creation fee - SYSTEM resolver should be exempt from minimum
-        (uint256 protocolCut, uint256 resolverShare, uint256 total) =
-            registry.getCreationFee(address(resolver), 0, address(0));
-
-        require(protocolCut == 0, "Protocol cut should be 0 for SYSTEM resolver with free fee");
-        require(resolverShare == 0, "Resolver share should be 0");
-        require(total == 0, "Total should be 0");
-    }
-
-    function test_RevertTokenNotSupported() public {
-        registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
-        address unsupportedToken = address(0x999);
-
-        bool reverted = false;
-        try registry.createTOC(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            unsupportedToken
-        ) {
-            // Should not reach here
-        } catch {
-            reverted = true;
-        }
-        require(reverted, "Should revert for unsupported token");
-    }
-
-    function test_RevertTokenNotSupportedByResolver() public {
-        registry.registerResolver(address(resolver));
-        // Only set ETH fee, not ERC20
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.001 ether);
-
-        // Add bondToken to whitelist
-        registry.setMinFee(address(bondToken), 5e18);
-
-        bondToken.mint(address(this), 100e18);
-        bondToken.approve(address(registry), 100e18);
-
-        // Try to create TOC with ERC20 that resolver doesn't support
-        bool reverted = false;
-        try registry.createTOC(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(bondToken)
-        ) {
-            // Should not reach here
-        } catch {
-            reverted = true;
-        }
-        require(reverted, "Should revert when resolver doesn't support token");
-    }
-
-    function test_ProtocolFeePercentByTrust() public {
-        registry.registerResolver(address(resolver));
-
-        // Set resolver to charge 0.01 ETH (high enough for percentages to matter)
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.01 ether);
-
-        // RESOLVER trust (60%)
-        (uint256 protocolCut1, , ) = registry.getCreationFee(address(resolver), 0, address(0));
-        require(protocolCut1 == 0.006 ether, "RESOLVER should pay 60% protocol fee");
-
-        // Upgrade to VERIFIED (40%)
-        registry.setResolverTrust(address(resolver), ResolverTrust.VERIFIED);
-        (uint256 protocolCut2, , ) = registry.getCreationFee(address(resolver), 0, address(0));
-        require(protocolCut2 == 0.004 ether, "VERIFIED should pay 40% protocol fee");
-
-        // Upgrade to SYSTEM (20%)
-        registry.setResolverTrust(address(resolver), ResolverTrust.SYSTEM);
-        (uint256 protocolCut3, , ) = registry.getCreationFee(address(resolver), 0, address(0));
-        require(protocolCut3 == 0.002 ether, "SYSTEM should pay 20% protocol fee");
-    }
-
-    function test_MinimumFeeAppliesWhenPercentageTooLow() public {
-        registry.registerResolver(address(resolver));
-
-        // Set resolver to charge only 0.0005 ETH (60% = 0.0003, less than min 0.001)
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.0005 ether);
-
-        (uint256 protocolCut, uint256 resolverShare, uint256 total) =
-            registry.getCreationFee(address(resolver), 0, address(0));
-
-        // Protocol cut should be minimum (0.001), not percentage (0.0003)
-        require(protocolCut == 0.001 ether, "Protocol cut should be minimum fee");
-        // Resolver share is 0 because fee (0.0005) < protocolCut (0.001)
-        require(resolverShare == 0, "Resolver should get nothing when fee < protocol cut");
-        require(total == 0.001 ether, "Total should be minimum fee");
-    }
-
-    function test_TemplateFeeOverridesDefault() public {
-        registry.registerResolver(address(resolver));
-
-        // Set default fee
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.01 ether);
-
-        // Set template-specific fee (lower)
-        vm.prank(address(resolver));
-        registry.setResolverFee(0, address(0), 0.005 ether);
-
-        // Should use template fee
-        uint256 fee = registry.getResolverFee(address(resolver), 0, address(0));
-        require(fee == 0.005 ether, "Should use template fee");
-
-        // Another template should use default
-        uint256 defaultFee = registry.getResolverDefaultFee(address(resolver), address(0));
-        require(defaultFee == 0.01 ether, "Default fee should be unchanged");
-    }
-
-    function test_SetMinFeeToZeroRemovesToken() public {
-        // Add token to whitelist
-        registry.setMinFee(address(bondToken), 5e18);
-        require(registry.getMinFee(address(bondToken)) == 5e18, "Token should be whitelisted");
-
-        // Remove token from whitelist
-        registry.setMinFee(address(bondToken), 0);
-        require(registry.getMinFee(address(bondToken)) == 0, "Token should be removed from whitelist");
-    }
-
-    function test_RevertInvalidFeePercent() public {
-        bool reverted = false;
-        try registry.setProtocolFeePercent(ResolverTrust.RESOLVER, 10001) {
-            // Should not reach here
-        } catch {
-            reverted = true;
-        }
-        require(reverted, "Should revert for fee percent > 10000");
-    }
-
-    // ============ Multi-Token Withdrawal Tests ============
-
-    function test_WithdrawProtocolFeesMultiToken() public {
-        registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.002 ether);
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(bondToken), 10e18);
-
-        registry.setMinFee(address(bondToken), 5e18);
-        registry.setTreasury(address(this));
-
-        // Create TOC with ETH
-        registry.createTOC{value: 0.002 ether}(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
-        );
-
-        // Create TOC with ERC20
-        bondToken.mint(address(this), 100e18);
-        bondToken.approve(address(registry), 100e18);
-        registry.createTOC(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(bondToken)
-        );
-
-        // Withdraw ETH fees
-        uint256 ethBalanceBefore = address(this).balance;
-        (uint256 ethCreation, uint256 ethSlashing) = registry.withdrawProtocolFees(address(0));
-        require(ethCreation > 0, "Should have ETH creation fees");
-        require(ethSlashing == 0, "Should have no ETH slashing fees");
-        require(address(this).balance == ethBalanceBefore + ethCreation, "Should receive ETH fees");
-
-        // Withdraw ERC20 fees
-        uint256 tokenBalanceBefore = bondToken.balanceOf(address(this));
-        (uint256 tokenCreation, uint256 tokenSlashing) = registry.withdrawProtocolFees(address(bondToken));
-        require(tokenCreation > 0, "Should have ERC20 creation fees");
-        require(tokenSlashing == 0, "Should have no ERC20 slashing fees");
-        require(bondToken.balanceOf(address(this)) == tokenBalanceBefore + tokenCreation, "Should receive ERC20 fees");
-    }
-
-    function test_WithdrawTKFeesMultiToken() public {
-        registry.registerResolver(address(resolver));
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(0), 0.002 ether);
-        vm.prank(address(resolver));
-        registry.setResolverDefaultFee(address(bondToken), 10e18);
-
-        registry.setMinFee(address(bondToken), 5e18);
-
-        // Create TOC with ETH
-        registry.createTOC{value: 0.002 ether}(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(0)
-        );
-
-        // Create TOC with ERC20
-        bondToken.mint(address(this), 100e18);
-        bondToken.approve(address(registry), 100e18);
-        registry.createTOC(
-            address(resolver),
-            0,
-            "",
-            DEFAULT_DISPUTE_WINDOW,
-            DEFAULT_TK_WINDOW,
-            DEFAULT_ESCALATION_WINDOW,
-            DEFAULT_POST_RESOLUTION_WINDOW,
-            truthKeeper,
-            address(bondToken)
-        );
-
-        // Check TK balances
-        uint256 tkEthBalance = registry.getTKBalance(truthKeeper, address(0));
-        uint256 tkTokenBalance = registry.getTKBalance(truthKeeper, address(bondToken));
-        require(tkEthBalance > 0, "TK should have ETH balance");
-        require(tkTokenBalance > 0, "TK should have ERC20 balance");
-
-        // Withdraw TK ETH fees (as TK)
-        uint256 tkEthBefore = address(truthKeeperContract).balance;
-        truthKeeperContract.withdrawFees(address(registry), address(0));
-        require(address(truthKeeperContract).balance == tkEthBefore + tkEthBalance, "TK should receive ETH");
-
-        // Withdraw TK ERC20 fees (as TK)
-        uint256 tkTokenBefore = bondToken.balanceOf(address(truthKeeperContract));
-        truthKeeperContract.withdrawFees(address(registry), address(bondToken));
-        require(bondToken.balanceOf(address(truthKeeperContract)) == tkTokenBefore + tkTokenBalance, "TK should receive ERC20");
     }
 
     // ============ Helpers ============
