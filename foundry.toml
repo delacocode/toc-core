@@ -1,5 +1,6 @@
 [profile.default]
 src = "contracts"
+test = "foundry-test"
 out = "out"
 libs = ["lib", "node_modules"]
 via_ir = true

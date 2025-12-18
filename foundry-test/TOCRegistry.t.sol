@@ -2,12 +2,12 @@
 pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
-import "../TOCRegistry/TOCRegistry.sol";
-import "../TOCRegistry/TOCTypes.sol";
+import "contracts/TOCRegistry/TOCRegistry.sol";
+import "contracts/TOCRegistry/TOCTypes.sol";
 import "./MockResolver.sol";
 import "./MockERC20.sol";
 import "./MockTruthKeeper.sol";
-import "../libraries/TOCResultCodec.sol";
+import "contracts/libraries/TOCResultCodec.sol";
 
 /// @title TOCRegistryTest
 /// @notice Comprehensive tests for TOCRegistry contract

@@ -2,11 +2,11 @@
 pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
-import "../TOCRegistry/TOCRegistry.sol";
-import "../TOCRegistry/TOCTypes.sol";
-import "../resolvers/OptimisticResolver.sol";
-import "../resolvers/IClarifiable.sol";
-import "../libraries/TOCResultCodec.sol";
+import "contracts/TOCRegistry/TOCRegistry.sol";
+import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/resolvers/OptimisticResolver.sol";
+import "contracts/resolvers/IClarifiable.sol";
+import "contracts/libraries/TOCResultCodec.sol";
 import "./MockTruthKeeper.sol";
 
 /// @title OptimisticResolverTest

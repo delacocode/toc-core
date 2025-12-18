@@ -13,6 +13,14 @@ const config: HardhatUserConfig = {
     },
   },
   plugins: [HardhatToolboxViem],
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache_hardhat",
+    artifacts: "./artifacts",
+  },
+  // Exclude Foundry test files from compilation
+  ignore: ["contracts/test/**/*.sol"],
 };
 
 export default config;

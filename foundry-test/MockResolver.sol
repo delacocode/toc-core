@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import "../TOCRegistry/ITOCResolver.sol";
-import "../TOCRegistry/TOCTypes.sol";
-import "../libraries/TOCResultCodec.sol";
+import "contracts/TOCRegistry/ITOCResolver.sol";
+import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/libraries/TOCResultCodec.sol";
 
 /// @title MockResolver
 /// @notice Mock resolver for testing the TOCRegistry
