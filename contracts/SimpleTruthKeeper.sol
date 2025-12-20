@@ -165,5 +165,20 @@ contract SimpleTruthKeeper is ITruthKeeper {
         emit ResolverAllowedChanged(resolver, allowed);
     }
 
+    /// @notice Set per-resolver minimum time windows
+    /// @dev Set to 0 to use global defaults
+    /// @param resolver The resolver address
+    /// @param disputeWindow Minimum dispute window (0 = use default)
+    /// @param tkWindow Minimum TK window (0 = use default)
+    function setResolverMinWindows(
+        address resolver,
+        uint32 disputeWindow,
+        uint32 tkWindow
+    ) external onlyOwner {
+        resolverMinDisputeWindow[resolver] = disputeWindow;
+        resolverMinTruthKeeperWindow[resolver] = tkWindow;
+        emit ResolverMinWindowsChanged(resolver, disputeWindow, tkWindow);
+    }
+
     receive() external payable {}
 }

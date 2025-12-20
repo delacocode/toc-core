@@ -111,4 +111,61 @@ contract SimpleTruthKeeperTest is Test {
         );
         assertEq(uint8(response), uint8(TKApprovalResponse.REJECT_SOFT));
     }
+
+    // ============ Per-Resolver Override Tests ============
+
+    function test_canAcceptToc_usesResolverOverrideWindows() public {
+        vm.startPrank(owner);
+        tk.setResolverAllowed(resolver1, true);
+        tk.setResolverMinWindows(resolver1, 30 minutes, 2 hours); // Lower than defaults
+        vm.stopPrank();
+
+        // Should approve with windows that meet override but not global default
+        TKApprovalResponse response = tk.canAcceptToc(
+            resolver1,
+            0,
+            creator,
+            "",
+            30 minutes, // Meets override, not global
+            2 hours,    // Meets override, not global
+            48 hours,
+            24 hours
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.APPROVE));
+    }
+
+    function test_canAcceptToc_rejectsWhenBelowResolverOverride() public {
+        vm.startPrank(owner);
+        tk.setResolverAllowed(resolver1, true);
+        tk.setResolverMinWindows(resolver1, 2 hours, 8 hours); // Higher than defaults
+        vm.stopPrank();
+
+        // Should reject even though it meets global defaults
+        TKApprovalResponse response = tk.canAcceptToc(
+            resolver1,
+            0,
+            creator,
+            "",
+            DEFAULT_DISPUTE_WINDOW, // 1 hour, less than 2 hour override
+            DEFAULT_TK_WINDOW,      // 4 hours, less than 8 hour override
+            48 hours,
+            24 hours
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.REJECT_SOFT));
+    }
+
+    function test_getEffectiveMinWindows_returnsGlobalWhenNoOverride() public view {
+        (uint32 minDispute, uint32 minTk) = tk.getEffectiveMinWindows(resolver1);
+        assertEq(minDispute, DEFAULT_DISPUTE_WINDOW);
+        assertEq(minTk, DEFAULT_TK_WINDOW);
+    }
+
+    function test_getEffectiveMinWindows_returnsOverrideWhenSet() public {
+        vm.prank(owner);
+        tk.setResolverMinWindows(resolver1, 2 hours, 8 hours);
+
+        (uint32 minDispute, uint32 minTk) = tk.getEffectiveMinWindows(resolver1);
+        assertEq(minDispute, 2 hours);
+        assertEq(minTk, 8 hours);
+    }
 }
