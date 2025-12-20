@@ -398,5 +398,148 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(reverted, "Should revert when price not near deadline");
     }
 
+    // ============ Template 2: Range Tests ============
+
+    function test_CreateRangeTOC() public {
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            block.timestamp + 1 days,
+            int64(90000_00000000), // lower: $90,000
+            int64(100000_00000000), // upper: $100,000
+            true // isInside
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            2, // TEMPLATE_RANGE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveRangeInside_True() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(90000_00000000),
+            int64(100000_00000000),
+            true // isInside
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            2,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        vm.warp(deadline);
+
+        // Price at $95,000 (inside range)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(BTC_USD, int64(95000_00000000), uint64(100_00000000), int32(-8), uint64(deadline));
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertTrue(result, "Should be true - price inside range");
+    }
+
+    function test_ResolveRangeInside_False() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(90000_00000000),
+            int64(100000_00000000),
+            true // isInside
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            2,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        vm.warp(deadline);
+
+        // Price at $105,000 (outside range)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(BTC_USD, int64(105000_00000000), uint64(100_00000000), int32(-8), uint64(deadline));
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertFalse(result, "Should be false - price outside range");
+    }
+
+    function test_ResolveRangeOutside_True() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(90000_00000000),
+            int64(100000_00000000),
+            false // isInside = false means isOutside
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            2,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        vm.warp(deadline);
+
+        // Price at $105,000 (outside range)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(BTC_USD, int64(105000_00000000), uint64(100_00000000), int32(-8), uint64(deadline));
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertTrue(result, "Should be true - price outside range");
+    }
+
+    function test_RevertRangeInvalidBounds() public {
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            block.timestamp + 1 days,
+            int64(100000_00000000), // lower > upper (invalid!)
+            int64(90000_00000000),
+            true
+        );
+
+        bool reverted = false;
+        try registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            2,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        ) {
+            // Should not reach
+        } catch {
+            reverted = true;
+        }
+        assertTrue(reverted, "Should revert with invalid bounds");
+    }
+
     receive() external payable {}
 }

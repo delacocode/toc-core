@@ -61,6 +61,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 deadline
     );
 
+    event RangeTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        int64 lowerBound,
+        int64 upperBound,
+        bool isInside,
+        uint256 deadline
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -76,6 +85,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 deadline;
         int64 threshold;
         bool isAbove;
+    }
+
+    struct RangePayload {
+        bytes32 priceId;
+        uint256 deadline;
+        int64 lowerBound;
+        int64 upperBound;
+        bool isInside;
     }
 
     // ============ Errors ============
@@ -133,6 +150,8 @@ contract PythPriceResolverV2 is ITOCResolver {
         // Validate and emit events based on template
         if (templateId == TEMPLATE_SNAPSHOT) {
             _validateAndEmitSnapshot(tocId, payload);
+        } else if (templateId == TEMPLATE_RANGE) {
+            _validateAndEmitRange(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -151,6 +170,8 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool outcome;
         if (templateId == TEMPLATE_SNAPSHOT) {
             outcome = _resolveSnapshot(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_RANGE) {
+            outcome = _resolveRange(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -280,6 +301,39 @@ contract PythPriceResolverV2 is ITOCResolver {
             int32 diff = expo - (-PRICE_DECIMALS); // diff = -6 - (-8) = 2
             return price * int64(int256(10 ** uint32(diff)));
         }
+    }
+
+    function _validateAndEmitRange(uint256 tocId, bytes calldata payload) internal {
+        RangePayload memory p = abi.decode(payload, (RangePayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+        if (p.lowerBound >= p.upperBound) revert InvalidBounds();
+
+        emit RangeTOCCreated(tocId, p.priceId, p.lowerBound, p.upperBound, p.isInside, p.deadline);
+    }
+
+    function _resolveRange(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        RangePayload memory p = abi.decode(_tocPayloads[tocId], (RangePayload));
+
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        (int64 price, uint256 publishTime) = _getPriceAtDeadline(
+            p.priceId,
+            p.deadline,
+            pythUpdateData
+        );
+
+        bool inRange = price >= p.lowerBound && price <= p.upperBound;
+        bool outcome = p.isInside ? inRange : !inRange;
+
+        emit TOCResolved(tocId, TEMPLATE_RANGE, outcome, price, publishTime);
+        return outcome;
     }
 
     // ============ Receive ============
