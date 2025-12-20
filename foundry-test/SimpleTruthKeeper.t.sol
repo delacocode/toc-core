@@ -17,6 +17,14 @@ contract SimpleTruthKeeperTest is Test {
     uint32 public constant DEFAULT_DISPUTE_WINDOW = 1 hours;
     uint32 public constant DEFAULT_TK_WINDOW = 4 hours;
 
+    // ============ Events ============
+
+    event ResolverAllowedChanged(address indexed resolver, bool allowed);
+    event DefaultMinWindowsChanged(uint32 disputeWindow, uint32 tkWindow);
+    event ResolverMinWindowsChanged(address indexed resolver, uint32 disputeWindow, uint32 tkWindow);
+    event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
+    event RegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
+
     function setUp() public {
         tk = new SimpleTruthKeeper(
             registry,
@@ -310,5 +318,51 @@ contract SimpleTruthKeeperTest is Test {
             24 hours
         );
         assertEq(uint8(response), uint8(TKApprovalResponse.REJECT_SOFT));
+    }
+
+    // ============ Event Tests ============
+
+    function test_setResolverAllowed_emitsEvent() public {
+        vm.expectEmit(true, true, true, true);
+        emit ResolverAllowedChanged(resolver1, true);
+
+        vm.prank(owner);
+        tk.setResolverAllowed(resolver1, true);
+    }
+
+    function test_setDefaultMinWindows_emitsEvent() public {
+        vm.expectEmit(true, true, true, true);
+        emit DefaultMinWindowsChanged(2 hours, 8 hours);
+
+        vm.prank(owner);
+        tk.setDefaultMinWindows(2 hours, 8 hours);
+    }
+
+    function test_setResolverMinWindows_emitsEvent() public {
+        vm.expectEmit(true, true, true, true);
+        emit ResolverMinWindowsChanged(resolver1, 2 hours, 8 hours);
+
+        vm.prank(owner);
+        tk.setResolverMinWindows(resolver1, 2 hours, 8 hours);
+    }
+
+    function test_transferOwnership_emitsEvent() public {
+        address newOwner = address(0x999);
+
+        vm.expectEmit(true, true, true, true);
+        emit OwnershipTransferred(owner, newOwner);
+
+        vm.prank(owner);
+        tk.transferOwnership(newOwner);
+    }
+
+    function test_setRegistry_emitsEvent() public {
+        address newRegistry = address(0x888);
+
+        vm.expectEmit(true, true, true, true);
+        emit RegistryUpdated(registry, newRegistry);
+
+        vm.prank(owner);
+        tk.setRegistry(newRegistry);
     }
 }
