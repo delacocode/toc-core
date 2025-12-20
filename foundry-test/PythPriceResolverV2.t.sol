@@ -677,5 +677,133 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(reverted, "Should revert - price after deadline");
     }
 
+    // ============ Template 4: Touched Both Tests ============
+
+    function test_CreateTouchedBothTOC() public {
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            block.timestamp + 7 days,
+            int64(100000_00000000), // targetA: $100,000 (high target)
+            int64(90000_00000000)   // targetB: $90,000 (low target)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            4, // TEMPLATE_TOUCHED_BOTH
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveTouchedBoth_Yes() public {
+        uint256 deadline = block.timestamp + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000), // targetA: $100,000
+            int64(90000_00000000)   // targetB: $90,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            4,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to after deadline
+        vm.warp(deadline + 1);
+
+        // Provide multiple price proofs showing both targets were touched
+        bytes[] memory updates = new bytes[](3);
+
+        // Day 2: Price reached $101,000 (>= targetA)
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(101000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(block.timestamp - 5 days)
+        );
+
+        // Day 5: Price dropped to $89,000 (<= targetB)
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(89000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(block.timestamp - 2 days)
+        );
+
+        // Day 7 (at deadline): Price at $95,000
+        updates[2] = _createPriceUpdate(
+            BTC_USD,
+            int64(95000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 3}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertTrue(result, "Should be true - both targets were touched");
+    }
+
+    function test_ResolveTouchedBoth_No() public {
+        uint256 deadline = block.timestamp + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000), // targetA: $100,000
+            int64(90000_00000000)   // targetB: $90,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            4,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        vm.warp(deadline + 1);
+
+        // Provide price proofs showing only targetA was touched (not targetB)
+        bytes[] memory updates = new bytes[](2);
+
+        // Day 2: Price reached $101,000 (>= targetA) ✓
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(101000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(block.timestamp - 5 days)
+        );
+
+        // Day 7: Price at $95,000 (never touched targetB of $90,000)
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(95000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertFalse(result, "Should be false - only targetA was touched, not both");
+    }
+
     receive() external payable {}
 }

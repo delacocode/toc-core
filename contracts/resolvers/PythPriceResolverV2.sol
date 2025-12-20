@@ -78,6 +78,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 deadline
     );
 
+    event TouchedBothTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        int64 targetA,
+        int64 targetB,
+        uint256 deadline
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -108,6 +116,13 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 deadline;
         int64 target;
         bool isAbove;
+    }
+
+    struct TouchedBothPayload {
+        bytes32 priceId;
+        uint256 deadline;
+        int64 targetA;
+        int64 targetB;
     }
 
     // ============ Errors ============
@@ -169,6 +184,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitRange(tocId, payload);
         } else if (templateId == TEMPLATE_REACHED_TARGET) {
             _validateAndEmitReachedTarget(tocId, payload);
+        } else if (templateId == TEMPLATE_TOUCHED_BOTH) {
+            _validateAndEmitTouchedBoth(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -191,6 +208,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveRange(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_REACHED_TARGET) {
             outcome = _resolveReachedTarget(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_TOUCHED_BOTH) {
+            outcome = _resolveTouchedBoth(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -424,6 +443,84 @@ contract PythPriceResolverV2 is ITOCResolver {
 
         price = _normalizePrice(priceData.price, priceData.expo);
         publishTime = priceData.publishTime;
+    }
+
+    function _validateAndEmitTouchedBoth(uint256 tocId, bytes calldata payload) internal {
+        TouchedBothPayload memory p = abi.decode(payload, (TouchedBothPayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit TouchedBothTOCCreated(tocId, p.priceId, p.targetA, p.targetB, p.deadline);
+    }
+
+    function _resolveTouchedBoth(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        TouchedBothPayload memory p = abi.decode(_tocPayloads[tocId], (TouchedBothPayload));
+
+        // Must be at or after deadline
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        // Decode multiple price updates
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+        if (updates.length == 0) {
+            revert InvalidProofArray();
+        }
+
+        // Update Pyth with all proofs
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Check if both targets were touched
+        bool touchedA = false;
+        bool touchedB = false;
+        int64 lastPrice = 0;
+        uint256 lastPublishTime = 0;
+
+        for (uint256 i = 0; i < updates.length; i++) {
+            // Decode the price feed from the update
+            (PythStructs.PriceFeed memory priceFeed,) = abi.decode(updates[i], (PythStructs.PriceFeed, uint64));
+
+            // Verify this is the correct price ID
+            if (priceFeed.id != p.priceId) {
+                continue;
+            }
+
+            // Validate timing - publishTime must be <= deadline
+            if (priceFeed.price.publishTime > p.deadline) {
+                revert PriceAfterDeadline(priceFeed.price.publishTime, p.deadline);
+            }
+
+            // Validate confidence
+            _checkConfidence(priceFeed.price.conf, priceFeed.price.price);
+
+            // Normalize price
+            int64 normalizedPrice = _normalizePrice(priceFeed.price.price, priceFeed.price.expo);
+
+            // Check if this proof shows targetA was reached (>= targetA)
+            if (normalizedPrice >= p.targetA) {
+                touchedA = true;
+            }
+
+            // Check if this proof shows targetB was reached (<= targetB)
+            if (normalizedPrice <= p.targetB) {
+                touchedB = true;
+            }
+
+            // Track last price for event
+            lastPrice = normalizedPrice;
+            lastPublishTime = priceFeed.price.publishTime;
+        }
+
+        // Return true only if BOTH targets were touched
+        bool outcome = touchedA && touchedB;
+
+        emit TOCResolved(tocId, TEMPLATE_TOUCHED_BOTH, outcome, lastPrice, lastPublishTime);
+        return outcome;
     }
 
     // ============ Receive ============
