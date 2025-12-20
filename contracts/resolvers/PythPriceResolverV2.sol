@@ -51,6 +51,33 @@ contract PythPriceResolverV2 is ITOCResolver {
     mapping(uint256 => uint32) private _tocTemplates;
     mapping(uint256 => bytes) private _tocPayloads;
 
+    // ============ Events ============
+
+    event SnapshotTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        int64 threshold,
+        bool isAbove,
+        uint256 deadline
+    );
+
+    event TOCResolved(
+        uint256 indexed tocId,
+        uint32 indexed templateId,
+        bool outcome,
+        int64 priceUsed,
+        uint256 publishTime
+    );
+
+    // ============ Structs ============
+
+    struct SnapshotPayload {
+        bytes32 priceId;
+        uint256 deadline;
+        int64 threshold;
+        bool isAbove;
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -99,21 +126,36 @@ contract PythPriceResolverV2 is ITOCResolver {
         if (templateId == TEMPLATE_NONE || templateId >= TEMPLATE_COUNT) {
             revert InvalidTemplate(templateId);
         }
+
         _tocTemplates[tocId] = templateId;
         _tocPayloads[tocId] = payload;
+
+        // Validate and emit events based on template
+        if (templateId == TEMPLATE_SNAPSHOT) {
+            _validateAndEmitSnapshot(tocId, payload);
+        }
+
         return TOCState.ACTIVE;
     }
 
     function resolveToc(
         uint256 tocId,
         address,
-        bytes calldata
+        bytes calldata pythUpdateData
     ) external onlyRegistry returns (bytes memory result) {
-        if (_tocTemplates[tocId] == TEMPLATE_NONE) {
+        uint32 templateId = _tocTemplates[tocId];
+        if (templateId == TEMPLATE_NONE) {
             revert TocNotManaged(tocId);
         }
-        // Stub - will be implemented per template
-        return TOCResultCodec.encodeBoolean(false);
+
+        bool outcome;
+        if (templateId == TEMPLATE_SNAPSHOT) {
+            outcome = _resolveSnapshot(tocId, pythUpdateData);
+        } else {
+            revert InvalidTemplate(templateId);
+        }
+
+        return TOCResultCodec.encodeBoolean(outcome);
     }
 
     function getTocDetails(
@@ -139,6 +181,105 @@ contract PythPriceResolverV2 is ITOCResolver {
 
     function getTemplateAnswerType(uint32) external pure returns (AnswerType) {
         return AnswerType.BOOLEAN;
+    }
+
+    // ============ Internal Functions ============
+
+    function _validateAndEmitSnapshot(uint256 tocId, bytes calldata payload) internal {
+        SnapshotPayload memory p = abi.decode(payload, (SnapshotPayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit SnapshotTOCCreated(tocId, p.priceId, p.threshold, p.isAbove, p.deadline);
+    }
+
+    function _resolveSnapshot(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        SnapshotPayload memory p = abi.decode(_tocPayloads[tocId], (SnapshotPayload));
+
+        // Must be at or after deadline
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        // Get and validate price
+        (int64 price, uint256 publishTime) = _getPriceAtDeadline(
+            p.priceId,
+            p.deadline,
+            pythUpdateData
+        );
+
+        // Check condition
+        bool outcome;
+        if (p.isAbove) {
+            outcome = price > p.threshold;
+        } else {
+            outcome = price < p.threshold;
+        }
+
+        emit TOCResolved(tocId, TEMPLATE_SNAPSHOT, outcome, price, publishTime);
+        return outcome;
+    }
+
+    function _getPriceAtDeadline(
+        bytes32 priceId,
+        uint256 deadline,
+        bytes calldata pythUpdateData
+    ) internal returns (int64 price, uint256 publishTime) {
+        // Decode update data array
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        // Update Pyth
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Get price
+        PythStructs.Price memory priceData = pyth.getPriceNoOlderThan(
+            priceId,
+            3600 // Allow fetching recent price
+        );
+
+        // Validate timing - must be within 1 second of deadline
+        if (priceData.publishTime < deadline || priceData.publishTime > deadline + POINT_IN_TIME_TOLERANCE) {
+            revert PriceNotNearDeadline(priceData.publishTime, deadline);
+        }
+
+        // Validate confidence (must be < 1% of price)
+        _checkConfidence(priceData.conf, priceData.price);
+
+        // Normalize to 8 decimals
+        price = _normalizePrice(priceData.price, priceData.expo);
+        publishTime = priceData.publishTime;
+    }
+
+    function _checkConfidence(uint64 conf, int64 price) internal pure {
+        // conf * 100 > |price| means conf > 1% of price
+        int64 absPrice = price < 0 ? -price : price;
+        if (conf * 100 > uint64(absPrice)) {
+            revert ConfidenceTooWide(conf, price);
+        }
+    }
+
+    function _normalizePrice(int64 price, int32 expo) internal pure returns (int64) {
+        // Normalize to 8 decimals (PRICE_DECIMALS = 8, meaning 10^-8)
+        // Pyth uses negative exponents, e.g., expo=-8 means price * 10^-8
+        if (expo == -PRICE_DECIMALS) {
+            // Already normalized (e.g., expo = -8 for USD pairs)
+            return price;
+        } else if (expo < -PRICE_DECIMALS) {
+            // expo is more negative, need to divide
+            // e.g., expo=-10, target=-8, so divide by 10^2
+            int32 diff = -PRICE_DECIMALS - expo; // diff = -8 - (-10) = 2
+            return price / int64(int256(10 ** uint32(diff)));
+        } else {
+            // expo is less negative (or positive), need to multiply
+            // e.g., expo=-6, target=-8, so multiply by 10^2
+            int32 diff = expo - (-PRICE_DECIMALS); // diff = -6 - (-8) = 2
+            return price * int64(int256(10 ** uint32(diff)));
+        }
     }
 
     // ============ Receive ============
