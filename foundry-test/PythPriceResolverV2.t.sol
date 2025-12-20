@@ -541,5 +541,141 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(reverted, "Should revert with invalid bounds");
     }
 
+    // ============ Template 3: Reached Target Tests ============
+
+    function test_ResolveReachedTargetAbove_Yes() public {
+        uint256 deadline = block.timestamp + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000), // target: $100,000
+            true // isAbove
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            3, // TEMPLATE_REACHED_TARGET
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Price hit $101,000 on day 3 (before deadline)
+        uint256 hitTime = block.timestamp + 3 days;
+        vm.warp(hitTime);
+
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(BTC_USD, int64(101000_00000000), uint64(100_00000000), int32(-8), uint64(hitTime));
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertTrue(result, "Should be true - target was reached before deadline");
+    }
+
+    function test_ResolveReachedTargetAbove_No() public {
+        uint256 deadline = block.timestamp + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000), // target: $100,000
+            true // isAbove
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            3,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp past deadline
+        vm.warp(deadline + 1);
+
+        // Price at deadline was only $95,000 (never reached target)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(BTC_USD, int64(95000_00000000), uint64(100_00000000), int32(-8), uint64(deadline));
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+
+        // For NO resolution, we just need to be past deadline
+        // The resolver should accept this and return false
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertFalse(result, "Should be false - target never reached");
+    }
+
+    function test_ResolveReachedTargetBelow_Yes() public {
+        uint256 deadline = block.timestamp + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(90000_00000000), // target: $90,000
+            false // isAbove = false means must go below
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            3,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Price dropped to $89,000 on day 2
+        uint256 hitTime = block.timestamp + 2 days;
+        vm.warp(hitTime);
+
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(BTC_USD, int64(89000_00000000), uint64(100_00000000), int32(-8), uint64(hitTime));
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertTrue(result, "Should be true - dropped below target");
+    }
+
+    function test_RevertReachedTargetPriceAfterDeadline() public {
+        uint256 deadline = block.timestamp + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000),
+            true
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            3,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        vm.warp(deadline + 1 days);
+
+        // Try to use a price from after deadline
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(BTC_USD, int64(101000_00000000), uint64(100_00000000), int32(-8), uint64(deadline + 1 days));
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+
+        bool reverted = false;
+        try registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates)) {
+            // Should not reach
+        } catch {
+            reverted = true;
+        }
+        assertTrue(reverted, "Should revert - price after deadline");
+    }
+
     receive() external payable {}
 }

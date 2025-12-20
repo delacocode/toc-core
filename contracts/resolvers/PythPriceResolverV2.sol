@@ -70,6 +70,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 deadline
     );
 
+    event ReachedTargetTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        int64 target,
+        bool isAbove,
+        uint256 deadline
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -93,6 +101,13 @@ contract PythPriceResolverV2 is ITOCResolver {
         int64 lowerBound;
         int64 upperBound;
         bool isInside;
+    }
+
+    struct ReachedTargetPayload {
+        bytes32 priceId;
+        uint256 deadline;
+        int64 target;
+        bool isAbove;
     }
 
     // ============ Errors ============
@@ -152,6 +167,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitSnapshot(tocId, payload);
         } else if (templateId == TEMPLATE_RANGE) {
             _validateAndEmitRange(tocId, payload);
+        } else if (templateId == TEMPLATE_REACHED_TARGET) {
+            _validateAndEmitReachedTarget(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -172,6 +189,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveSnapshot(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_RANGE) {
             outcome = _resolveRange(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_REACHED_TARGET) {
+            outcome = _resolveReachedTarget(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -334,6 +353,77 @@ contract PythPriceResolverV2 is ITOCResolver {
 
         emit TOCResolved(tocId, TEMPLATE_RANGE, outcome, price, publishTime);
         return outcome;
+    }
+
+    function _validateAndEmitReachedTarget(uint256 tocId, bytes calldata payload) internal {
+        ReachedTargetPayload memory p = abi.decode(payload, (ReachedTargetPayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit ReachedTargetTOCCreated(tocId, p.priceId, p.target, p.isAbove, p.deadline);
+    }
+
+    function _resolveReachedTarget(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        ReachedTargetPayload memory p = abi.decode(_tocPayloads[tocId], (ReachedTargetPayload));
+
+        (int64 price, uint256 publishTime) = _getPriceBeforeDeadline(
+            p.priceId,
+            p.deadline,
+            pythUpdateData
+        );
+
+        // Check if target was reached
+        bool reached;
+        if (p.isAbove) {
+            reached = price >= p.target;
+        } else {
+            reached = price <= p.target;
+        }
+
+        // If reached, resolve YES
+        if (reached) {
+            emit TOCResolved(tocId, TEMPLATE_REACHED_TARGET, true, price, publishTime);
+            return true;
+        }
+
+        // If not reached and deadline passed, resolve NO
+        if (block.timestamp >= p.deadline) {
+            emit TOCResolved(tocId, TEMPLATE_REACHED_TARGET, false, price, publishTime);
+            return false;
+        }
+
+        // Not reached and deadline not passed - can't resolve yet
+        revert DeadlineNotReached(p.deadline, block.timestamp);
+    }
+
+    function _getPriceBeforeDeadline(
+        bytes32 priceId,
+        uint256 deadline,
+        bytes calldata pythUpdateData
+    ) internal returns (int64 price, uint256 publishTime) {
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        PythStructs.Price memory priceData = pyth.getPriceNoOlderThan(
+            priceId,
+            3600
+        );
+
+        // For "before deadline" templates, publishTime must be <= deadline
+        if (priceData.publishTime > deadline) {
+            revert PriceAfterDeadline(priceData.publishTime, deadline);
+        }
+
+        _checkConfidence(priceData.conf, priceData.price);
+
+        price = _normalizePrice(priceData.price, priceData.expo);
+        publishTime = priceData.publishTime;
     }
 
     // ============ Receive ============
