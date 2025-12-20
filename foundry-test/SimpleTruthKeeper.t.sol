@@ -255,4 +255,60 @@ contract SimpleTruthKeeperTest is Test {
         vm.expectRevert(SimpleTruthKeeper.ZeroAddress.selector);
         tk.setRegistry(address(0));
     }
+
+    // ============ onTocAssigned Tests ============
+
+    function test_onTocAssigned_approvesWhenCalledByRegistry() public {
+        vm.prank(owner);
+        tk.setResolverAllowed(resolver1, true);
+
+        vm.prank(registry);
+        TKApprovalResponse response = tk.onTocAssigned(
+            1, // tocId
+            resolver1,
+            0,
+            creator,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            48 hours,
+            24 hours
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.APPROVE));
+    }
+
+    function test_onTocAssigned_revertsWhenNotRegistry() public {
+        vm.prank(owner);
+        tk.setResolverAllowed(resolver1, true);
+
+        vm.prank(creator); // Not registry
+        vm.expectRevert(SimpleTruthKeeper.OnlyRegistry.selector);
+        tk.onTocAssigned(
+            1,
+            resolver1,
+            0,
+            creator,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            48 hours,
+            24 hours
+        );
+    }
+
+    function test_onTocAssigned_rejectsSoftWhenNotAllowed() public {
+        vm.prank(registry);
+        TKApprovalResponse response = tk.onTocAssigned(
+            1,
+            resolver1, // Not allowed
+            0,
+            creator,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            48 hours,
+            24 hours
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.REJECT_SOFT));
+    }
 }
