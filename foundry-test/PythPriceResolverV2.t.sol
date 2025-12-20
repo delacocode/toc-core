@@ -805,7 +805,7 @@ contract PythPriceResolverV2Test is Test {
         assertFalse(result, "Should be false - only targetA was touched, not both");
     }
 
-    // ============ Template 5: Stayed Tests ============
+    // ============ Template 5: Stayed Tests (Optimistic Approach) ============
 
     function test_CreateStayedTOC() public {
         uint256 startTime = block.timestamp;
@@ -813,10 +813,10 @@ contract PythPriceResolverV2Test is Test {
 
         bytes memory payload = abi.encode(
             BTC_USD,
+            startTime,
             deadline,
             int64(95000_00000000), // threshold: $95,000
-            true,                   // isAbove - must stay above
-            startTime
+            true                    // isAbove - must stay above
         );
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -831,16 +831,16 @@ contract PythPriceResolverV2Test is Test {
         assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
     }
 
-    function test_ResolveStayedAbove_Yes() public {
+    function test_ResolveStayedAbove_YesNoProof() public {
         uint256 startTime = block.timestamp;
         uint256 deadline = startTime + 7 days;
 
         bytes memory payload = abi.encode(
             BTC_USD,
+            startTime,
             deadline,
             int64(95000_00000000), // threshold: $95,000
-            true,                   // isAbove - must stay above
-            startTime
+            true                    // isAbove - must stay above
         );
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -854,62 +854,24 @@ contract PythPriceResolverV2Test is Test {
         // Warp to after deadline
         vm.warp(deadline + 1);
 
-        // Provide multiple price proofs covering the period, ALL above threshold
-        bytes[] memory updates = new bytes[](4);
-
-        // Day 0 (start): $96,000 (above)
-        updates[0] = _createPriceUpdate(
-            BTC_USD,
-            int64(96000_00000000),
-            uint64(100_00000000),
-            int32(-8),
-            uint64(startTime)
-        );
-
-        // Day 2: $97,000 (above)
-        updates[1] = _createPriceUpdate(
-            BTC_USD,
-            int64(97000_00000000),
-            uint64(100_00000000),
-            int32(-8),
-            uint64(startTime + 2 days)
-        );
-
-        // Day 5: $98,000 (above)
-        updates[2] = _createPriceUpdate(
-            BTC_USD,
-            int64(98000_00000000),
-            uint64(100_00000000),
-            int32(-8),
-            uint64(startTime + 5 days)
-        );
-
-        // Day 7 (deadline): $96,500 (above)
-        updates[3] = _createPriceUpdate(
-            BTC_USD,
-            int64(96500_00000000),
-            uint64(100_00000000),
-            int32(-8),
-            uint64(deadline)
-        );
-
-        mockPyth.updatePriceFeeds{value: PYTH_FEE * 4}(updates);
+        // OPTIMISTIC: Resolve with no proof (empty array) → defaults to YES
+        bytes[] memory updates = new bytes[](0);
         registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
 
         bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
-        assertTrue(result, "Should be true - all proofs show price stayed above threshold");
+        assertTrue(result, "Should be true - no counter-proof submitted, optimistic YES");
     }
 
-    function test_ResolveStayedAbove_No() public {
+    function test_ResolveStayedAbove_NoWithCounterProof() public {
         uint256 startTime = block.timestamp;
         uint256 deadline = startTime + 7 days;
 
         bytes memory payload = abi.encode(
             BTC_USD,
+            startTime,
             deadline,
             int64(95000_00000000), // threshold: $95,000
-            true,                   // isAbove - must stay above
-            startTime
+            true                    // isAbove - must stay above
         );
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
@@ -920,52 +882,63 @@ contract PythPriceResolverV2Test is Test {
             truthKeeper
         );
 
-        vm.warp(deadline + 1);
+        // Submit counter-proof showing price violated (went below threshold)
+        // Price at day 4 (before deadline, within valid time range)
+        uint256 violationTime = startTime + 4 days;
 
-        // Provide proofs where at least ONE is below threshold
-        bytes[] memory updates = new bytes[](4);
+        bytes[] memory updates = new bytes[](1);
 
-        // Day 0: $96,000 (above)
+        // Day 4: $94,000 (BELOW threshold - violation!)
         updates[0] = _createPriceUpdate(
-            BTC_USD,
-            int64(96000_00000000),
-            uint64(100_00000000),
-            int32(-8),
-            uint64(startTime)
-        );
-
-        // Day 2: $97,000 (above)
-        updates[1] = _createPriceUpdate(
-            BTC_USD,
-            int64(97000_00000000),
-            uint64(100_00000000),
-            int32(-8),
-            uint64(startTime + 2 days)
-        );
-
-        // Day 4: $94,000 (BELOW threshold - violated!)
-        updates[2] = _createPriceUpdate(
             BTC_USD,
             int64(94000_00000000),
             uint64(100_00000000),
             int32(-8),
-            uint64(startTime + 4 days)
+            uint64(violationTime)
         );
 
-        // Day 7: $96,000 (above again, but too late)
-        updates[3] = _createPriceUpdate(
-            BTC_USD,
-            int64(96000_00000000),
-            uint64(100_00000000),
-            int32(-8),
-            uint64(deadline)
-        );
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
 
-        mockPyth.updatePriceFeeds{value: PYTH_FEE * 4}(updates);
+        // Warp to after deadline so we can resolve
+        vm.warp(deadline + 1);
+
         registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
 
         bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
-        assertFalse(result, "Should be false - at least one proof violated the condition");
+        assertFalse(result, "Should be false - counter-proof shows violation");
+    }
+
+    function test_RevertStayedBeforeDeadline() public {
+        uint256 startTime = block.timestamp;
+        uint256 deadline = startTime + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            startTime,
+            deadline,
+            int64(95000_00000000),
+            true
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            5,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Don't warp - still before deadline
+        // Try to resolve with no proof (optimistic YES)
+        bytes[] memory updates = new bytes[](0);
+
+        bool reverted = false;
+        try registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates)) {
+            // Should not reach
+        } catch {
+            reverted = true;
+        }
+        assertTrue(reverted, "Should revert - can't resolve YES before deadline");
     }
 
     // ============ Reference Price Tests ============

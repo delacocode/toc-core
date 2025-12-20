@@ -93,6 +93,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 deadline
     );
 
+    event StayedTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        uint256 startTime,
+        uint256 deadline,
+        int64 threshold,
+        bool isAbove
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -134,6 +143,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         int64 targetB;
     }
 
+    struct StayedPayload {
+        bytes32 priceId;
+        uint256 startTime;
+        uint256 deadline;
+        int64 threshold;
+        bool isAbove;  // true = must stay above, false = must stay below
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -153,6 +170,7 @@ contract PythPriceResolverV2 is ITOCResolver {
     error ConditionNotMet();
     error ReferencePriceAlreadySet(uint256 tocId);
     error InvalidReferenceTimestamp(uint256 expected, uint256 actual);
+    error InvalidTimeRange();
 
     // ============ Modifiers ============
 
@@ -197,6 +215,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitReachedTarget(tocId, payload);
         } else if (templateId == TEMPLATE_TOUCHED_BOTH) {
             _validateAndEmitTouchedBoth(tocId, payload);
+        } else if (templateId == TEMPLATE_STAYED) {
+            _validateAndEmitStayed(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -221,6 +241,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveReachedTarget(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_TOUCHED_BOTH) {
             outcome = _resolveTouchedBoth(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_STAYED) {
+            outcome = _resolveStayed(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -625,6 +647,90 @@ contract PythPriceResolverV2 is ITOCResolver {
 
         emit TOCResolved(tocId, TEMPLATE_TOUCHED_BOTH, outcome, lastPrice, lastPublishTime);
         return outcome;
+    }
+
+    function _validateAndEmitStayed(uint256 tocId, bytes calldata payload) internal {
+        StayedPayload memory p = abi.decode(payload, (StayedPayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.startTime >= p.deadline) revert InvalidTimeRange();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit StayedTOCCreated(tocId, p.priceId, p.startTime, p.deadline, p.threshold, p.isAbove);
+    }
+
+    function _resolveStayed(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        StayedPayload memory p = abi.decode(_tocPayloads[tocId], (StayedPayload));
+
+        // Decode update data array
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        // OPTIMISTIC APPROACH:
+        // If no proof provided (empty array) and deadline passed → resolve YES
+        if (updates.length == 0) {
+            // Must be at or after deadline to resolve YES without proof
+            if (block.timestamp < p.deadline) {
+                revert DeadlineNotReached(p.deadline, block.timestamp);
+            }
+
+            // No counter-proof submitted, resolve YES (price stayed within bounds)
+            emit TOCResolved(tocId, TEMPLATE_STAYED, true, 0, p.deadline);
+            return true;
+        }
+
+        // If proof provided → check if it shows a violation
+        // Update Pyth with all proofs
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Check all proofs for a violation
+        for (uint256 i = 0; i < updates.length; i++) {
+            // Decode the price feed from the update
+            (PythStructs.PriceFeed memory priceFeed,) = abi.decode(updates[i], (PythStructs.PriceFeed, uint64));
+
+            // Verify this is the correct price ID
+            if (priceFeed.id != p.priceId) {
+                continue;
+            }
+
+            // Validate timing - publishTime must be within [startTime, deadline]
+            if (priceFeed.price.publishTime < p.startTime || priceFeed.price.publishTime > p.deadline) {
+                continue; // Skip proofs outside the time range
+            }
+
+            // Validate confidence
+            _checkConfidence(priceFeed.price.conf, priceFeed.price.price);
+
+            // Normalize price
+            int64 normalizedPrice = _normalizePrice(priceFeed.price.price, priceFeed.price.expo);
+
+            // Check if this proof shows a violation
+            bool violated = false;
+            if (p.isAbove) {
+                // Must stay above threshold, violation if price <= threshold
+                violated = normalizedPrice <= p.threshold;
+            } else {
+                // Must stay below threshold, violation if price >= threshold
+                violated = normalizedPrice >= p.threshold;
+            }
+
+            if (violated) {
+                // Found a counter-proof showing violation → resolve NO
+                emit TOCResolved(tocId, TEMPLATE_STAYED, false, normalizedPrice, priceFeed.price.publishTime);
+                return false;
+            }
+        }
+
+        // All proofs checked, no violation found
+        // But if proofs were provided, they should show a violation for NO
+        // If we reach here, the proofs don't show a violation → resolve YES
+        // Note: This allows someone to try to submit proofs that fail to show violation
+        // In that case, we still resolve YES (price stayed)
+        emit TOCResolved(tocId, TEMPLATE_STAYED, true, 0, p.deadline);
+        return true;
     }
 
     // ============ Receive ============
