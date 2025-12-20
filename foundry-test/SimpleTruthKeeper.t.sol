@@ -168,4 +168,91 @@ contract SimpleTruthKeeperTest is Test {
         assertEq(minDispute, 2 hours);
         assertEq(minTk, 8 hours);
     }
+
+    // ============ Owner Function Tests ============
+
+    function test_setDefaultMinWindows_updatesDefaults() public {
+        vm.prank(owner);
+        tk.setDefaultMinWindows(2 hours, 8 hours);
+
+        assertEq(tk.defaultMinDisputeWindow(), 2 hours);
+        assertEq(tk.defaultMinTruthKeeperWindow(), 8 hours);
+    }
+
+    function test_setDefaultMinWindows_revertsIfNotOwner() public {
+        vm.prank(creator);
+        vm.expectRevert(SimpleTruthKeeper.OnlyOwner.selector);
+        tk.setDefaultMinWindows(2 hours, 8 hours);
+    }
+
+    function test_setResolversAllowed_batchAllows() public {
+        address[] memory resolvers = new address[](2);
+        resolvers[0] = resolver1;
+        resolvers[1] = resolver2;
+
+        vm.prank(owner);
+        tk.setResolversAllowed(resolvers, true);
+
+        assertTrue(tk.allowedResolvers(resolver1));
+        assertTrue(tk.allowedResolvers(resolver2));
+    }
+
+    function test_setResolversAllowed_batchDisallows() public {
+        address[] memory resolvers = new address[](2);
+        resolvers[0] = resolver1;
+        resolvers[1] = resolver2;
+
+        vm.startPrank(owner);
+        tk.setResolversAllowed(resolvers, true);
+        tk.setResolversAllowed(resolvers, false);
+        vm.stopPrank();
+
+        assertFalse(tk.allowedResolvers(resolver1));
+        assertFalse(tk.allowedResolvers(resolver2));
+    }
+
+    function test_setResolversAllowed_revertsIfNotOwner() public {
+        address[] memory resolvers = new address[](1);
+        resolvers[0] = resolver1;
+
+        vm.prank(creator);
+        vm.expectRevert(SimpleTruthKeeper.OnlyOwner.selector);
+        tk.setResolversAllowed(resolvers, true);
+    }
+
+    function test_transferOwnership_transfersOwner() public {
+        address newOwner = address(0x999);
+
+        vm.prank(owner);
+        tk.transferOwnership(newOwner);
+
+        assertEq(tk.owner(), newOwner);
+    }
+
+    function test_transferOwnership_revertsOnZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(SimpleTruthKeeper.ZeroAddress.selector);
+        tk.transferOwnership(address(0));
+    }
+
+    function test_transferOwnership_revertsIfNotOwner() public {
+        vm.prank(creator);
+        vm.expectRevert(SimpleTruthKeeper.OnlyOwner.selector);
+        tk.transferOwnership(creator);
+    }
+
+    function test_setRegistry_updatesRegistry() public {
+        address newRegistry = address(0x888);
+
+        vm.prank(owner);
+        tk.setRegistry(newRegistry);
+
+        assertEq(tk.registry(), newRegistry);
+    }
+
+    function test_setRegistry_revertsOnZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(SimpleTruthKeeper.ZeroAddress.selector);
+        tk.setRegistry(address(0));
+    }
 }

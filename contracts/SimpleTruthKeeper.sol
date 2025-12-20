@@ -180,5 +180,42 @@ contract SimpleTruthKeeper is ITruthKeeper {
         emit ResolverMinWindowsChanged(resolver, disputeWindow, tkWindow);
     }
 
+    /// @notice Set global default minimum windows
+    /// @param disputeWindow Default minimum dispute window
+    /// @param tkWindow Default minimum TK window
+    function setDefaultMinWindows(uint32 disputeWindow, uint32 tkWindow) external onlyOwner {
+        defaultMinDisputeWindow = disputeWindow;
+        defaultMinTruthKeeperWindow = tkWindow;
+        emit DefaultMinWindowsChanged(disputeWindow, tkWindow);
+    }
+
+    /// @notice Batch add or remove resolvers from the allowlist
+    /// @param resolvers Array of resolver addresses
+    /// @param allowed Whether to allow the resolvers
+    function setResolversAllowed(address[] calldata resolvers, bool allowed) external onlyOwner {
+        for (uint256 i = 0; i < resolvers.length; i++) {
+            allowedResolvers[resolvers[i]] = allowed;
+            emit ResolverAllowedChanged(resolvers[i], allowed);
+        }
+    }
+
+    /// @notice Transfer ownership to a new address
+    /// @param newOwner The new owner address
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+        address oldOwner = owner;
+        owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+
+    /// @notice Update registry address
+    /// @param newRegistry The new registry address
+    function setRegistry(address newRegistry) external onlyOwner {
+        if (newRegistry == address(0)) revert ZeroAddress();
+        address oldRegistry = registry;
+        registry = newRegistry;
+        emit RegistryUpdated(oldRegistry, newRegistry);
+    }
+
     receive() external payable {}
 }
