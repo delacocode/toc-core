@@ -44,4 +44,71 @@ contract SimpleTruthKeeperTest is Test {
         vm.expectRevert(SimpleTruthKeeper.ZeroAddress.selector);
         new SimpleTruthKeeper(registry, address(0), DEFAULT_DISPUTE_WINDOW, DEFAULT_TK_WINDOW);
     }
+
+    // ============ canAcceptToc Tests ============
+
+    function test_canAcceptToc_rejectsSoftWhenResolverNotAllowed() public view {
+        TKApprovalResponse response = tk.canAcceptToc(
+            resolver1,
+            0, // templateId
+            creator,
+            "", // payload
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            48 hours, // escalationWindow
+            24 hours  // postResolutionWindow
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.REJECT_SOFT));
+    }
+
+    function test_canAcceptToc_approvesWhenAllConditionsMet() public {
+        vm.prank(owner);
+        tk.setResolverAllowed(resolver1, true);
+
+        TKApprovalResponse response = tk.canAcceptToc(
+            resolver1,
+            0,
+            creator,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            DEFAULT_TK_WINDOW,
+            48 hours,
+            24 hours
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.APPROVE));
+    }
+
+    function test_canAcceptToc_rejectsSoftWhenDisputeWindowTooShort() public {
+        vm.prank(owner);
+        tk.setResolverAllowed(resolver1, true);
+
+        TKApprovalResponse response = tk.canAcceptToc(
+            resolver1,
+            0,
+            creator,
+            "",
+            30 minutes, // Less than 1 hour minimum
+            DEFAULT_TK_WINDOW,
+            48 hours,
+            24 hours
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.REJECT_SOFT));
+    }
+
+    function test_canAcceptToc_rejectsSoftWhenTkWindowTooShort() public {
+        vm.prank(owner);
+        tk.setResolverAllowed(resolver1, true);
+
+        TKApprovalResponse response = tk.canAcceptToc(
+            resolver1,
+            0,
+            creator,
+            "",
+            DEFAULT_DISPUTE_WINDOW,
+            2 hours, // Less than 4 hour minimum
+            48 hours,
+            24 hours
+        );
+        assertEq(uint8(response), uint8(TKApprovalResponse.REJECT_SOFT));
+    }
 }

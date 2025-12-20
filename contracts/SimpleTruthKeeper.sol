@@ -67,32 +67,102 @@ contract SimpleTruthKeeper is ITruthKeeper {
         defaultMinTruthKeeperWindow = _defaultMinTruthKeeperWindow;
     }
 
-    // Placeholder for ITruthKeeper - will implement in next task
+    // ============ ITruthKeeper Implementation ============
+
+    /// @inheritdoc ITruthKeeper
     function canAcceptToc(
-        address,
-        uint32,
-        address,
-        bytes calldata,
-        uint32,
-        uint32,
-        uint32,
-        uint32
+        address resolver,
+        uint32 /* templateId */,
+        address /* creator */,
+        bytes calldata /* payload */,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow,
+        uint32 /* escalationWindow */,
+        uint32 /* postResolutionWindow */
     ) external view returns (TKApprovalResponse) {
-        return TKApprovalResponse.REJECT_SOFT;
+        return _evaluate(resolver, disputeWindow, truthKeeperWindow);
     }
 
+    /// @inheritdoc ITruthKeeper
     function onTocAssigned(
-        uint256,
-        address,
-        uint32,
-        address,
-        bytes calldata,
-        uint32,
-        uint32,
-        uint32,
-        uint32
+        uint256 /* tocId */,
+        address resolver,
+        uint32 /* templateId */,
+        address /* creator */,
+        bytes calldata /* payload */,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow,
+        uint32 /* escalationWindow */,
+        uint32 /* postResolutionWindow */
     ) external onlyRegistry returns (TKApprovalResponse) {
-        return TKApprovalResponse.REJECT_SOFT;
+        return _evaluate(resolver, disputeWindow, truthKeeperWindow);
+    }
+
+    // ============ Internal ============
+
+    /// @notice Evaluate if a TOC should be approved
+    /// @dev Returns APPROVE only if resolver is allowed AND time windows meet minimums
+    function _evaluate(
+        address resolver,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow
+    ) internal view returns (TKApprovalResponse) {
+        // Check resolver allowlist
+        if (!allowedResolvers[resolver]) {
+            return TKApprovalResponse.REJECT_SOFT;
+        }
+
+        // Get effective minimums (per-resolver override or global default)
+        (uint32 minDispute, uint32 minTk) = getEffectiveMinWindows(resolver);
+
+        // Check time windows
+        if (disputeWindow < minDispute) {
+            return TKApprovalResponse.REJECT_SOFT;
+        }
+        if (truthKeeperWindow < minTk) {
+            return TKApprovalResponse.REJECT_SOFT;
+        }
+
+        return TKApprovalResponse.APPROVE;
+    }
+
+    // ============ View Helpers ============
+
+    /// @notice Get effective minimum windows for a resolver
+    /// @param resolver The resolver address
+    /// @return minDisputeWindow The effective minimum dispute window
+    /// @return minTkWindow The effective minimum TK window
+    function getEffectiveMinWindows(address resolver)
+        public
+        view
+        returns (uint32 minDisputeWindow, uint32 minTkWindow)
+    {
+        minDisputeWindow = resolverMinDisputeWindow[resolver];
+        if (minDisputeWindow == 0) {
+            minDisputeWindow = defaultMinDisputeWindow;
+        }
+
+        minTkWindow = resolverMinTruthKeeperWindow[resolver];
+        if (minTkWindow == 0) {
+            minTkWindow = defaultMinTruthKeeperWindow;
+        }
+    }
+
+    /// @notice Check if a resolver is allowed
+    /// @param resolver The resolver address
+    /// @return allowed Whether the resolver is on the allowlist
+    function isResolverAllowed(address resolver) external view returns (bool allowed) {
+        return allowedResolvers[resolver];
+    }
+
+    // ============ Owner Functions ============
+
+    /// @notice Add or remove a resolver from the allowlist
+    /// @param resolver The resolver address
+    /// @param allowed Whether to allow the resolver
+    function setResolverAllowed(address resolver, bool allowed) external onlyOwner {
+        allowedResolvers[resolver] = allowed;
+        emit ResolverAllowedChanged(resolver, allowed);
     }
 
     receive() external payable {}
