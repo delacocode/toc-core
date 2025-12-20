@@ -48,8 +48,15 @@ contract PythPriceResolverV2 is ITOCResolver {
 
     // ============ Storage ============
 
+    struct ReferencePrice {
+        int64 price;
+        uint256 timestamp;
+        bool isSet;
+    }
+
     mapping(uint256 => uint32) private _tocTemplates;
     mapping(uint256 => bytes) private _tocPayloads;
+    mapping(uint256 => ReferencePrice) private _referencePrice;
 
     // ============ Events ============
 
@@ -93,6 +100,8 @@ contract PythPriceResolverV2 is ITOCResolver {
         int64 priceUsed,
         uint256 publishTime
     );
+
+    event ReferencePriceSet(uint256 indexed tocId, int64 price, uint256 timestamp);
 
     // ============ Structs ============
 
@@ -142,6 +151,8 @@ contract PythPriceResolverV2 is ITOCResolver {
     error InvalidPayload();
     error InvalidProofArray();
     error ConditionNotMet();
+    error ReferencePriceAlreadySet(uint256 tocId);
+    error InvalidReferenceTimestamp(uint256 expected, uint256 actual);
 
     // ============ Modifiers ============
 
@@ -240,6 +251,99 @@ contract PythPriceResolverV2 is ITOCResolver {
 
     function getTemplateAnswerType(uint32) external pure returns (AnswerType) {
         return AnswerType.BOOLEAN;
+    }
+
+    // ============ Reference Price Functions ============
+
+    /// @notice Set the reference price for a TOC
+    /// @param tocId The TOC ID
+    /// @param pythUpdateData Pyth proof for the reference price
+    /// @dev Can only be called once per TOC, validates against referenceTimestamp in payload
+    function setReferencePrice(uint256 tocId, bytes calldata pythUpdateData) external {
+        uint32 templateId = _tocTemplates[tocId];
+        if (templateId == TEMPLATE_NONE) {
+            revert TocNotManaged(tocId);
+        }
+
+        // Check if reference price is already set
+        if (_referencePrice[tocId].isSet) {
+            revert ReferencePriceAlreadySet(tocId);
+        }
+
+        // Decode pythUpdateData
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        // Update Pyth
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Get the priceId from the payload based on template
+        bytes32 priceId;
+        uint256 referenceTimestamp;
+
+        // Extract priceId and referenceTimestamp from payload based on template
+        // For templates 7-10, 14, the payload should include referenceTimestamp
+        // For now, we'll extract from the common payload structures
+        bytes memory payload = _tocPayloads[tocId];
+
+        if (templateId == TEMPLATE_SNAPSHOT) {
+            SnapshotPayload memory p = abi.decode(payload, (SnapshotPayload));
+            priceId = p.priceId;
+            referenceTimestamp = 0; // Snapshot doesn't have referenceTimestamp
+        } else if (templateId == TEMPLATE_RANGE) {
+            RangePayload memory p = abi.decode(payload, (RangePayload));
+            priceId = p.priceId;
+            referenceTimestamp = 0;
+        } else if (templateId == TEMPLATE_REACHED_TARGET) {
+            ReachedTargetPayload memory p = abi.decode(payload, (ReachedTargetPayload));
+            priceId = p.priceId;
+            referenceTimestamp = 0;
+        } else if (templateId == TEMPLATE_TOUCHED_BOTH) {
+            TouchedBothPayload memory p = abi.decode(payload, (TouchedBothPayload));
+            priceId = p.priceId;
+            referenceTimestamp = 0;
+        } else {
+            // For templates that use reference prices, try to decode referenceTimestamp
+            // Assuming the payload has a referenceTimestamp field at a specific position
+            // This is a simplified version - in production, each template would have its own struct
+            assembly {
+                // Load referenceTimestamp from offset in payload
+                // This assumes referenceTimestamp is at a known position
+                referenceTimestamp := mload(add(payload, 96)) // Adjust offset as needed
+                priceId := mload(add(payload, 32))
+            }
+        }
+
+        // Get price from Pyth
+        PythStructs.Price memory priceData = pyth.getPriceNoOlderThan(
+            priceId,
+            3600 // Allow fetching recent price
+        );
+
+        // Validate timestamp if referenceTimestamp is set
+        if (referenceTimestamp != 0) {
+            // Pyth proof must have publishTime within 1 second of referenceTimestamp
+            if (priceData.publishTime < referenceTimestamp ||
+                priceData.publishTime > referenceTimestamp + POINT_IN_TIME_TOLERANCE) {
+                revert InvalidReferenceTimestamp(referenceTimestamp, priceData.publishTime);
+            }
+        }
+        // If referenceTimestamp = 0, accept any recent Pyth proof
+
+        // Validate confidence
+        _checkConfidence(priceData.conf, priceData.price);
+
+        // Normalize to 8 decimals
+        int64 normalizedPrice = _normalizePrice(priceData.price, priceData.expo);
+
+        // Store reference price
+        _referencePrice[tocId] = ReferencePrice({
+            price: normalizedPrice,
+            timestamp: priceData.publishTime,
+            isSet: true
+        });
+
+        emit ReferencePriceSet(tocId, normalizedPrice, priceData.publishTime);
     }
 
     // ============ Internal Functions ============

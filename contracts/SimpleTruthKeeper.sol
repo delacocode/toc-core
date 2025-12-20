@@ -219,3 +219,4 @@ contract SimpleTruthKeeper is ITruthKeeper {
 
     receive() external payable {}
 }
+

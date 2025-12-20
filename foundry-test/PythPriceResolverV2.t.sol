@@ -805,5 +805,313 @@ contract PythPriceResolverV2Test is Test {
         assertFalse(result, "Should be false - only targetA was touched, not both");
     }
 
+    // ============ Template 5: Stayed Tests ============
+
+    function test_CreateStayedTOC() public {
+        uint256 startTime = block.timestamp;
+        uint256 deadline = startTime + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(95000_00000000), // threshold: $95,000
+            true,                   // isAbove - must stay above
+            startTime
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            5, // TEMPLATE_STAYED
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveStayedAbove_Yes() public {
+        uint256 startTime = block.timestamp;
+        uint256 deadline = startTime + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(95000_00000000), // threshold: $95,000
+            true,                   // isAbove - must stay above
+            startTime
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            5,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to after deadline
+        vm.warp(deadline + 1);
+
+        // Provide multiple price proofs covering the period, ALL above threshold
+        bytes[] memory updates = new bytes[](4);
+
+        // Day 0 (start): $96,000 (above)
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(startTime)
+        );
+
+        // Day 2: $97,000 (above)
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(97000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(startTime + 2 days)
+        );
+
+        // Day 5: $98,000 (above)
+        updates[2] = _createPriceUpdate(
+            BTC_USD,
+            int64(98000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(startTime + 5 days)
+        );
+
+        // Day 7 (deadline): $96,500 (above)
+        updates[3] = _createPriceUpdate(
+            BTC_USD,
+            int64(96500_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 4}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertTrue(result, "Should be true - all proofs show price stayed above threshold");
+    }
+
+    function test_ResolveStayedAbove_No() public {
+        uint256 startTime = block.timestamp;
+        uint256 deadline = startTime + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(95000_00000000), // threshold: $95,000
+            true,                   // isAbove - must stay above
+            startTime
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            5,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        vm.warp(deadline + 1);
+
+        // Provide proofs where at least ONE is below threshold
+        bytes[] memory updates = new bytes[](4);
+
+        // Day 0: $96,000 (above)
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(startTime)
+        );
+
+        // Day 2: $97,000 (above)
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(97000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(startTime + 2 days)
+        );
+
+        // Day 4: $94,000 (BELOW threshold - violated!)
+        updates[2] = _createPriceUpdate(
+            BTC_USD,
+            int64(94000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(startTime + 4 days)
+        );
+
+        // Day 7: $96,000 (above again, but too late)
+        updates[3] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 4}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertFalse(result, "Should be false - at least one proof violated the condition");
+    }
+
+    // ============ Reference Price Tests ============
+
+    function test_SetReferencePrice() public {
+        // Create a TOC
+        uint256 deadline = block.timestamp + 7 days;
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(95000_00000000),
+            true
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            1, // TEMPLATE_SNAPSHOT
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Create price update for reference price
+        uint256 refTime = block.timestamp;
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(94000_00000000), // Reference price: $94,000
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime)
+        );
+
+        // Update mock pyth first
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+
+        // Set reference price (anyone can call this)
+        resolver.setReferencePrice(tocId, _encodePriceUpdates(updates));
+
+        // Verify the reference price was set by attempting to set it again (should revert)
+        bool reverted = false;
+        try resolver.setReferencePrice(tocId, _encodePriceUpdates(updates)) {
+            // Should not reach
+        } catch {
+            reverted = true;
+        }
+        assertTrue(reverted, "Should revert when reference price already set");
+    }
+
+    function test_SetReferencePriceWithTimestamp() public {
+        // Create a TOC
+        uint256 deadline = block.timestamp + 7 days;
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(95000_00000000),
+            true
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            1,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // For templates with referenceTimestamp, the timestamp must match
+        // Since template 1 (Snapshot) doesn't have referenceTimestamp,
+        // it will accept any recent price
+        uint256 refTime = block.timestamp;
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(94000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        resolver.setReferencePrice(tocId, _encodePriceUpdates(updates));
+
+        // Success - reference price was set
+        // Verify by trying to set again
+        bool reverted = false;
+        try resolver.setReferencePrice(tocId, _encodePriceUpdates(updates)) {
+            // Should not reach
+        } catch {
+            reverted = true;
+        }
+        assertTrue(reverted, "Should revert when already set");
+    }
+
+    function test_RevertSetReferencePriceAlreadySet() public {
+        // Create a TOC
+        uint256 deadline = block.timestamp + 7 days;
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(95000_00000000),
+            true
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            1,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Set reference price first time
+        uint256 refTime = block.timestamp;
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(94000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        resolver.setReferencePrice(tocId, _encodePriceUpdates(updates));
+
+        // Try to set reference price again - should revert
+        bytes[] memory updates2 = new bytes[](1);
+        updates2[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(95000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime + 100)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates2);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PythPriceResolverV2.ReferencePriceAlreadySet.selector,
+                tocId
+            )
+        );
+        resolver.setReferencePrice(tocId, _encodePriceUpdates(updates2));
+    }
+
     receive() external payable {}
 }

@@ -286,15 +286,80 @@ ExtensiveResult memory res = registry.getExtensiveResultStrict(tocId);
 
 ---
 
+## TruthKeepers
+
+A TruthKeeper (TK) is a contract that validates and approves TOCs, and handles disputes. Every TOC must specify a TruthKeeper.
+
+### SimpleTruthKeeper (Recommended for Launch)
+
+`SimpleTruthKeeper` is the standard TK for initial deployments:
+
+**Features:**
+- Resolver allowlist - only approved resolvers get `TK_GUARANTEED` tier
+- Time window validation - enforces minimum dispute/TK windows
+- Per-resolver overrides - custom minimums for specific resolvers
+- Single owner model - can be set to multi-sig
+
+**Approval logic:**
+```
+IF resolver is on allowlist
+   AND disputeWindow >= minimum
+   AND truthKeeperWindow >= minimum
+THEN → APPROVE (TK_GUARANTEED tier)
+ELSE → REJECT_SOFT (RESOLVER tier)
+```
+
+### TK Approval Responses
+
+When a TOC is created, the TruthKeeper returns one of:
+
+| Response | Effect | Tier |
+|----------|--------|------|
+| `APPROVE` | TOC created with TK backing | `TK_GUARANTEED` or `SYSTEM` |
+| `REJECT_SOFT` | TOC created without TK backing | `RESOLVER` |
+| `REJECT_HARD` | TOC creation reverts | N/A |
+
+### Using SimpleTruthKeeper
+
+```solidity
+// Deploy SimpleTruthKeeper
+SimpleTruthKeeper tk = new SimpleTruthKeeper(
+    registryAddress,    // TOCRegistry address
+    ownerAddress,       // Who can configure
+    1 hours,            // Default min dispute window
+    4 hours             // Default min TK window
+);
+
+// Allow a resolver
+tk.setResolverAllowed(optimisticResolverAddress, true);
+
+// Optional: Set custom minimums for a resolver
+tk.setResolverMinWindows(
+    optimisticResolverAddress,
+    30 minutes,  // Custom min dispute window
+    2 hours      // Custom min TK window
+);
+```
+
+### Which TruthKeeper to Use
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Production launch | `SimpleTruthKeeper` with resolver allowlist |
+| Testing | `MockTruthKeeper` (always approves) |
+| Custom validation | Implement `ITruthKeeper` interface |
+
+---
+
 ## Accountability Tiers
 
-Every TOC has an accountability tier set at creation:
+Every TOC has an accountability tier set at creation based on TruthKeeper approval:
 
-| Tier | Meaning | Use For |
-|------|---------|---------|
-| `SYSTEM` | Maximum protocol backing | High-value settlements |
-| `TK_GUARANTEED` | TruthKeeper stakes reputation | Standard production use |
-| `RESOLVER` | No guarantees | Experiments, low-value |
+| Tier | Meaning | When Assigned |
+|------|---------|---------------|
+| `SYSTEM` | Maximum protocol backing | TK approved + SYSTEM resolver + whitelisted TK |
+| `TK_GUARANTEED` | TruthKeeper stakes reputation | TK approved |
+| `RESOLVER` | No guarantees | TK soft-rejected or didn't approve |
 
 Check tier when deciding trust level:
 
@@ -470,9 +535,15 @@ contract PredictionMarketExample {
 ## Next Steps
 
 1. **Copy `ITOCConsumer.sol`** to your project
-2. **Deploy or get addresses** for TOCRegistry, OptimisticResolver, and a TruthKeeper
-3. **Create markets** using `createTOC()` with appropriate payloads
-4. **Poll state** to determine when markets can settle
-5. **Read results** and distribute winnings
+2. **Deploy contracts:**
+   - TOCRegistry (or get existing address)
+   - OptimisticResolver (or get existing address)
+   - SimpleTruthKeeper (configure with your resolver allowlist)
+3. **Configure SimpleTruthKeeper:**
+   - Set resolver allowlist: `tk.setResolverAllowed(resolver, true)`
+   - Optionally set per-resolver time windows
+4. **Create markets** using `createTOC()` with appropriate payloads
+5. **Poll state** to determine when markets can settle
+6. **Read results** and distribute winnings
 
 For full TOC documentation, see the [GitBook docs](../gitbook/README.md).
