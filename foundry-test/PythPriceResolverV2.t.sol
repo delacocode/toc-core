@@ -2831,5 +2831,112 @@ contract PythPriceResolverV2Test is Test {
         assertFalse(result, "Should be false - neither target hit");
     }
 
+    // ============ getTocQuestion Gas Test ============
+
+    function test_GetTocQuestionGas() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Test Template 1 (Snapshot)
+        {
+            bytes memory payload = abi.encode(
+                BTC_USD,
+                deadline,
+                int64(100000_00000000),  // $100,000 threshold
+                true                      // isAbove
+            );
+
+            uint256 tocId = registry.createTOC{value: 0.001 ether}(
+                address(resolver),
+                1,  // TEMPLATE_SNAPSHOT
+                payload,
+                0, 0, 0, 0,
+                truthKeeper
+            );
+
+            uint256 gasBefore = gasleft();
+            string memory question = resolver.getTocQuestion(tocId);
+            uint256 gasUsed = gasBefore - gasleft();
+
+            console.log("Template 1 (Snapshot) Gas:", gasUsed);
+            console.log("Question:", question);
+        }
+
+        // Test Template 2 (Range)
+        {
+            bytes memory payload = abi.encode(
+                BTC_USD,
+                deadline,
+                int64(90000_00000000),   // lowerBound
+                int64(110000_00000000),  // upperBound
+                true                      // isInside
+            );
+
+            uint256 tocId = registry.createTOC{value: 0.001 ether}(
+                address(resolver),
+                2,  // TEMPLATE_RANGE
+                payload,
+                0, 0, 0, 0,
+                truthKeeper
+            );
+
+            uint256 gasBefore = gasleft();
+            string memory question = resolver.getTocQuestion(tocId);
+            uint256 gasUsed = gasBefore - gasleft();
+
+            console.log("Template 2 (Range) Gas:", gasUsed);
+            console.log("Question:", question);
+        }
+
+        // Test Template 11 (Asset Compare)
+        {
+            bytes memory payload = abi.encode(
+                BTC_USD,
+                ETH_USD,
+                deadline,
+                true  // aGreater
+            );
+
+            uint256 tocId = registry.createTOC{value: 0.001 ether}(
+                address(resolver),
+                11,  // TEMPLATE_ASSET_COMPARE
+                payload,
+                0, 0, 0, 0,
+                truthKeeper
+            );
+
+            uint256 gasBefore = gasleft();
+            string memory question = resolver.getTocQuestion(tocId);
+            uint256 gasUsed = gasBefore - gasleft();
+
+            console.log("Template 11 (Asset Compare) Gas:", gasUsed);
+            console.log("Question:", question);
+        }
+
+        // Test Template 3 (Reached Target)
+        {
+            bytes memory payload = abi.encode(
+                BTC_USD,
+                deadline,
+                int64(100000_00000000),  // target
+                true                      // isAbove
+            );
+
+            uint256 tocId = registry.createTOC{value: 0.001 ether}(
+                address(resolver),
+                3,  // TEMPLATE_REACHED_TARGET
+                payload,
+                0, 0, 0, 0,
+                truthKeeper
+            );
+
+            uint256 gasBefore = gasleft();
+            string memory question = resolver.getTocQuestion(tocId);
+            uint256 gasUsed = gasBefore - gasleft();
+
+            console.log("Template 3 (Reached Target) Gas:", gasUsed);
+            console.log("Question:", question);
+        }
+    }
+
     receive() external payable {}
 }

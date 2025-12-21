@@ -470,10 +470,54 @@ contract PythPriceResolverV2 is ITOCResolver {
     }
 
     function getTocQuestion(uint256 tocId) external view returns (string memory) {
-        if (_tocTemplates[tocId] == TEMPLATE_NONE) {
+        uint32 templateId = _tocTemplates[tocId];
+        if (templateId == TEMPLATE_NONE) {
             return "Unknown TOC";
         }
-        return "Price question"; // Stub
+
+        bytes memory payload = _tocPayloads[tocId];
+
+        // Return minimal formula format: templateId|field1|field2|...
+        if (templateId == TEMPLATE_SNAPSHOT) {
+            SnapshotPayload memory p = abi.decode(payload, (SnapshotPayload));
+            return string(abi.encodePacked(
+                "1|",
+                _bytes32ToHexString(p.priceId), "|",
+                _int64ToString(p.threshold), "|",
+                p.isAbove ? "1" : "0", "|",
+                _uint256ToString(p.deadline)
+            ));
+        } else if (templateId == TEMPLATE_RANGE) {
+            RangePayload memory p = abi.decode(payload, (RangePayload));
+            return string(abi.encodePacked(
+                "2|",
+                _bytes32ToHexString(p.priceId), "|",
+                _int64ToString(p.lowerBound), "|",
+                _int64ToString(p.upperBound), "|",
+                p.isInside ? "1" : "0", "|",
+                _uint256ToString(p.deadline)
+            ));
+        } else if (templateId == TEMPLATE_ASSET_COMPARE) {
+            AssetComparePayload memory p = abi.decode(payload, (AssetComparePayload));
+            return string(abi.encodePacked(
+                "11|",
+                _bytes32ToHexString(p.priceIdA), "|",
+                _bytes32ToHexString(p.priceIdB), "|",
+                p.aGreater ? "1" : "0", "|",
+                _uint256ToString(p.deadline)
+            ));
+        } else if (templateId == TEMPLATE_REACHED_TARGET) {
+            ReachedTargetPayload memory p = abi.decode(payload, (ReachedTargetPayload));
+            return string(abi.encodePacked(
+                "3|",
+                _bytes32ToHexString(p.priceId), "|",
+                _int64ToString(p.target), "|",
+                p.isAbove ? "1" : "0", "|",
+                _uint256ToString(p.deadline)
+            ));
+        }
+
+        return "Template not implemented";
     }
 
     function getTemplateCount() external pure returns (uint32) {
@@ -1934,6 +1978,47 @@ contract PythPriceResolverV2 is ITOCResolver {
 
         emit TOCResolved(tocId, TEMPLATE_FIRST_TO_TARGET, outcome, priceUsed, publishTime);
         return outcome;
+    }
+
+    // ============ String Conversion Helpers ============
+
+    /// @notice Convert uint256 to string
+    function _uint256ToString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    /// @notice Convert int64 to string
+    function _int64ToString(int64 value) internal pure returns (string memory) {
+        if (value < 0) {
+            return string(abi.encodePacked("-", _uint256ToString(uint256(uint64(-value)))));
+        }
+        return _uint256ToString(uint256(uint64(value)));
+    }
+
+    /// @notice Convert bytes32 to hex string (without 0x prefix)
+    function _bytes32ToHexString(bytes32 value) internal pure returns (string memory) {
+        bytes memory buffer = new bytes(64);
+        bytes memory alphabet = "0123456789abcdef";
+        for (uint256 i = 0; i < 32; i++) {
+            buffer[i*2] = alphabet[uint8(value[i] >> 4)];
+            buffer[i*2+1] = alphabet[uint8(value[i] & 0x0f)];
+        }
+        return string(buffer);
     }
 
     // ============ Receive ============
