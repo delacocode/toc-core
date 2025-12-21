@@ -102,6 +102,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isAbove
     );
 
+    event StayedInRangeTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        uint256 startTime,
+        uint256 deadline,
+        int64 lowerBound,
+        int64 upperBound
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -149,6 +158,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 deadline;
         int64 threshold;
         bool isAbove;  // true = must stay above, false = must stay below
+    }
+
+    struct StayedInRangePayload {
+        bytes32 priceId;
+        uint256 startTime;
+        uint256 deadline;
+        int64 lowerBound;
+        int64 upperBound;
     }
 
     // ============ Errors ============
@@ -217,6 +234,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitTouchedBoth(tocId, payload);
         } else if (templateId == TEMPLATE_STAYED) {
             _validateAndEmitStayed(tocId, payload);
+        } else if (templateId == TEMPLATE_STAYED_IN_RANGE) {
+            _validateAndEmitStayedInRange(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -243,6 +262,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveTouchedBoth(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_STAYED) {
             outcome = _resolveStayed(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_STAYED_IN_RANGE) {
+            outcome = _resolveStayedInRange(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -659,6 +680,17 @@ contract PythPriceResolverV2 is ITOCResolver {
         emit StayedTOCCreated(tocId, p.priceId, p.startTime, p.deadline, p.threshold, p.isAbove);
     }
 
+    function _validateAndEmitStayedInRange(uint256 tocId, bytes calldata payload) internal {
+        StayedInRangePayload memory p = abi.decode(payload, (StayedInRangePayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.lowerBound >= p.upperBound) revert InvalidBounds();
+        if (p.startTime >= p.deadline) revert InvalidTimeRange();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit StayedInRangeTOCCreated(tocId, p.priceId, p.startTime, p.deadline, p.lowerBound, p.upperBound);
+    }
+
     function _resolveStayed(
         uint256 tocId,
         bytes calldata pythUpdateData
@@ -730,6 +762,70 @@ contract PythPriceResolverV2 is ITOCResolver {
         // Note: This allows someone to try to submit proofs that fail to show violation
         // In that case, we still resolve YES (price stayed)
         emit TOCResolved(tocId, TEMPLATE_STAYED, true, 0, p.deadline);
+        return true;
+    }
+
+    function _resolveStayedInRange(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        StayedInRangePayload memory p = abi.decode(_tocPayloads[tocId], (StayedInRangePayload));
+
+        // Decode update data array
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        // OPTIMISTIC APPROACH:
+        // If no proof provided (empty array) and deadline passed → resolve YES
+        if (updates.length == 0) {
+            // Must be at or after deadline to resolve YES without proof
+            if (block.timestamp < p.deadline) {
+                revert DeadlineNotReached(p.deadline, block.timestamp);
+            }
+
+            // No counter-proof submitted, resolve YES (price stayed in range)
+            emit TOCResolved(tocId, TEMPLATE_STAYED_IN_RANGE, true, 0, p.deadline);
+            return true;
+        }
+
+        // If proof provided → check if it shows a violation
+        // Update Pyth with all proofs
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Check all proofs for a violation (price went outside range)
+        for (uint256 i = 0; i < updates.length; i++) {
+            // Decode the price feed from the update
+            (PythStructs.PriceFeed memory priceFeed,) = abi.decode(updates[i], (PythStructs.PriceFeed, uint64));
+
+            // Verify this is the correct price ID
+            if (priceFeed.id != p.priceId) {
+                continue;
+            }
+
+            // Validate timing - publishTime must be within [startTime, deadline]
+            if (priceFeed.price.publishTime < p.startTime || priceFeed.price.publishTime > p.deadline) {
+                continue; // Skip proofs outside the time range
+            }
+
+            // Validate confidence
+            _checkConfidence(priceFeed.price.conf, priceFeed.price.price);
+
+            // Normalize price
+            int64 normalizedPrice = _normalizePrice(priceFeed.price.price, priceFeed.price.expo);
+
+            // Check if this proof shows a violation (price went outside [lowerBound, upperBound])
+            bool violated = normalizedPrice < p.lowerBound || normalizedPrice > p.upperBound;
+
+            if (violated) {
+                // Found a counter-proof showing violation → resolve NO
+                emit TOCResolved(tocId, TEMPLATE_STAYED_IN_RANGE, false, normalizedPrice, priceFeed.price.publishTime);
+                return false;
+            }
+        }
+
+        // All proofs checked, no violation found
+        // If we reach here, the proofs don't show a violation → resolve YES
+        emit TOCResolved(tocId, TEMPLATE_STAYED_IN_RANGE, true, 0, p.deadline);
         return true;
     }
 

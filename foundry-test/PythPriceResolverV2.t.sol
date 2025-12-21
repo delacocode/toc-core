@@ -941,6 +941,109 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(reverted, "Should revert - can't resolve YES before deadline");
     }
 
+    // ============ Template 6: Stayed In Range Tests (Optimistic Approach) ============
+
+    function test_CreateStayedInRangeTOC() public {
+        uint256 startTime = block.timestamp;
+        uint256 deadline = startTime + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            startTime,
+            deadline,
+            int64(90000_00000000), // lowerBound: $90,000
+            int64(100000_00000000) // upperBound: $100,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            6, // TEMPLATE_STAYED_IN_RANGE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveStayedInRange_YesNoProof() public {
+        uint256 startTime = block.timestamp;
+        uint256 deadline = startTime + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            startTime,
+            deadline,
+            int64(90000_00000000), // lowerBound: $90,000
+            int64(100000_00000000) // upperBound: $100,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            6,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to after deadline
+        vm.warp(deadline + 1);
+
+        // OPTIMISTIC: Resolve with no proof (empty array) → defaults to YES
+        bytes[] memory updates = new bytes[](0);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertTrue(result, "Should be true - no counter-proof submitted, optimistic YES");
+    }
+
+    function test_ResolveStayedInRange_NoWithCounterProof() public {
+        uint256 startTime = block.timestamp;
+        uint256 deadline = startTime + 7 days;
+
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            startTime,
+            deadline,
+            int64(90000_00000000), // lowerBound: $90,000
+            int64(100000_00000000) // upperBound: $100,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            6,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Submit counter-proof showing price violated (went outside range)
+        // Price at day 4 (before deadline, within valid time range)
+        uint256 violationTime = startTime + 4 days;
+
+        bytes[] memory updates = new bytes[](1);
+
+        // Day 4: $105,000 (ABOVE upperBound - violation!)
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(105000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(violationTime)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+
+        // Warp to after deadline so we can resolve
+        vm.warp(deadline + 1);
+
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        bool result = TOCResultCodec.decodeBoolean(registry.getResult(tocId));
+        assertFalse(result, "Should be false - counter-proof shows violation (price above upper bound)");
+    }
+
     // ============ Reference Price Tests ============
 
     function test_SetReferencePrice() public {
