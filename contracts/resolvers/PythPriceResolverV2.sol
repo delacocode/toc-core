@@ -148,6 +148,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isHigher
     );
 
+    event AssetCompareTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceIdA,
+        bytes32 indexed priceIdB,
+        uint256 deadline,
+        bool aGreater
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -238,6 +246,13 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isHigher;         // true = expect higher, false = expect lower
     }
 
+    struct AssetComparePayload {
+        bytes32 priceIdA;
+        bytes32 priceIdB;
+        uint256 deadline;
+        bool aGreater;  // true = expect A > B, false = expect A < B
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -315,6 +330,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitPercentageEither(tocId, payload);
         } else if (templateId == TEMPLATE_END_VS_START) {
             _validateAndEmitEndVsStart(tocId, payload);
+        } else if (templateId == TEMPLATE_ASSET_COMPARE) {
+            _validateAndEmitAssetCompare(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -351,6 +368,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolvePercentageEither(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_END_VS_START) {
             outcome = _resolveEndVsStart(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_ASSET_COMPARE) {
+            outcome = _resolveAssetCompare(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -1236,6 +1255,94 @@ contract PythPriceResolverV2 is ITOCResolver {
 
         emit TOCResolved(tocId, TEMPLATE_END_VS_START, outcome, price, publishTime);
         return outcome;
+    }
+
+    function _validateAndEmitAssetCompare(uint256 tocId, bytes calldata payload) internal {
+        AssetComparePayload memory p = abi.decode(payload, (AssetComparePayload));
+
+        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit AssetCompareTOCCreated(tocId, p.priceIdA, p.priceIdB, p.deadline, p.aGreater);
+    }
+
+    function _resolveAssetCompare(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        AssetComparePayload memory p = abi.decode(_tocPayloads[tocId], (AssetComparePayload));
+
+        // Must be at or after deadline
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        // Get both prices at deadline
+        (int64 priceA, int64 priceB, uint256 publishTime) = _getTwoPricesAtDeadline(
+            p.priceIdA,
+            p.priceIdB,
+            p.deadline,
+            pythUpdateData
+        );
+
+        // Check condition
+        bool outcome;
+        if (p.aGreater) {
+            outcome = priceA > priceB;
+        } else {
+            outcome = priceA < priceB;
+        }
+
+        emit TOCResolved(tocId, TEMPLATE_ASSET_COMPARE, outcome, priceA, publishTime);
+        return outcome;
+    }
+
+    function _getTwoPricesAtDeadline(
+        bytes32 priceIdA,
+        bytes32 priceIdB,
+        uint256 deadline,
+        bytes calldata pythUpdateData
+    ) internal returns (int64 priceA, int64 priceB, uint256 publishTime) {
+        // Decode update data array
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+        if (updates.length < 2) {
+            revert InvalidProofArray();
+        }
+
+        // Update Pyth
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Get price A
+        PythStructs.Price memory priceDataA = pyth.getPriceNoOlderThan(
+            priceIdA,
+            3600 // Allow fetching recent price
+        );
+
+        // Get price B
+        PythStructs.Price memory priceDataB = pyth.getPriceNoOlderThan(
+            priceIdB,
+            3600 // Allow fetching recent price
+        );
+
+        // Validate timing - both must be within 1 second of deadline
+        if (priceDataA.publishTime < deadline || priceDataA.publishTime > deadline + POINT_IN_TIME_TOLERANCE) {
+            revert PriceNotNearDeadline(priceDataA.publishTime, deadline);
+        }
+        if (priceDataB.publishTime < deadline || priceDataB.publishTime > deadline + POINT_IN_TIME_TOLERANCE) {
+            revert PriceNotNearDeadline(priceDataB.publishTime, deadline);
+        }
+
+        // Validate confidence for both prices
+        _checkConfidence(priceDataA.conf, priceDataA.price);
+        _checkConfidence(priceDataB.conf, priceDataB.price);
+
+        // Normalize to 8 decimals
+        priceA = _normalizePrice(priceDataA.price, priceDataA.expo);
+        priceB = _normalizePrice(priceDataB.price, priceDataB.expo);
+        publishTime = priceDataA.publishTime;
     }
 
     // ============ Receive ============

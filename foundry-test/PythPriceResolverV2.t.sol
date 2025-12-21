@@ -1936,5 +1936,214 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(result, "Should be true - deadline price lower than start price");
     }
 
+    // ============ Template 11: Asset Compare Tests ============
+
+    function test_CreateAssetCompareTOC() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceIdA, priceIdB, deadline, aGreater
+        bytes memory payload = abi.encode(
+            BTC_USD,  // Asset A
+            ETH_USD,  // Asset B
+            deadline,
+            true      // aGreater - expect BTC > ETH
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            11, // TEMPLATE_ASSET_COMPARE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveAssetCompareAGreater_Yes() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Will BTC > ETH at deadline?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            ETH_USD,
+            deadline,
+            true  // aGreater
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            11,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // BTC at $96,000
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // ETH at $3,500
+        updates[1] = _createPriceUpdate(
+            ETH_USD,
+            int64(3500_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (BTC $96,000 > ETH $3,500)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - BTC price > ETH price");
+    }
+
+    function test_ResolveAssetCompareAGreater_No() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Will BTC > ETH at deadline?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            ETH_USD,
+            deadline,
+            true  // aGreater
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            11,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // BTC at $3,000 (hypothetical low price)
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(3000_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // ETH at $3,500
+        updates[1] = _createPriceUpdate(
+            ETH_USD,
+            int64(3500_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (BTC $3,000 < ETH $3,500)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - BTC price < ETH price");
+    }
+
+    function test_ResolveAssetCompareALess_Yes() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Will ETH < BTC at deadline? (aGreater=false means expect A < B)
+        bytes memory payload = abi.encode(
+            ETH_USD,  // Asset A
+            BTC_USD,  // Asset B
+            deadline,
+            false     // aGreater = false (expect A < B)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            11,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // ETH at $3,500
+        updates[0] = _createPriceUpdate(
+            ETH_USD,
+            int64(3500_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // BTC at $96,000
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (ETH $3,500 < BTC $96,000)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - ETH price < BTC price");
+    }
+
+    function test_RevertAssetCompareSamePriceIds() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Try to create TOC with same priceIds (invalid!)
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            BTC_USD,  // Same as priceIdA - should revert!
+            deadline,
+            true
+        );
+
+        bool reverted = false;
+        try registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            11,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        ) {
+            // Should not reach
+        } catch {
+            reverted = true;
+        }
+        assertTrue(reverted, "Should revert with same price IDs");
+    }
+
     receive() external payable {}
 }
