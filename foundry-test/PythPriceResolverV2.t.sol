@@ -2342,5 +2342,146 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(result, "Should be true - ratio below threshold");
     }
 
+    // ============ Template 13: Spread Threshold Tests ============
+
+    function test_CreateSpreadThresholdTOC() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceIdA, priceIdB, deadline, spreadThreshold, isAbove
+        // Example: Is BTC-ETH spread above $90,000?
+        bytes memory payload = abi.encode(
+            BTC_USD,  // Asset A
+            ETH_USD,  // Asset B
+            deadline,
+            int64(90000_00000000),  // $90,000 threshold
+            true                     // isAbove - spread must be > $90,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            13, // TEMPLATE_SPREAD_THRESHOLD
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveSpreadThresholdAbove_Yes() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Is BTC-ETH spread > $90,000 at deadline?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            ETH_USD,
+            deadline,
+            int64(90000_00000000),  // $90,000 threshold
+            true                     // isAbove
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            13,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // BTC at $96,000
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // ETH at $3,600
+        updates[1] = _createPriceUpdate(
+            ETH_USD,
+            int64(3600_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // Spread = BTC - ETH = 96000 - 3600 = 92400
+        // 92400 > 90000, so outcome should be YES
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (spread $92,400 > threshold $90,000)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - spread above threshold");
+    }
+
+    function test_ResolveSpreadThresholdAbove_No() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Is BTC-ETH spread > $95,000 at deadline?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            ETH_USD,
+            deadline,
+            int64(95000_00000000),  // $95,000 threshold
+            true                     // isAbove
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            13,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // BTC at $96,000
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // ETH at $3,600
+        updates[1] = _createPriceUpdate(
+            ETH_USD,
+            int64(3600_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // Spread = BTC - ETH = 96000 - 3600 = 92400
+        // 92400 < 95000, so outcome should be NO
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (spread $92,400 < threshold $95,000)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - spread below threshold");
+    }
+
     receive() external payable {}
 }

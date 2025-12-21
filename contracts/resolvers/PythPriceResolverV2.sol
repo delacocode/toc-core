@@ -165,6 +165,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isAbove
     );
 
+    event SpreadThresholdTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceIdA,
+        bytes32 indexed priceIdB,
+        uint256 deadline,
+        int64 spreadThreshold,
+        bool isAbove
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -270,6 +279,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isAbove;       // true = ratio must be above threshold
     }
 
+    struct SpreadThresholdPayload {
+        bytes32 priceIdA;
+        bytes32 priceIdB;
+        uint256 deadline;
+        int64 spreadThreshold;  // The spread threshold (can be negative)
+        bool isAbove;           // true = spread must be above threshold
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -351,6 +368,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitAssetCompare(tocId, payload);
         } else if (templateId == TEMPLATE_RATIO_THRESHOLD) {
             _validateAndEmitRatioThreshold(tocId, payload);
+        } else if (templateId == TEMPLATE_SPREAD_THRESHOLD) {
+            _validateAndEmitSpreadThreshold(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -391,6 +410,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveAssetCompare(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_RATIO_THRESHOLD) {
             outcome = _resolveRatioThreshold(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_SPREAD_THRESHOLD) {
+            outcome = _resolveSpreadThreshold(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -1412,6 +1433,53 @@ contract PythPriceResolverV2 is ITOCResolver {
         }
 
         emit TOCResolved(tocId, TEMPLATE_RATIO_THRESHOLD, outcome, priceA, publishTime);
+        return outcome;
+    }
+
+    function _validateAndEmitSpreadThreshold(uint256 tocId, bytes calldata payload) internal {
+        SpreadThresholdPayload memory p = abi.decode(payload, (SpreadThresholdPayload));
+
+        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit SpreadThresholdTOCCreated(tocId, p.priceIdA, p.priceIdB, p.deadline, p.spreadThreshold, p.isAbove);
+    }
+
+    function _resolveSpreadThreshold(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        SpreadThresholdPayload memory p = abi.decode(_tocPayloads[tocId], (SpreadThresholdPayload));
+
+        // Must be at or after deadline
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        // Get both prices at deadline
+        (int64 priceA, int64 priceB, uint256 publishTime) = _getTwoPricesAtDeadline(
+            p.priceIdA,
+            p.priceIdB,
+            p.deadline,
+            pythUpdateData
+        );
+
+        // Calculate spread: priceA - priceB
+        int64 spread = priceA - priceB;
+
+        // Check condition
+        bool outcome;
+        if (p.isAbove) {
+            // YES if spread > spreadThreshold
+            outcome = spread > p.spreadThreshold;
+        } else {
+            // YES if spread < spreadThreshold
+            outcome = spread < p.spreadThreshold;
+        }
+
+        emit TOCResolved(tocId, TEMPLATE_SPREAD_THRESHOLD, outcome, priceA, publishTime);
         return outcome;
     }
 
