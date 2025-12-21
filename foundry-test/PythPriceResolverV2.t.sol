@@ -2145,5 +2145,202 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(reverted, "Should revert with same price IDs");
     }
 
+    // ============ Template 12: Ratio Threshold Tests ============
+
+    function test_CreateRatioThresholdTOC() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceIdA, priceIdB, deadline, ratioBps, isAbove
+        // Example: Is ETH/BTC ratio above 3% (300 bps)?
+        bytes memory payload = abi.encode(
+            ETH_USD,  // Asset A (numerator)
+            BTC_USD,  // Asset B (denominator)
+            deadline,
+            uint64(300),  // 300 bps = 3%
+            true          // isAbove - ratio must be > 3%
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            12, // TEMPLATE_RATIO_THRESHOLD
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveRatioThresholdAbove_Yes() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Is ETH/BTC ratio > 3.5% at deadline?
+        bytes memory payload = abi.encode(
+            ETH_USD,
+            BTC_USD,
+            deadline,
+            uint64(350),  // 350 bps = 3.5%
+            true          // isAbove
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            12,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // ETH at $3,600
+        updates[0] = _createPriceUpdate(
+            ETH_USD,
+            int64(3600_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // BTC at $96,000
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // Ratio = (3600 * 10000) / 96000 = 375 bps = 3.75%
+        // 375 > 350, so outcome should be YES
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (ratio 3.75% > threshold 3.5%)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - ratio above threshold");
+    }
+
+    function test_ResolveRatioThresholdAbove_No() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Is ETH/BTC ratio > 4% at deadline?
+        bytes memory payload = abi.encode(
+            ETH_USD,
+            BTC_USD,
+            deadline,
+            uint64(400),  // 400 bps = 4%
+            true          // isAbove
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            12,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // ETH at $3,600
+        updates[0] = _createPriceUpdate(
+            ETH_USD,
+            int64(3600_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // BTC at $96,000
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // Ratio = (3600 * 10000) / 96000 = 375 bps = 3.75%
+        // 375 < 400, so outcome should be NO
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (ratio 3.75% < threshold 4%)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - ratio below threshold");
+    }
+
+    function test_ResolveRatioThresholdBelow_Yes() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Is ETH/BTC ratio < 4% at deadline?
+        bytes memory payload = abi.encode(
+            ETH_USD,
+            BTC_USD,
+            deadline,
+            uint64(400),  // 400 bps = 4%
+            false         // isAbove = false, checking if ratio < threshold
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            12,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Create two price updates at deadline
+        bytes[] memory updates = new bytes[](2);
+
+        // ETH at $3,600
+        updates[0] = _createPriceUpdate(
+            ETH_USD,
+            int64(3600_00000000),
+            uint64(10_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // BTC at $96,000
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // Ratio = (3600 * 10000) / 96000 = 375 bps = 3.75%
+        // 375 < 400, so outcome should be YES
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (ratio 3.75% < threshold 4%)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - ratio below threshold");
+    }
+
     receive() external payable {}
 }

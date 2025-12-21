@@ -156,6 +156,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool aGreater
     );
 
+    event RatioThresholdTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceIdA,
+        bytes32 indexed priceIdB,
+        uint256 deadline,
+        uint64 ratioBps,
+        bool isAbove
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -253,6 +262,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool aGreater;  // true = expect A > B, false = expect A < B
     }
 
+    struct RatioThresholdPayload {
+        bytes32 priceIdA;
+        bytes32 priceIdB;
+        uint256 deadline;
+        uint64 ratioBps;    // Ratio threshold in basis points (e.g., 500 = 0.05 = 5%)
+        bool isAbove;       // true = ratio must be above threshold
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -332,6 +349,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitEndVsStart(tocId, payload);
         } else if (templateId == TEMPLATE_ASSET_COMPARE) {
             _validateAndEmitAssetCompare(tocId, payload);
+        } else if (templateId == TEMPLATE_RATIO_THRESHOLD) {
+            _validateAndEmitRatioThreshold(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -370,6 +389,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveEndVsStart(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_ASSET_COMPARE) {
             outcome = _resolveAssetCompare(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_RATIO_THRESHOLD) {
+            outcome = _resolveRatioThreshold(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -1343,6 +1364,55 @@ contract PythPriceResolverV2 is ITOCResolver {
         priceA = _normalizePrice(priceDataA.price, priceDataA.expo);
         priceB = _normalizePrice(priceDataB.price, priceDataB.expo);
         publishTime = priceDataA.publishTime;
+    }
+
+    function _validateAndEmitRatioThreshold(uint256 tocId, bytes calldata payload) internal {
+        RatioThresholdPayload memory p = abi.decode(payload, (RatioThresholdPayload));
+
+        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+        if (p.ratioBps == 0) revert InvalidPercentage();
+
+        emit RatioThresholdTOCCreated(tocId, p.priceIdA, p.priceIdB, p.deadline, p.ratioBps, p.isAbove);
+    }
+
+    function _resolveRatioThreshold(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        RatioThresholdPayload memory p = abi.decode(_tocPayloads[tocId], (RatioThresholdPayload));
+
+        // Must be at or after deadline
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        // Get both prices at deadline
+        (int64 priceA, int64 priceB, uint256 publishTime) = _getTwoPricesAtDeadline(
+            p.priceIdA,
+            p.priceIdB,
+            p.deadline,
+            pythUpdateData
+        );
+
+        // Calculate ratio: (priceA * 10000) / priceB
+        // This gives us the ratio in basis points
+        int64 ratio = (priceA * 10000) / priceB;
+
+        // Check condition
+        bool outcome;
+        if (p.isAbove) {
+            // YES if ratio > ratioBps
+            outcome = ratio > int64(uint64(p.ratioBps));
+        } else {
+            // YES if ratio < ratioBps
+            outcome = ratio < int64(uint64(p.ratioBps));
+        }
+
+        emit TOCResolved(tocId, TEMPLATE_RATIO_THRESHOLD, outcome, priceA, publishTime);
+        return outcome;
     }
 
     // ============ Receive ============
