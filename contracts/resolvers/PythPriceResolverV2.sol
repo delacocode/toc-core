@@ -111,6 +111,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         int64 upperBound
     );
 
+    event BreakoutTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        uint256 deadline,
+        uint256 referenceTimestamp,
+        int64 referencePrice,
+        bool isUp
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -168,6 +177,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         int64 upperBound;
     }
 
+    struct BreakoutPayload {
+        bytes32 priceId;
+        uint256 deadline;
+        uint256 referenceTimestamp;  // 0 = use setReferencePrice later
+        int64 referencePrice;        // 0 = use setReferencePrice later
+        bool isUp;                   // true = break above, false = break below
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -188,6 +205,7 @@ contract PythPriceResolverV2 is ITOCResolver {
     error ReferencePriceAlreadySet(uint256 tocId);
     error InvalidReferenceTimestamp(uint256 expected, uint256 actual);
     error InvalidTimeRange();
+    error ReferencePriceNotSet(uint256 tocId);
 
     // ============ Modifiers ============
 
@@ -236,6 +254,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitStayed(tocId, payload);
         } else if (templateId == TEMPLATE_STAYED_IN_RANGE) {
             _validateAndEmitStayedInRange(tocId, payload);
+        } else if (templateId == TEMPLATE_BREAKOUT) {
+            _validateAndEmitBreakout(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -264,6 +284,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveStayed(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_STAYED_IN_RANGE) {
             outcome = _resolveStayedInRange(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_BREAKOUT) {
+            outcome = _resolveBreakout(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -691,6 +713,31 @@ contract PythPriceResolverV2 is ITOCResolver {
         emit StayedInRangeTOCCreated(tocId, p.priceId, p.startTime, p.deadline, p.lowerBound, p.upperBound);
     }
 
+    function _validateAndEmitBreakout(uint256 tocId, bytes calldata payload) internal {
+        BreakoutPayload memory p = abi.decode(payload, (BreakoutPayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        // If referenceTimestamp and referencePrice are both 0, user will call setReferencePrice later
+        // If either is non-zero, store the reference price now
+        if (p.referenceTimestamp != 0 || p.referencePrice != 0) {
+            // Both must be non-zero if either is set
+            if (p.referenceTimestamp == 0 || p.referencePrice == 0) {
+                revert InvalidPayload();
+            }
+            // Store reference price
+            _referencePrice[tocId] = ReferencePrice({
+                price: p.referencePrice,
+                timestamp: p.referenceTimestamp,
+                isSet: true
+            });
+            emit ReferencePriceSet(tocId, p.referencePrice, p.referenceTimestamp);
+        }
+
+        emit BreakoutTOCCreated(tocId, p.priceId, p.deadline, p.referenceTimestamp, p.referencePrice, p.isUp);
+    }
+
     function _resolveStayed(
         uint256 tocId,
         bytes calldata pythUpdateData
@@ -827,6 +874,83 @@ contract PythPriceResolverV2 is ITOCResolver {
         // If we reach here, the proofs don't show a violation → resolve YES
         emit TOCResolved(tocId, TEMPLATE_STAYED_IN_RANGE, true, 0, p.deadline);
         return true;
+    }
+
+    function _resolveBreakout(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        BreakoutPayload memory p = abi.decode(_tocPayloads[tocId], (BreakoutPayload));
+
+        // Reference price must be set
+        if (!_referencePrice[tocId].isSet) {
+            revert ReferencePriceNotSet(tocId);
+        }
+
+        ReferencePrice memory refPrice = _referencePrice[tocId];
+
+        // Decode update data array
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        // If no proof provided (empty array) and deadline passed → resolve NO
+        if (updates.length == 0) {
+            // Must be at or after deadline to resolve NO without proof
+            if (block.timestamp < p.deadline) {
+                revert DeadlineNotReached(p.deadline, block.timestamp);
+            }
+
+            // No breakout proof submitted, resolve NO (price did not break out)
+            emit TOCResolved(tocId, TEMPLATE_BREAKOUT, false, refPrice.price, p.deadline);
+            return false;
+        }
+
+        // If proof provided → check if it shows a breakout
+        // Update Pyth with all proofs
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Check all proofs for a breakout
+        for (uint256 i = 0; i < updates.length; i++) {
+            // Decode the price feed from the update
+            (PythStructs.PriceFeed memory priceFeed,) = abi.decode(updates[i], (PythStructs.PriceFeed, uint64));
+
+            // Verify this is the correct price ID
+            if (priceFeed.id != p.priceId) {
+                continue;
+            }
+
+            // Validate timing - publishTime must be <= deadline and after reference timestamp
+            if (priceFeed.price.publishTime > p.deadline || priceFeed.price.publishTime < refPrice.timestamp) {
+                continue; // Skip proofs outside the valid time range
+            }
+
+            // Validate confidence
+            _checkConfidence(priceFeed.price.conf, priceFeed.price.price);
+
+            // Normalize price
+            int64 normalizedPrice = _normalizePrice(priceFeed.price.price, priceFeed.price.expo);
+
+            // Check if this proof shows a breakout
+            bool breakout = false;
+            if (p.isUp) {
+                // Break up: price > referencePrice
+                breakout = normalizedPrice > refPrice.price;
+            } else {
+                // Break down: price < referencePrice
+                breakout = normalizedPrice < refPrice.price;
+            }
+
+            if (breakout) {
+                // Found a proof showing breakout → resolve YES
+                emit TOCResolved(tocId, TEMPLATE_BREAKOUT, true, normalizedPrice, priceFeed.price.publishTime);
+                return true;
+            }
+        }
+
+        // All proofs checked, no breakout found
+        // If proofs were provided but don't show breakout, still resolve NO
+        emit TOCResolved(tocId, TEMPLATE_BREAKOUT, false, refPrice.price, p.deadline);
+        return false;
     }
 
     // ============ Receive ============

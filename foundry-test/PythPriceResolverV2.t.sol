@@ -1189,5 +1189,253 @@ contract PythPriceResolverV2Test is Test {
         resolver.setReferencePrice(tocId, _encodePriceUpdates(updates2));
     }
 
+    // ============ Template 7: Breakout Tests ============
+
+    function test_CreateBreakoutTOC() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceId, deadline, referenceTimestamp, referencePrice, isUp
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference price
+            true // isUp - break above reference
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            7, // TEMPLATE_BREAKOUT
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveBreakoutUp_Yes() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC with reference price at $95,000
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000),
+            true // isUp
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            7,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to after reference time but before deadline
+        vm.warp(refTime + 2 hours);
+
+        // Create price update showing breakout: $96,000 (above $95,000)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime + 2 hours)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+
+        // Resolve
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (price broke above reference)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - price broke above reference");
+    }
+
+    function test_ResolveBreakoutUp_No() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC with reference price at $95,000
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000),
+            true // isUp
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            7,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to after deadline
+        vm.warp(deadline + 1 hours);
+
+        // Resolve with empty proof (no breakout occurred)
+        bytes[] memory updates = new bytes[](0);
+
+        // Resolve
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (deadline passed, no breakout proof)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - deadline passed without breakout");
+    }
+
+    function test_ResolveBreakoutDown_Yes() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC with reference price at $95,000, break down
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000),
+            false // isUp = false (break down)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            7,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to after reference time but before deadline
+        vm.warp(refTime + 2 hours);
+
+        // Create price update showing breakout down: $94,000 (below $95,000)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(94000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime + 2 hours)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+
+        // Resolve
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (price broke below reference)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - price broke below reference");
+    }
+
+    function test_RevertBreakoutReferencePriceNotSet() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC with referenceTimestamp=0 and referencePrice=0 (will call setReferencePrice later)
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            uint256(0), // referenceTimestamp = 0
+            int64(0),   // referencePrice = 0
+            true        // isUp
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            7,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Try to resolve without setting reference price - should revert
+        vm.warp(deadline + 1 hours);
+        bytes[] memory updates = new bytes[](0);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PythPriceResolverV2.ReferencePriceNotSet.selector,
+                tocId
+            )
+        );
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+    }
+
+    function test_BreakoutWithSetReferencePrice() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC with referenceTimestamp and referencePrice both 0
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            uint256(0), // referenceTimestamp = 0
+            int64(0),   // referencePrice = 0
+            true        // isUp
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            7,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Set reference price using setReferencePrice
+        bytes[] memory refUpdates = new bytes[](1);
+        refUpdates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(95000_00000000), // $95,000 reference
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(refUpdates);
+        resolver.setReferencePrice(tocId, _encodePriceUpdates(refUpdates));
+
+        // Now resolve with breakout proof
+        vm.warp(refTime + 2 hours);
+
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000), // $96,000 - broke above
+            uint64(100_00000000),
+            int32(-8),
+            uint64(refTime + 2 hours)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - price broke above reference");
+    }
+
     receive() external payable {}
 }
