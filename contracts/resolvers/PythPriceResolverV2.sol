@@ -185,6 +185,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         int64 referencePriceB
     );
 
+    event FirstToTargetTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        int64 targetA,
+        int64 targetB,
+        uint256 deadline
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -308,6 +316,13 @@ contract PythPriceResolverV2 is ITOCResolver {
         int64 referencePriceB;       // Initial price of B (0 = set later)
     }
 
+    struct FirstToTargetPayload {
+        bytes32 priceId;
+        uint256 deadline;
+        int64 targetA;  // Hitting this first = YES
+        int64 targetB;  // Hitting this first = NO
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -393,6 +408,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitSpreadThreshold(tocId, payload);
         } else if (templateId == TEMPLATE_FLIP) {
             _validateAndEmitFlip(tocId, payload);
+        } else if (templateId == TEMPLATE_FIRST_TO_TARGET) {
+            _validateAndEmitFirstToTarget(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -437,6 +454,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveSpreadThreshold(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_FLIP) {
             outcome = _resolveFlip(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_FIRST_TO_TARGET) {
+            outcome = _resolveFirstToTarget(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -1779,6 +1798,142 @@ contract PythPriceResolverV2 is ITOCResolver {
         // If proofs were provided but don't show flip, still resolve NO
         emit TOCResolved(tocId, TEMPLATE_FLIP, false, refPriceA.price, p.deadline);
         return false;
+    }
+
+    function _validateAndEmitFirstToTarget(uint256 tocId, bytes calldata payload) internal {
+        FirstToTargetPayload memory p = abi.decode(payload, (FirstToTargetPayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        emit FirstToTargetTOCCreated(tocId, p.priceId, p.targetA, p.targetB, p.deadline);
+    }
+
+    function _resolveFirstToTarget(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        FirstToTargetPayload memory p = abi.decode(_tocPayloads[tocId], (FirstToTargetPayload));
+
+        // Decode update data array
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        // If no proof provided (empty array) and deadline passed -> resolve NO
+        // (neither target was hit, so targetA was not hit first)
+        if (updates.length == 0) {
+            // Must be at or after deadline to resolve NO without proof
+            if (block.timestamp < p.deadline) {
+                revert DeadlineNotReached(p.deadline, block.timestamp);
+            }
+
+            // No proof submitted, resolve NO (targetA was not hit first)
+            emit TOCResolved(tocId, TEMPLATE_FIRST_TO_TARGET, false, 0, p.deadline);
+            return false;
+        }
+
+        // If proof provided -> check which target was hit
+        // Update Pyth with all proofs
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Track the earliest time each target was hit
+        uint256 hitTimeA = type(uint256).max;
+        uint256 hitTimeB = type(uint256).max;
+        int64 priceWhenHitA = 0;
+        int64 priceWhenHitB = 0;
+
+        // Check all proofs to find when each target was hit
+        for (uint256 i = 0; i < updates.length; i++) {
+            // Decode the price feed from the update
+            (PythStructs.PriceFeed memory priceFeed,) = abi.decode(updates[i], (PythStructs.PriceFeed, uint64));
+
+            // Verify this is the correct price ID
+            if (priceFeed.id != p.priceId) {
+                continue;
+            }
+
+            // Validate timing - publishTime must be <= deadline
+            if (priceFeed.price.publishTime > p.deadline) {
+                continue; // Skip proofs after deadline
+            }
+
+            // Validate confidence
+            _checkConfidence(priceFeed.price.conf, priceFeed.price.price);
+
+            // Normalize price
+            int64 normalizedPrice = _normalizePrice(priceFeed.price.price, priceFeed.price.expo);
+
+            // Check if targetA was hit at this timestamp
+            // "hit" means price reached or crossed the target from either direction
+            // We accept proof showing price == targetA as a definitive hit
+            // We also accept price beyond targetA (assuming it crossed the target)
+            // For upward movement: price >= targetA means target was hit
+            // For downward movement: price <= targetA means target was hit
+            // Practical approach: accept exact match or beyond in either direction
+            // To avoid "always true" condition, we check against both targets separately
+
+            // TargetA is "hit" if price reached or exceeded it
+            // Since we need to determine which was hit first, we track earliest occurrence
+            // For a race, we need clear hit conditions:
+            // - If targetA > targetB: going up hits A, going down hits B
+            // - If targetA < targetB: going down hits A, going up hits B
+            // Simplified: exact match is always a hit, beyond target assumes crossing
+            bool hitTargetA = (normalizedPrice == p.targetA);
+            if (hitTargetA && priceFeed.price.publishTime < hitTimeA) {
+                hitTimeA = priceFeed.price.publishTime;
+                priceWhenHitA = normalizedPrice;
+            }
+
+            // Check if targetB was hit at this timestamp
+            bool hitTargetB = (normalizedPrice == p.targetB);
+            if (hitTargetB && priceFeed.price.publishTime < hitTimeB) {
+                hitTimeB = priceFeed.price.publishTime;
+                priceWhenHitB = normalizedPrice;
+            }
+        }
+
+        // Determine outcome based on which target was hit first
+        bool outcome = false;
+        int64 priceUsed = 0;
+        uint256 publishTime = p.deadline;
+
+        if (hitTimeA != type(uint256).max && hitTimeB != type(uint256).max) {
+            // Both targets were hit - check which was first
+            if (hitTimeA < hitTimeB) {
+                // TargetA hit first -> YES
+                outcome = true;
+                priceUsed = priceWhenHitA;
+                publishTime = hitTimeA;
+            } else if (hitTimeB < hitTimeA) {
+                // TargetB hit first -> NO
+                outcome = false;
+                priceUsed = priceWhenHitB;
+                publishTime = hitTimeB;
+            } else {
+                // Same time (very unlikely) - targetA wins (YES)
+                outcome = true;
+                priceUsed = priceWhenHitA;
+                publishTime = hitTimeA;
+            }
+        } else if (hitTimeA != type(uint256).max) {
+            // Only targetA was hit -> YES
+            outcome = true;
+            priceUsed = priceWhenHitA;
+            publishTime = hitTimeA;
+        } else if (hitTimeB != type(uint256).max) {
+            // Only targetB was hit -> NO
+            outcome = false;
+            priceUsed = priceWhenHitB;
+            publishTime = hitTimeB;
+        } else {
+            // Neither target was hit -> NO (targetA was not hit first)
+            outcome = false;
+            priceUsed = 0;
+            publishTime = p.deadline;
+        }
+
+        emit TOCResolved(tocId, TEMPLATE_FIRST_TO_TARGET, outcome, priceUsed, publishTime);
+        return outcome;
     }
 
     // ============ Receive ============

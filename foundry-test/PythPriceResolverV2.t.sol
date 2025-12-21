@@ -2664,5 +2664,172 @@ contract PythPriceResolverV2Test is Test {
         assertFalse(result, "Should be false - no flip in proof");
     }
 
+    // ============ Template 15: First to Target Tests ============
+
+    function test_CreateFirstToTargetTOC() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceId, deadline, targetA, targetB
+        // Example: Did BTC hit $100k before hitting $90k?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000),    // targetA: $100,000 (hit this first = YES)
+            int64(90000_00000000)      // targetB: $90,000 (hit this first = NO)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            15, // TEMPLATE_FIRST_TO_TARGET
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveFirstToTarget_YesHitA() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC hit $100k before hitting $90k?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000),    // targetA: $100,000
+            int64(90000_00000000)      // targetB: $90,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            15,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Submit proof showing targetA was hit first
+        // Price hits $100k at T+6 hours, then hits $90k at T+12 hours
+        bytes[] memory updates = new bytes[](2);
+
+        // First proof: price at $100k (targetA hit at 6 hours)
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(100000_00000000),    // exactly at targetA
+            uint64(100_00000000),
+            int32(-8),
+            uint64(block.timestamp - 18 hours)  // 6 hours into the period
+        );
+
+        // Second proof: price at $90k (targetB hit at 12 hours)
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(90000_00000000),     // exactly at targetB
+            uint64(100_00000000),
+            int32(-8),
+            uint64(block.timestamp - 12 hours)  // 12 hours into the period
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (targetA hit first)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - targetA hit first");
+    }
+
+    function test_ResolveFirstToTarget_NoHitB() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC hit $100k before hitting $90k?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000),    // targetA: $100,000
+            int64(90000_00000000)      // targetB: $90,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            15,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Submit proof showing targetB was hit first
+        // Price hits $90k at T+6 hours, then hits $100k at T+12 hours
+        bytes[] memory updates = new bytes[](2);
+
+        // First proof: price at $90k (targetB hit at 6 hours)
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(90000_00000000),     // exactly at targetB
+            uint64(100_00000000),
+            int32(-8),
+            uint64(block.timestamp - 18 hours)  // 6 hours into the period
+        );
+
+        // Second proof: price at $100k (targetA hit at 12 hours)
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(100000_00000000),    // exactly at targetA
+            uint64(100_00000000),
+            int32(-8),
+            uint64(block.timestamp - 12 hours)  // 12 hours into the period
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (targetB hit first)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - targetB hit first");
+    }
+
+    function test_ResolveFirstToTarget_NoDeadlinePassed() public {
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC hit $100k before hitting $90k?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            int64(100000_00000000),    // targetA: $100,000
+            int64(90000_00000000)      // targetB: $90,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            15,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Submit empty proof array (no target was hit)
+        bytes[] memory updates = new bytes[](0);
+
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (neither target hit, so targetA not hit first)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - neither target hit");
+    }
+
     receive() external payable {}
 }
