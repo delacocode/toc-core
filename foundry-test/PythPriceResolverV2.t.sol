@@ -1606,5 +1606,173 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(result, "Should be true - price lost 10%+");
     }
 
+    // ============ Template 9: Percentage Either Tests ============
+
+    function test_CreatePercentageEitherTOC() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceId, deadline, referenceTimestamp, referencePrice, percentageBps
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference price
+            uint64(1000)           // 10% (1000 bps) in either direction
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            9, // TEMPLATE_PERCENTAGE_EITHER
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolvePercentageEither_YesUp() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC move 10% in either direction from $95,000?
+        // Upper threshold: $95,000 * 1.10 = $104,500
+        // Lower threshold: $95,000 * 0.90 = $85,500
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference
+            uint64(1000)           // 10% (1000 bps)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            9,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $105,000 (moved up more than 10%)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(105000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (price moved up by 10%+)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - price moved up 10%+");
+    }
+
+    function test_ResolvePercentageEither_YesDown() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC move 10% in either direction from $95,000?
+        // Upper threshold: $95,000 * 1.10 = $104,500
+        // Lower threshold: $95,000 * 0.90 = $85,500
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference
+            uint64(1000)           // 10% (1000 bps)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            9,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $85,000 (moved down more than 10%)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(85000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (price moved down by 10%+)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - price moved down 10%+");
+    }
+
+    function test_ResolvePercentageEither_No() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC move 10% in either direction from $95,000?
+        // Upper threshold: $95,000 * 1.10 = $104,500
+        // Lower threshold: $95,000 * 0.90 = $85,500
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference
+            uint64(1000)           // 10% (1000 bps)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            9,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $98,000 (only moved 3.16%, not enough in either direction)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(98000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (price didn't move enough in either direction)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - price only moved 3.16%, not 10%");
+    }
+
     receive() external payable {}
 }
