@@ -1774,5 +1774,167 @@ contract PythPriceResolverV2Test is Test {
         assertFalse(result, "Should be false - price only moved 3.16%, not 10%");
     }
 
+    // ============ Template 10: End vs Start Tests ============
+
+    function test_CreateEndVsStartTOC() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceId, deadline, referenceTimestamp, referencePrice, isHigher
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 start price
+            true                   // isHigher - expect deadline price > start price
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            10, // TEMPLATE_END_VS_START
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveEndVsStartHigher_Yes() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Will BTC price be higher at deadline than start price of $95,000?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 start price
+            true                   // isHigher
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            10,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $98,000 (higher than $95,000 start)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(98000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (deadline price > start price)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - deadline price higher than start price");
+    }
+
+    function test_ResolveEndVsStartHigher_No() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Will BTC price be higher at deadline than start price of $95,000?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 start price
+            true                   // isHigher
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            10,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $92,000 (lower than $95,000 start)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(92000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (deadline price not higher than start price)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - deadline price lower than start price");
+    }
+
+    function test_ResolveEndVsStartLower_Yes() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Will BTC price be lower at deadline than start price of $95,000?
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 start price
+            false                  // isHigher = false (expect lower)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            10,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $90,000 (lower than $95,000 start)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(90000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (deadline price < start price)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - deadline price lower than start price");
+    }
+
     receive() external payable {}
 }

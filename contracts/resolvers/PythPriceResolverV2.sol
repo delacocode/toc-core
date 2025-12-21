@@ -139,6 +139,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint64 percentageBps
     );
 
+    event EndVsStartTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        uint256 deadline,
+        uint256 referenceTimestamp,
+        int64 referencePrice,
+        bool isHigher
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -221,6 +230,14 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint64 percentageBps;  // Basis points (100 = 1%)
     }
 
+    struct EndVsStartPayload {
+        bytes32 priceId;
+        uint256 deadline;
+        uint256 referenceTimestamp;
+        int64 referencePrice;  // The "start" price
+        bool isHigher;         // true = expect higher, false = expect lower
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -296,6 +313,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitPercentageChange(tocId, payload);
         } else if (templateId == TEMPLATE_PERCENTAGE_EITHER) {
             _validateAndEmitPercentageEither(tocId, payload);
+        } else if (templateId == TEMPLATE_END_VS_START) {
+            _validateAndEmitEndVsStart(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -330,6 +349,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolvePercentageChange(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_PERCENTAGE_EITHER) {
             outcome = _resolvePercentageEither(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_END_VS_START) {
+            outcome = _resolveEndVsStart(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -1143,6 +1164,77 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool outcome = price >= upperThreshold || price <= lowerThreshold;
 
         emit TOCResolved(tocId, TEMPLATE_PERCENTAGE_EITHER, outcome, price, publishTime);
+        return outcome;
+    }
+
+    function _validateAndEmitEndVsStart(uint256 tocId, bytes calldata payload) internal {
+        EndVsStartPayload memory p = abi.decode(payload, (EndVsStartPayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        // If referenceTimestamp and referencePrice are both 0, user will call setReferencePrice later
+        // If either is non-zero, store the reference price now
+        if (p.referenceTimestamp != 0 || p.referencePrice != 0) {
+            // Both must be non-zero if either is set
+            if (p.referenceTimestamp == 0 || p.referencePrice == 0) {
+                revert InvalidPayload();
+            }
+            // Store reference price
+            _referencePrice[tocId] = ReferencePrice({
+                price: p.referencePrice,
+                timestamp: p.referenceTimestamp,
+                isSet: true
+            });
+            emit ReferencePriceSet(tocId, p.referencePrice, p.referenceTimestamp);
+        }
+
+        emit EndVsStartTOCCreated(
+            tocId,
+            p.priceId,
+            p.deadline,
+            p.referenceTimestamp,
+            p.referencePrice,
+            p.isHigher
+        );
+    }
+
+    function _resolveEndVsStart(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        EndVsStartPayload memory p = abi.decode(_tocPayloads[tocId], (EndVsStartPayload));
+
+        // Reference price must be set
+        if (!_referencePrice[tocId].isSet) {
+            revert ReferencePriceNotSet(tocId);
+        }
+
+        ReferencePrice memory refPrice = _referencePrice[tocId];
+
+        // Must be at or after deadline
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        // Get price at deadline (point-in-time, 1 sec tolerance)
+        (int64 price, uint256 publishTime) = _getPriceAtDeadline(
+            p.priceId,
+            p.deadline,
+            pythUpdateData
+        );
+
+        // Check if price matches expectation
+        bool outcome;
+        if (p.isHigher) {
+            // YES if deadline price > start price
+            outcome = price > refPrice.price;
+        } else {
+            // YES if deadline price < start price
+            outcome = price < refPrice.price;
+        }
+
+        emit TOCResolved(tocId, TEMPLATE_END_VS_START, outcome, price, publishTime);
         return outcome;
     }
 
