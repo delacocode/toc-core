@@ -54,6 +54,8 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isSet;
     }
 
+    address public owner;
+    mapping(uint32 => string) private _templateNames;
     mapping(uint256 => uint32) private _tocTemplates;
     mapping(uint256 => bytes) private _tocPayloads;
     mapping(uint256 => ReferencePrice) private _referencePrice;
@@ -359,6 +361,26 @@ contract PythPriceResolverV2 is ITOCResolver {
     constructor(address _pyth, address _registry) {
         pyth = IPyth(_pyth);
         registry = ITOCRegistry(_registry);
+        owner = msg.sender;
+    }
+
+    // ============ Admin Functions ============
+
+    /// @notice Set the display name for a template (admin only)
+    function setTemplateName(uint32 templateId, string calldata name) external {
+        require(msg.sender == owner, "Only owner");
+        require(templateId > 0 && templateId < TEMPLATE_COUNT, "Invalid template");
+        _templateNames[templateId] = name;
+    }
+
+    /// @notice Set multiple template names at once (admin only)
+    function setTemplateNames(uint32[] calldata templateIds, string[] calldata names) external {
+        require(msg.sender == owner, "Only owner");
+        require(templateIds.length == names.length, "Length mismatch");
+        for (uint i = 0; i < templateIds.length; i++) {
+            require(templateIds[i] > 0 && templateIds[i] < TEMPLATE_COUNT, "Invalid template");
+            _templateNames[templateIds[i]] = names[i];
+        }
     }
 
     // ============ ITOCResolver Implementation (stubs) ============
@@ -471,53 +493,15 @@ contract PythPriceResolverV2 is ITOCResolver {
 
     function getTocQuestion(uint256 tocId) external view returns (string memory) {
         uint32 templateId = _tocTemplates[tocId];
-        if (templateId == TEMPLATE_NONE) {
-            return "Unknown TOC";
+        if (templateId == TEMPLATE_NONE) return "UNKNOWN";
+
+        string memory name = _templateNames[templateId];
+        if (bytes(name).length > 0) {
+            return name;
         }
 
-        bytes memory payload = _tocPayloads[tocId];
-
-        // Return minimal formula format: templateId|field1|field2|...
-        if (templateId == TEMPLATE_SNAPSHOT) {
-            SnapshotPayload memory p = abi.decode(payload, (SnapshotPayload));
-            return string(abi.encodePacked(
-                "1|",
-                _bytes32ToHexString(p.priceId), "|",
-                _int64ToString(p.threshold), "|",
-                p.isAbove ? "1" : "0", "|",
-                _uint256ToString(p.deadline)
-            ));
-        } else if (templateId == TEMPLATE_RANGE) {
-            RangePayload memory p = abi.decode(payload, (RangePayload));
-            return string(abi.encodePacked(
-                "2|",
-                _bytes32ToHexString(p.priceId), "|",
-                _int64ToString(p.lowerBound), "|",
-                _int64ToString(p.upperBound), "|",
-                p.isInside ? "1" : "0", "|",
-                _uint256ToString(p.deadline)
-            ));
-        } else if (templateId == TEMPLATE_ASSET_COMPARE) {
-            AssetComparePayload memory p = abi.decode(payload, (AssetComparePayload));
-            return string(abi.encodePacked(
-                "11|",
-                _bytes32ToHexString(p.priceIdA), "|",
-                _bytes32ToHexString(p.priceIdB), "|",
-                p.aGreater ? "1" : "0", "|",
-                _uint256ToString(p.deadline)
-            ));
-        } else if (templateId == TEMPLATE_REACHED_TARGET) {
-            ReachedTargetPayload memory p = abi.decode(payload, (ReachedTargetPayload));
-            return string(abi.encodePacked(
-                "3|",
-                _bytes32ToHexString(p.priceId), "|",
-                _int64ToString(p.target), "|",
-                p.isAbove ? "1" : "0", "|",
-                _uint256ToString(p.deadline)
-            ));
-        }
-
-        return "Template not implemented";
+        // Default fallback - just return template ID as string
+        return _uint256ToString(templateId);
     }
 
     function getTemplateCount() external pure returns (uint32) {
@@ -1998,25 +1982,6 @@ contract PythPriceResolverV2 is ITOCResolver {
             digits -= 1;
             buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
             value /= 10;
-        }
-        return string(buffer);
-    }
-
-    /// @notice Convert int64 to string
-    function _int64ToString(int64 value) internal pure returns (string memory) {
-        if (value < 0) {
-            return string(abi.encodePacked("-", _uint256ToString(uint256(uint64(-value)))));
-        }
-        return _uint256ToString(uint256(uint64(value)));
-    }
-
-    /// @notice Convert bytes32 to hex string (without 0x prefix)
-    function _bytes32ToHexString(bytes32 value) internal pure returns (string memory) {
-        bytes memory buffer = new bytes(64);
-        bytes memory alphabet = "0123456789abcdef";
-        for (uint256 i = 0; i < 32; i++) {
-            buffer[i*2] = alphabet[uint8(value[i] >> 4)];
-            buffer[i*2+1] = alphabet[uint8(value[i] & 0x0f)];
         }
         return string(buffer);
     }

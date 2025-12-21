@@ -2938,5 +2938,104 @@ contract PythPriceResolverV2Test is Test {
         }
     }
 
+    // ============ Template Name Tests ============
+
+    function test_SetTemplateName() public {
+        // Set a template name
+        resolver.setTemplateName(1, "BTC Snapshot");
+
+        // Create a TOC with template 1
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            block.timestamp + 1 days,
+            int64(100000_00000000),
+            true
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            1,  // TEMPLATE_SNAPSHOT
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Check that getTocQuestion returns the custom name
+        string memory question = resolver.getTocQuestion(tocId);
+        assertEq(question, "BTC Snapshot");
+    }
+
+    function test_SetTemplateNames_Batch() public {
+        // Set multiple template names at once
+        uint32[] memory templateIds = new uint32[](3);
+        templateIds[0] = 1;
+        templateIds[1] = 2;
+        templateIds[2] = 3;
+
+        string[] memory names = new string[](3);
+        names[0] = "Snapshot Template";
+        names[1] = "Range Template";
+        names[2] = "Reached Target Template";
+
+        resolver.setTemplateNames(templateIds, names);
+
+        // Create TOCs and verify names
+        bytes memory payload1 = abi.encode(
+            BTC_USD,
+            block.timestamp + 1 days,
+            int64(100000_00000000),
+            true
+        );
+
+        uint256 tocId1 = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            1,
+            payload1,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(resolver.getTocQuestion(tocId1), "Snapshot Template");
+    }
+
+    function test_GetTocQuestion_FallbackToTemplateId() public {
+        // Create a TOC without setting a template name
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            block.timestamp + 1 days,
+            int64(100000_00000000),
+            true
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            1,  // TEMPLATE_SNAPSHOT
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Should return template ID as string
+        string memory question = resolver.getTocQuestion(tocId);
+        assertEq(question, "1");
+    }
+
+    function test_SetTemplateName_OnlyOwner() public {
+        // Try to set template name from non-owner account
+        vm.prank(user1);
+        vm.expectRevert("Only owner");
+        resolver.setTemplateName(1, "Unauthorized");
+    }
+
+    function test_SetTemplateName_InvalidTemplate() public {
+        // Try to set name for template 0 (invalid)
+        vm.expectRevert("Invalid template");
+        resolver.setTemplateName(0, "Invalid");
+
+        // Try to set name for template >= TEMPLATE_COUNT
+        vm.expectRevert("Invalid template");
+        resolver.setTemplateName(16, "Invalid");
+    }
+
     receive() external payable {}
 }
