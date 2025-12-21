@@ -1437,5 +1437,174 @@ contract PythPriceResolverV2Test is Test {
         assertTrue(result, "Should be true - price broke above reference");
     }
 
+    // ============ Template 8: Percentage Change Tests ============
+
+    function test_CreatePercentageChangeTOC() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Payload: priceId, deadline, referenceTimestamp, referencePrice, percentageBps, isUp
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference price
+            uint64(1000),          // 10% (1000 bps)
+            true                   // isUp - price gain
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            8, // TEMPLATE_PERCENTAGE_CHANGE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolvePercentageChangeUp_Yes() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC gain 10% from $95,000 reference?
+        // Target: $95,000 * 1.10 = $104,500
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference
+            uint64(1000),          // 10% (1000 bps)
+            true                   // isUp
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            8,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $105,000 (gained more than 10%)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(105000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (price gained required %)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - price gained 10%+");
+    }
+
+    function test_ResolvePercentageChangeUp_No() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC gain 10% from $95,000 reference?
+        // Target: $95,000 * 1.10 = $104,500
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference
+            uint64(1000),          // 10% (1000 bps)
+            true                   // isUp
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            8,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $100,000 (only gained 5.26%, not enough)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(100000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (price didn't gain enough)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - price only gained 5.26%, not 10%");
+    }
+
+    function test_ResolvePercentageChangeDown_Yes() public {
+        vm.warp(1 days); // Set block.timestamp to a reasonable value
+        uint256 refTime = block.timestamp - 1 hours;
+        uint256 deadline = block.timestamp + 1 days;
+
+        // Create TOC: Did BTC lose 10% from $95,000 reference?
+        // Target: $95,000 * 0.90 = $85,500
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            deadline,
+            refTime,
+            int64(95000_00000000), // $95,000 reference
+            uint64(1000),          // 10% (1000 bps)
+            false                  // isUp = false (down)
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            8,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to deadline
+        vm.warp(deadline);
+
+        // Price at deadline: $85,000 (lost more than 10%)
+        bytes[] memory updates = new bytes[](1);
+        updates[0] = _createPriceUpdate(
+            BTC_USD,
+            int64(85000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (price lost required %)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - price lost 10%+");
+    }
+
     receive() external payable {}
 }

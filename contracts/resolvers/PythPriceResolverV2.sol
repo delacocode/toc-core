@@ -120,6 +120,16 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isUp
     );
 
+    event PercentageChangeTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceId,
+        uint256 deadline,
+        uint256 referenceTimestamp,
+        int64 referencePrice,
+        uint64 percentageBps,
+        bool isUp
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -183,6 +193,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint256 referenceTimestamp;  // 0 = use setReferencePrice later
         int64 referencePrice;        // 0 = use setReferencePrice later
         bool isUp;                   // true = break above, false = break below
+    }
+
+    struct PercentageChangePayload {
+        bytes32 priceId;
+        uint256 deadline;
+        uint256 referenceTimestamp;
+        int64 referencePrice;
+        uint64 percentageBps;  // Basis points (100 = 1%, 1000 = 10%)
+        bool isUp;             // true = gain, false = loss
     }
 
     // ============ Errors ============
@@ -256,6 +275,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitStayedInRange(tocId, payload);
         } else if (templateId == TEMPLATE_BREAKOUT) {
             _validateAndEmitBreakout(tocId, payload);
+        } else if (templateId == TEMPLATE_PERCENTAGE_CHANGE) {
+            _validateAndEmitPercentageChange(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -286,6 +307,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveStayedInRange(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_BREAKOUT) {
             outcome = _resolveBreakout(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_PERCENTAGE_CHANGE) {
+            outcome = _resolvePercentageChange(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -951,6 +974,84 @@ contract PythPriceResolverV2 is ITOCResolver {
         // If proofs were provided but don't show breakout, still resolve NO
         emit TOCResolved(tocId, TEMPLATE_BREAKOUT, false, refPrice.price, p.deadline);
         return false;
+    }
+
+    function _validateAndEmitPercentageChange(uint256 tocId, bytes calldata payload) internal {
+        PercentageChangePayload memory p = abi.decode(payload, (PercentageChangePayload));
+
+        if (p.priceId == bytes32(0)) revert InvalidPriceId();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+        if (p.percentageBps == 0) revert InvalidPercentage();
+
+        // If referenceTimestamp and referencePrice are both 0, user will call setReferencePrice later
+        // If either is non-zero, store the reference price now
+        if (p.referenceTimestamp != 0 || p.referencePrice != 0) {
+            // Both must be non-zero if either is set
+            if (p.referenceTimestamp == 0 || p.referencePrice == 0) {
+                revert InvalidPayload();
+            }
+            // Store reference price
+            _referencePrice[tocId] = ReferencePrice({
+                price: p.referencePrice,
+                timestamp: p.referenceTimestamp,
+                isSet: true
+            });
+            emit ReferencePriceSet(tocId, p.referencePrice, p.referenceTimestamp);
+        }
+
+        emit PercentageChangeTOCCreated(
+            tocId,
+            p.priceId,
+            p.deadline,
+            p.referenceTimestamp,
+            p.referencePrice,
+            p.percentageBps,
+            p.isUp
+        );
+    }
+
+    function _resolvePercentageChange(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        PercentageChangePayload memory p = abi.decode(_tocPayloads[tocId], (PercentageChangePayload));
+
+        // Reference price must be set
+        if (!_referencePrice[tocId].isSet) {
+            revert ReferencePriceNotSet(tocId);
+        }
+
+        ReferencePrice memory refPrice = _referencePrice[tocId];
+
+        // Must be at or after deadline
+        if (block.timestamp < p.deadline) {
+            revert DeadlineNotReached(p.deadline, block.timestamp);
+        }
+
+        // Get price at deadline
+        (int64 price, uint256 publishTime) = _getPriceAtDeadline(
+            p.priceId,
+            p.deadline,
+            pythUpdateData
+        );
+
+        // Calculate the target price based on percentage change
+        // Using basis points: 10000 = 100%, 100 = 1%
+        bool outcome;
+        if (p.isUp) {
+            // Check if price gained required percentage
+            // price >= referencePrice * (10000 + percentageBps) / 10000
+            int64 targetPrice = refPrice.price + (refPrice.price * int64(uint64(p.percentageBps))) / 10000;
+            outcome = price >= targetPrice;
+        } else {
+            // Check if price lost required percentage
+            // price <= referencePrice * (10000 - percentageBps) / 10000
+            int64 targetPrice = refPrice.price - (refPrice.price * int64(uint64(p.percentageBps))) / 10000;
+            outcome = price <= targetPrice;
+        }
+
+        emit TOCResolved(tocId, TEMPLATE_PERCENTAGE_CHANGE, outcome, price, publishTime);
+        return outcome;
     }
 
     // ============ Receive ============
