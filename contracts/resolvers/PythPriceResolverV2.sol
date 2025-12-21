@@ -57,6 +57,7 @@ contract PythPriceResolverV2 is ITOCResolver {
     mapping(uint256 => uint32) private _tocTemplates;
     mapping(uint256 => bytes) private _tocPayloads;
     mapping(uint256 => ReferencePrice) private _referencePrice;
+    mapping(uint256 => ReferencePrice) private _referencePriceB;
 
     // ============ Events ============
 
@@ -174,6 +175,16 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isAbove
     );
 
+    event FlipTOCCreated(
+        uint256 indexed tocId,
+        bytes32 indexed priceIdA,
+        bytes32 indexed priceIdB,
+        uint256 deadline,
+        uint256 referenceTimestamp,
+        int64 referencePriceA,
+        int64 referencePriceB
+    );
+
     event TOCResolved(
         uint256 indexed tocId,
         uint32 indexed templateId,
@@ -183,6 +194,7 @@ contract PythPriceResolverV2 is ITOCResolver {
     );
 
     event ReferencePriceSet(uint256 indexed tocId, int64 price, uint256 timestamp);
+    event ReferencePricesSet(uint256 indexed tocId, int64 priceA, int64 priceB, uint256 timestamp);
 
     // ============ Structs ============
 
@@ -287,6 +299,15 @@ contract PythPriceResolverV2 is ITOCResolver {
         bool isAbove;           // true = spread must be above threshold
     }
 
+    struct FlipPayload {
+        bytes32 priceIdA;
+        bytes32 priceIdB;
+        uint256 deadline;
+        uint256 referenceTimestamp;  // When to capture initial state
+        int64 referencePriceA;       // Initial price of A (0 = set later)
+        int64 referencePriceB;       // Initial price of B (0 = set later)
+    }
+
     // ============ Errors ============
 
     error InvalidTemplate(uint32 templateId);
@@ -370,6 +391,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             _validateAndEmitRatioThreshold(tocId, payload);
         } else if (templateId == TEMPLATE_SPREAD_THRESHOLD) {
             _validateAndEmitSpreadThreshold(tocId, payload);
+        } else if (templateId == TEMPLATE_FLIP) {
+            _validateAndEmitFlip(tocId, payload);
         }
 
         return TOCState.ACTIVE;
@@ -412,6 +435,8 @@ contract PythPriceResolverV2 is ITOCResolver {
             outcome = _resolveRatioThreshold(tocId, pythUpdateData);
         } else if (templateId == TEMPLATE_SPREAD_THRESHOLD) {
             outcome = _resolveSpreadThreshold(tocId, pythUpdateData);
+        } else if (templateId == TEMPLATE_FLIP) {
+            outcome = _resolveFlip(tocId, pythUpdateData);
         } else {
             revert InvalidTemplate(templateId);
         }
@@ -535,6 +560,91 @@ contract PythPriceResolverV2 is ITOCResolver {
         });
 
         emit ReferencePriceSet(tocId, normalizedPrice, priceData.publishTime);
+    }
+
+    /// @notice Set reference prices for both assets (for multi-asset templates like Flip)
+    /// @param tocId The TOC ID
+    /// @param pythUpdateDataA Pyth proof for reference price A
+    /// @param pythUpdateDataB Pyth proof for reference price B
+    /// @dev Can only be called once per TOC, validates against referenceTimestamp in payload
+    function setReferencePrices(
+        uint256 tocId,
+        bytes calldata pythUpdateDataA,
+        bytes calldata pythUpdateDataB
+    ) external {
+        uint32 templateId = _tocTemplates[tocId];
+        if (templateId == TEMPLATE_NONE) {
+            revert TocNotManaged(tocId);
+        }
+
+        // Check if reference prices are already set
+        if (_referencePrice[tocId].isSet || _referencePriceB[tocId].isSet) {
+            revert ReferencePriceAlreadySet(tocId);
+        }
+
+        // Only for Flip template
+        if (templateId != TEMPLATE_FLIP) {
+            revert InvalidTemplate(templateId);
+        }
+
+        FlipPayload memory p = abi.decode(_tocPayloads[tocId], (FlipPayload));
+
+        // Decode pythUpdateData
+        bytes[] memory updatesA = abi.decode(pythUpdateDataA, (bytes[]));
+        bytes[] memory updatesB = abi.decode(pythUpdateDataB, (bytes[]));
+
+        // Update Pyth for both
+        uint256 feeA = pyth.getUpdateFee(updatesA);
+        uint256 feeB = pyth.getUpdateFee(updatesB);
+        pyth.updatePriceFeeds{value: feeA}(updatesA);
+        pyth.updatePriceFeeds{value: feeB}(updatesB);
+
+        // Get price A from Pyth
+        PythStructs.Price memory priceDataA = pyth.getPriceNoOlderThan(
+            p.priceIdA,
+            3600 // Allow fetching recent price
+        );
+
+        // Get price B from Pyth
+        PythStructs.Price memory priceDataB = pyth.getPriceNoOlderThan(
+            p.priceIdB,
+            3600 // Allow fetching recent price
+        );
+
+        // Validate timestamp if referenceTimestamp is set
+        if (p.referenceTimestamp != 0) {
+            // Pyth proof must have publishTime within 1 second of referenceTimestamp
+            if (priceDataA.publishTime < p.referenceTimestamp ||
+                priceDataA.publishTime > p.referenceTimestamp + POINT_IN_TIME_TOLERANCE) {
+                revert InvalidReferenceTimestamp(p.referenceTimestamp, priceDataA.publishTime);
+            }
+            if (priceDataB.publishTime < p.referenceTimestamp ||
+                priceDataB.publishTime > p.referenceTimestamp + POINT_IN_TIME_TOLERANCE) {
+                revert InvalidReferenceTimestamp(p.referenceTimestamp, priceDataB.publishTime);
+            }
+        }
+
+        // Validate confidence
+        _checkConfidence(priceDataA.conf, priceDataA.price);
+        _checkConfidence(priceDataB.conf, priceDataB.price);
+
+        // Normalize to 8 decimals
+        int64 normalizedPriceA = _normalizePrice(priceDataA.price, priceDataA.expo);
+        int64 normalizedPriceB = _normalizePrice(priceDataB.price, priceDataB.expo);
+
+        // Store reference prices
+        _referencePrice[tocId] = ReferencePrice({
+            price: normalizedPriceA,
+            timestamp: priceDataA.publishTime,
+            isSet: true
+        });
+        _referencePriceB[tocId] = ReferencePrice({
+            price: normalizedPriceB,
+            timestamp: priceDataB.publishTime,
+            isSet: true
+        });
+
+        emit ReferencePricesSet(tocId, normalizedPriceA, normalizedPriceB, priceDataA.publishTime);
     }
 
     // ============ Internal Functions ============
@@ -1481,6 +1591,194 @@ contract PythPriceResolverV2 is ITOCResolver {
 
         emit TOCResolved(tocId, TEMPLATE_SPREAD_THRESHOLD, outcome, priceA, publishTime);
         return outcome;
+    }
+
+    function _validateAndEmitFlip(uint256 tocId, bytes calldata payload) internal {
+        FlipPayload memory p = abi.decode(payload, (FlipPayload));
+
+        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
+        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
+        if (p.deadline <= block.timestamp) revert DeadlineInPast();
+
+        // If reference prices are set, store them
+        if (p.referenceTimestamp != 0 || p.referencePriceA != 0 || p.referencePriceB != 0) {
+            // All must be non-zero if any is set
+            if (p.referenceTimestamp == 0 || p.referencePriceA == 0 || p.referencePriceB == 0) {
+                revert InvalidPayload();
+            }
+            // Store reference prices
+            _referencePrice[tocId] = ReferencePrice({
+                price: p.referencePriceA,
+                timestamp: p.referenceTimestamp,
+                isSet: true
+            });
+            _referencePriceB[tocId] = ReferencePrice({
+                price: p.referencePriceB,
+                timestamp: p.referenceTimestamp,
+                isSet: true
+            });
+            emit ReferencePricesSet(tocId, p.referencePriceA, p.referencePriceB, p.referenceTimestamp);
+        }
+
+        emit FlipTOCCreated(
+            tocId,
+            p.priceIdA,
+            p.priceIdB,
+            p.deadline,
+            p.referenceTimestamp,
+            p.referencePriceA,
+            p.referencePriceB
+        );
+    }
+
+    function _resolveFlip(
+        uint256 tocId,
+        bytes calldata pythUpdateData
+    ) internal returns (bool) {
+        FlipPayload memory p = abi.decode(_tocPayloads[tocId], (FlipPayload));
+
+        // Reference prices must be set
+        if (!_referencePrice[tocId].isSet || !_referencePriceB[tocId].isSet) {
+            revert ReferencePriceNotSet(tocId);
+        }
+
+        ReferencePrice memory refPriceA = _referencePrice[tocId];
+        ReferencePrice memory refPriceB = _referencePriceB[tocId];
+
+        // Decode update data array
+        bytes[] memory updates = abi.decode(pythUpdateData, (bytes[]));
+
+        // If no proof provided (empty array) and deadline passed -> resolve NO
+        if (updates.length == 0) {
+            // Must be at or after deadline to resolve NO without proof
+            if (block.timestamp < p.deadline) {
+                revert DeadlineNotReached(p.deadline, block.timestamp);
+            }
+
+            // No flip proof submitted, resolve NO (flip did not happen)
+            emit TOCResolved(tocId, TEMPLATE_FLIP, false, refPriceA.price, p.deadline);
+            return false;
+        }
+
+        // If proof provided -> check if it shows a flip
+        // Update Pyth with all proofs
+        uint256 fee = pyth.getUpdateFee(updates);
+        pyth.updatePriceFeeds{value: fee}(updates);
+
+        // Determine initial relationship: was A < B or A > B?
+        bool initialALessThanB = refPriceA.price < refPriceB.price;
+
+        // Check all proofs for a flip
+        for (uint256 i = 0; i < updates.length; i++) {
+            // Decode the price feed from the update
+            (PythStructs.PriceFeed memory priceFeed,) = abi.decode(updates[i], (PythStructs.PriceFeed, uint64));
+
+            // We need both prices at the same time
+            // Skip if this is not one of our price IDs
+            if (priceFeed.id != p.priceIdA && priceFeed.id != p.priceIdB) {
+                continue;
+            }
+
+            // Validate timing - publishTime must be <= deadline and after reference timestamp
+            if (priceFeed.price.publishTime > p.deadline || priceFeed.price.publishTime < refPriceA.timestamp) {
+                continue; // Skip proofs outside the valid time range
+            }
+
+            // We need to get both prices at this timestamp
+            // Since we're iterating through updates, we need to check if we have both prices
+            // For simplicity, we'll get both prices from Pyth after updating
+            // This assumes the updates contain price feeds for both assets at similar times
+        }
+
+        // Alternative approach: Get both current prices and check if flip occurred
+        // This requires the proof to contain updates for both price feeds
+        bool flipOccurred = false;
+        int64 lastPriceA = refPriceA.price;
+        int64 lastPriceB = refPriceB.price;
+        uint256 lastPublishTime = refPriceA.timestamp;
+
+        // Check each pair of price updates to see if a flip occurred
+        for (uint256 i = 0; i < updates.length; i++) {
+            (PythStructs.PriceFeed memory priceFeedA,) = abi.decode(updates[i], (PythStructs.PriceFeed, uint64));
+
+            if (priceFeedA.id != p.priceIdA) {
+                continue;
+            }
+
+            // Validate timing
+            if (priceFeedA.price.publishTime > p.deadline || priceFeedA.price.publishTime < refPriceA.timestamp) {
+                continue;
+            }
+
+            // Validate confidence
+            _checkConfidence(priceFeedA.price.conf, priceFeedA.price.price);
+
+            // Normalize price A
+            int64 normalizedPriceA = _normalizePrice(priceFeedA.price.price, priceFeedA.price.expo);
+
+            // Find matching price B at the same or nearby time
+            for (uint256 j = 0; j < updates.length; j++) {
+                (PythStructs.PriceFeed memory priceFeedB,) = abi.decode(updates[j], (PythStructs.PriceFeed, uint64));
+
+                if (priceFeedB.id != p.priceIdB) {
+                    continue;
+                }
+
+                // Check if timestamps are close (within tolerance)
+                if (priceFeedB.price.publishTime < priceFeedA.price.publishTime ||
+                    priceFeedB.price.publishTime > priceFeedA.price.publishTime + POINT_IN_TIME_TOLERANCE) {
+                    continue;
+                }
+
+                // Validate timing
+                if (priceFeedB.price.publishTime > p.deadline || priceFeedB.price.publishTime < refPriceB.timestamp) {
+                    continue;
+                }
+
+                // Validate confidence
+                _checkConfidence(priceFeedB.price.conf, priceFeedB.price.price);
+
+                // Normalize price B
+                int64 normalizedPriceB = _normalizePrice(priceFeedB.price.price, priceFeedB.price.expo);
+
+                // Check if flip occurred
+                if (initialALessThanB) {
+                    // Initially A < B, flip occurs when A > B
+                    if (normalizedPriceA > normalizedPriceB) {
+                        flipOccurred = true;
+                        lastPriceA = normalizedPriceA;
+                        lastPriceB = normalizedPriceB;
+                        lastPublishTime = priceFeedA.price.publishTime;
+                        break;
+                    }
+                } else {
+                    // Initially A > B, flip occurs when A < B
+                    if (normalizedPriceA < normalizedPriceB) {
+                        flipOccurred = true;
+                        lastPriceA = normalizedPriceA;
+                        lastPriceB = normalizedPriceB;
+                        lastPublishTime = priceFeedA.price.publishTime;
+                        break;
+                    }
+                }
+            }
+
+            if (flipOccurred) {
+                break;
+            }
+        }
+
+        if (flipOccurred) {
+            // Found a proof showing flip occurred -> resolve YES
+            emit TOCResolved(tocId, TEMPLATE_FLIP, true, lastPriceA, lastPublishTime);
+            return true;
+        }
+
+        // All proofs checked, no flip found
+        // If proofs were provided but don't show flip, still resolve NO
+        emit TOCResolved(tocId, TEMPLATE_FLIP, false, refPriceA.price, p.deadline);
+        return false;
     }
 
     // ============ Receive ============

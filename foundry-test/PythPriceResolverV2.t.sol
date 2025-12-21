@@ -2483,5 +2483,186 @@ contract PythPriceResolverV2Test is Test {
         assertFalse(result, "Should be false - spread below threshold");
     }
 
+    // ============ Template 14: Flip Tests ============
+
+    function test_CreateFlipTOC() public {
+        uint256 deadline = block.timestamp + 1 days;
+        uint256 referenceTime = block.timestamp;
+
+        // Payload: priceIdA, priceIdB, deadline, referenceTimestamp, referencePriceA, referencePriceB
+        // Example: Did ETH overtake (flip above) a lower priced asset before deadline?
+        // ETH starts at $3,000, Asset B at $3,500
+        bytes memory payload = abi.encode(
+            ETH_USD,                    // Asset A
+            BTC_USD,                    // Asset B (just for test, normally different pair)
+            deadline,
+            referenceTime,
+            int64(3000_00000000),      // ETH at $3,000
+            int64(3500_00000000)       // BTC at $3,500
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            14, // TEMPLATE_FLIP
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        assertEq(tocId, 1, "First TOC should have ID 1");
+
+        TOC memory toc = registry.getTOC(tocId);
+        assertEq(uint8(toc.state), uint8(TOCState.ACTIVE));
+    }
+
+    function test_ResolveFlip_Yes() public {
+        uint256 deadline = block.timestamp + 1 days;
+        uint256 referenceTime = block.timestamp;
+
+        // Create TOC: Did ETH flip above BTC before deadline?
+        // Initially: ETH ($3,000) < BTC ($96,000)
+        bytes memory payload = abi.encode(
+            ETH_USD,
+            BTC_USD,
+            deadline,
+            referenceTime,
+            int64(3000_00000000),      // ETH starts at $3,000
+            int64(96000_00000000)      // BTC starts at $96,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            14,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp to middle of period
+        vm.warp(referenceTime + 12 hours);
+
+        // Create proof showing flip occurred: ETH ($97,000) > BTC ($96,000)
+        bytes[] memory updates = new bytes[](2);
+
+        // ETH flipped to $97,000
+        updates[0] = _createPriceUpdate(
+            ETH_USD,
+            int64(97000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(referenceTime + 12 hours)
+        );
+
+        // BTC at $96,000
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),
+            int32(-8),
+            uint64(referenceTime + 12 hours)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be YES (flip occurred)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertTrue(result, "Should be true - flip occurred");
+    }
+
+    function test_ResolveFlip_No() public {
+        uint256 deadline = block.timestamp + 1 days;
+        uint256 referenceTime = block.timestamp;
+
+        // Create TOC: Did ETH flip above BTC before deadline?
+        // Initially: ETH ($3,000) < BTC ($96,000)
+        bytes memory payload = abi.encode(
+            ETH_USD,
+            BTC_USD,
+            deadline,
+            referenceTime,
+            int64(3000_00000000),      // ETH starts at $3,000
+            int64(96000_00000000)      // BTC starts at $96,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            14,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp past deadline
+        vm.warp(deadline + 1);
+
+        // No proof submitted (empty array) - flip did not occur
+        bytes[] memory updates = new bytes[](0);
+
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (flip did not occur)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - no flip occurred");
+    }
+
+    function test_ResolveFlip_NoProofDoesNotShowFlip() public {
+        uint256 deadline = block.timestamp + 1 days;
+        uint256 referenceTime = block.timestamp;
+
+        // Create TOC: Did ETH flip above BTC before deadline?
+        // Initially: ETH ($3,000) < BTC ($96,000)
+        bytes memory payload = abi.encode(
+            ETH_USD,
+            BTC_USD,
+            deadline,
+            referenceTime,
+            int64(3000_00000000),      // ETH starts at $3,000
+            int64(96000_00000000)      // BTC starts at $96,000
+        );
+
+        uint256 tocId = registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            14,
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+
+        // Warp past deadline
+        vm.warp(deadline + 1);
+
+        // Submit proof but it doesn't show flip: ETH still below BTC
+        bytes[] memory updates = new bytes[](2);
+
+        // ETH at $4,000 (still below BTC)
+        updates[0] = _createPriceUpdate(
+            ETH_USD,
+            int64(4000_00000000),
+            uint64(10_00000000),   // conf: $10 (well under 1% of $4,000)
+            int32(-8),
+            uint64(deadline)
+        );
+
+        // BTC at $96,000
+        updates[1] = _createPriceUpdate(
+            BTC_USD,
+            int64(96000_00000000),
+            uint64(100_00000000),  // conf: $100 (well under 1% of $96,000)
+            int32(-8),
+            uint64(deadline)
+        );
+
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
+        registry.resolveTOC(tocId, address(0), 0, _encodePriceUpdates(updates));
+
+        // Check result - should be NO (proof doesn't show flip)
+        bytes memory resultBytes = registry.getResult(tocId);
+        bool result = TOCResultCodec.decodeBoolean(resultBytes);
+        assertFalse(result, "Should be false - no flip in proof");
+    }
+
     receive() external payable {}
 }
