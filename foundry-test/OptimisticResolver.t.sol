@@ -78,7 +78,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0, // TEMPLATE_ARBITRARY
+            1, // TEMPLATE_ARBITRARY
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -104,7 +104,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -129,7 +129,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             0, // No dispute window for simplicity
             0,
@@ -163,7 +163,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             0, 0, 0, 0,
             truthKeeper
@@ -192,7 +192,7 @@ contract OptimisticResolverTest is Test {
         bool reverted = false;
         try registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -218,7 +218,7 @@ contract OptimisticResolverTest is Test {
         bool reverted = false;
         try registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -247,7 +247,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            1, // TEMPLATE_SPORTS
+            2, // TEMPLATE_SPORTS
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -277,7 +277,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            1,
+            2,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -302,7 +302,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            1,
+            2,
             abi.encode(payload),
             0, 0, 0, 0, // No dispute windows
             truthKeeper
@@ -332,7 +332,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            2, // TEMPLATE_EVENT
+            3, // TEMPLATE_EVENT
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -358,7 +358,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            2,
+            3,
             abi.encode(payload),
             0, 0, 0, 0,
             truthKeeper
@@ -391,7 +391,7 @@ contract OptimisticResolverTest is Test {
         vm.prank(creator, creator);
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -425,7 +425,7 @@ contract OptimisticResolverTest is Test {
         vm.prank(creator, creator);
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -460,7 +460,7 @@ contract OptimisticResolverTest is Test {
         vm.prank(creator, creator);
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -470,7 +470,7 @@ contract OptimisticResolverTest is Test {
         );
 
         (uint32 templateId, address tocCreator, uint256 createdAt) = resolver.getQuestionData(tocId);
-        require(templateId == 0, "Template should be 0");
+        require(templateId == 1, "Template should be 1");
         require(tocCreator == creator, "Creator should be creator address");
         require(createdAt > 0, "CreatedAt should be set");
     }
@@ -485,7 +485,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -495,7 +495,7 @@ contract OptimisticResolverTest is Test {
         );
 
         (uint32 templateId, bytes memory creationPayload) = resolver.getTocDetails(tocId);
-        require(templateId == 0, "Template should be 0");
+        require(templateId == 1, "Template should be 1");
         require(creationPayload.length > 0, "Payload should not be empty");
     }
 
@@ -511,7 +511,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -524,15 +524,16 @@ contract OptimisticResolverTest is Test {
     }
 
     function test_TemplateInfo() public {
-        require(resolver.getTemplateCount() == 3, "Should have 3 templates");
-        require(resolver.isValidTemplate(0), "Template 0 should be valid");
+        require(resolver.getTemplateCount() == 4, "Should have 4 template slots (0-3)");
+        require(!resolver.isValidTemplate(0), "Template 0 should be invalid (NONE)");
         require(resolver.isValidTemplate(1), "Template 1 should be valid");
         require(resolver.isValidTemplate(2), "Template 2 should be valid");
-        require(!resolver.isValidTemplate(3), "Template 3 should be invalid");
+        require(resolver.isValidTemplate(3), "Template 3 should be valid");
+        require(!resolver.isValidTemplate(4), "Template 4 should be invalid");
 
-        require(resolver.getTemplateAnswerType(0) == AnswerType.BOOLEAN, "All templates return BOOLEAN");
         require(resolver.getTemplateAnswerType(1) == AnswerType.BOOLEAN, "All templates return BOOLEAN");
         require(resolver.getTemplateAnswerType(2) == AnswerType.BOOLEAN, "All templates return BOOLEAN");
+        require(resolver.getTemplateAnswerType(3) == AnswerType.BOOLEAN, "All templates return BOOLEAN");
     }
 
     // ============ Integration with Dispute Flow ============
@@ -548,7 +549,7 @@ contract OptimisticResolverTest is Test {
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW, // Has dispute window
             DEFAULT_TK_WINDOW,
@@ -626,7 +627,7 @@ contract OptimisticResolverTest is Test {
         vm.prank(creator, creator);
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -659,7 +660,7 @@ contract OptimisticResolverTest is Test {
         vm.prank(creator, creator);
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -692,7 +693,7 @@ contract OptimisticResolverTest is Test {
         vm.prank(creator, creator);
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,
@@ -724,7 +725,7 @@ contract OptimisticResolverTest is Test {
         vm.prank(creator, creator);
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
-            0,
+            1,
             abi.encode(payload),
             DEFAULT_DISPUTE_WINDOW,
             DEFAULT_TK_WINDOW,

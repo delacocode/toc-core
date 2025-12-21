@@ -10,16 +10,18 @@ import "./IClarifiable.sol";
 /// @title OptimisticResolver
 /// @notice Resolver for human-judgment questions using optimistic proposal model
 /// @dev Implements 3 templates:
-///   - Template 0: Arbitrary Question - Free-form YES/NO questions
-///   - Template 1: Sports Outcome - Structured sports event questions
-///   - Template 2: Event Occurrence - Did a specific event occur?
+///   - Template 0: NONE (reserved)
+///   - Template 1: Arbitrary Question - Free-form YES/NO questions
+///   - Template 2: Sports Outcome - Structured sports event questions
+///   - Template 3: Event Occurrence - Did a specific event occur?
 contract OptimisticResolver is ITOCResolver, IClarifiable {
     // ============ Constants ============
 
-    uint32 public constant TEMPLATE_ARBITRARY = 0;
-    uint32 public constant TEMPLATE_SPORTS = 1;
-    uint32 public constant TEMPLATE_EVENT = 2;
-    uint32 public constant TEMPLATE_COUNT = 3;
+    uint32 public constant TEMPLATE_NONE = 0;
+    uint32 public constant TEMPLATE_ARBITRARY = 1;
+    uint32 public constant TEMPLATE_SPORTS = 2;
+    uint32 public constant TEMPLATE_EVENT = 3;
+    uint32 public constant TEMPLATE_COUNT = 4;
 
     /// @notice Maximum question/description length (8KB, matching UMA)
     uint256 public constant MAX_TEXT_LENGTH = 8192;
@@ -48,7 +50,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         bytes payload;
     }
 
-    /// @notice Payload for Template 0: Arbitrary Question
+    /// @notice Payload for Template 1: Arbitrary Question
     struct ArbitraryPayload {
         string question;
         string description;
@@ -56,7 +58,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         uint256 resolutionTime;
     }
 
-    /// @notice Payload for Template 1: Sports Outcome
+    /// @notice Payload for Template 2: Sports Outcome
     struct SportsPayload {
         string league;
         string homeTeam;
@@ -66,7 +68,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         int256 line; // For spread/over-under (scaled 1e18)
     }
 
-    /// @notice Payload for Template 2: Event Occurrence
+    /// @notice Payload for Template 3: Event Occurrence
     struct EventPayload {
         string eventDescription;
         string verificationSource;
@@ -158,7 +160,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         uint32 templateId,
         bytes calldata payload
     ) external onlyRegistry returns (TOCState initialState) {
-        if (templateId >= TEMPLATE_COUNT) {
+        if (templateId == TEMPLATE_NONE || templateId >= TEMPLATE_COUNT) {
             revert InvalidTemplate(templateId);
         }
 
@@ -230,7 +232,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
 
     /// @inheritdoc ITOCResolver
     function isValidTemplate(uint32 templateId) external pure returns (bool) {
-        return templateId < TEMPLATE_COUNT;
+        return templateId > TEMPLATE_NONE && templateId < TEMPLATE_COUNT;
     }
 
     /// @inheritdoc ITOCResolver
