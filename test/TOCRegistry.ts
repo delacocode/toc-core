@@ -180,10 +180,10 @@ describe("TOCRegistry with Expectations", async function () {
   const MIN_DISPUTE_BOND = parseEther("0.05");
   const MIN_ESCALATION_BOND = parseEther("0.15");
   const PROTOCOL_FEE = parseEther("0.001");
-  const DEFAULT_DISPUTE_WINDOW = 24n * 60n * 60n; // 24 hours
-  const DEFAULT_TK_WINDOW = 24n * 60n * 60n;
-  const DEFAULT_ESCALATION_WINDOW = 48n * 60n * 60n;
-  const DEFAULT_POST_RESOLUTION_WINDOW = 24n * 60n * 60n;
+  const DEFAULT_DISPUTE_WINDOW = 12n * 60n * 60n; // 12 hours (within 1-day limit for RESOLVER trust)
+  const DEFAULT_TK_WINDOW = 12n * 60n * 60n;
+  const DEFAULT_ESCALATION_WINDOW = 12n * 60n * 60n;
+  const DEFAULT_POST_RESOLUTION_WINDOW = 12n * 60n * 60n;
   const TK_SHARE_BASIS_POINTS = 4000n; // 40%
 
   // Contracts
@@ -214,7 +214,7 @@ describe("TOCRegistry with Expectations", async function () {
 
   describe("TOC Creation", () => {
     it("should create TOC with full effect verification", async () => {
-      // Use proper ArbitraryPayload format for OptimisticResolver template 0
+      // Use proper ArbitraryPayload format for OptimisticResolver template 1 (TEMPLATE_ARBITRARY)
       const futureTime = BigInt(Math.floor(Date.now() / 1000) + 86400 * 30); // 30 days from now
       const payload = encodeArbitraryPayload(
         "Will BTC hit $100k?",
@@ -231,7 +231,7 @@ describe("TOCRegistry with Expectations", async function () {
       const hash = await registry.write.createTOC(
         [
           resolver.address,
-          0, // templateId (TEMPLATE_ARBITRARY)
+          1, // templateId (TEMPLATE_ARBITRARY)
           payload,
           DEFAULT_DISPUTE_WINDOW,
           DEFAULT_TK_WINDOW,
@@ -253,7 +253,7 @@ describe("TOCRegistry with Expectations", async function () {
         logs: receipt.logs,
         params: {
           resolver: resolver.address,
-          templateId: 0,
+          templateId: 1,
           payload: payload as `0x${string}`,
           disputeWindow: Number(DEFAULT_DISPUTE_WINDOW),
           tkWindow: Number(DEFAULT_TK_WINDOW),
@@ -289,7 +289,7 @@ describe("TOCRegistry with Expectations", async function () {
       await registry.write.createTOC(
         [
           resolver.address,
-          0,
+          1, // TEMPLATE_ARBITRARY
           payload,
           DEFAULT_DISPUTE_WINDOW,
           DEFAULT_TK_WINDOW,
@@ -346,7 +346,7 @@ describe("TOCRegistry with Expectations", async function () {
       await registry.write.createTOC(
         [
           resolver.address,
-          0,
+          1, // TEMPLATE_ARBITRARY
           payload,
           0n, // disputeWindow
           0n, // tkWindow
@@ -408,7 +408,7 @@ describe("TOCRegistry with Expectations", async function () {
       const createHash = await registry.write.createTOC(
         [
           resolver.address,
-          0,
+          1, // TEMPLATE_ARBITRARY
           payload,
           DEFAULT_DISPUTE_WINDOW,
           DEFAULT_TK_WINDOW,
@@ -428,7 +428,7 @@ describe("TOCRegistry with Expectations", async function () {
         logs: createReceipt.logs,
         params: {
           resolver: resolver.address,
-          templateId: 0,
+          templateId: 1,
           payload: payload as `0x${string}`,
           disputeWindow: Number(DEFAULT_DISPUTE_WINDOW),
           tkWindow: Number(DEFAULT_TK_WINDOW),

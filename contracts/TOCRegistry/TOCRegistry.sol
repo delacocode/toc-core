@@ -24,6 +24,12 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     /// @notice Default dispute window if resolver doesn't specify one
     uint256 public constant DEFAULT_DISPUTE_WINDOW_DURATION = 24 hours;
 
+    /// @notice Maximum window duration for RESOLVER trust level
+    uint256 public constant MAX_WINDOW_RESOLVER = 1 days;
+
+    /// @notice Maximum window duration for VERIFIED and SYSTEM trust levels
+    uint256 public constant MAX_WINDOW_TRUSTED = 30 days;
+
     // ============ State Variables ============
 
     // Resolver storage (unified trust-based system)
@@ -117,6 +123,9 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     error NoFeesToWithdraw();
     error NoResolverFee(uint256 tocId);
     error NotResolverForToc(address caller, uint256 tocId);
+
+    // Window validation errors
+    error WindowTooLong(uint256 provided, uint256 maximum);
 
     // ============ Constructor ============
 
@@ -323,6 +332,15 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
             revert ResolverNotRegistered(resolver);
         }
 
+        // Validate time windows don't exceed maximum for trust level
+        uint256 maxWindow = (trust == ResolverTrust.RESOLVER)
+            ? MAX_WINDOW_RESOLVER
+            : MAX_WINDOW_TRUSTED;
+        if (disputeWindow > maxWindow) revert WindowTooLong(disputeWindow, maxWindow);
+        if (truthKeeperWindow > maxWindow) revert WindowTooLong(truthKeeperWindow, maxWindow);
+        if (escalationWindow > maxWindow) revert WindowTooLong(escalationWindow, maxWindow);
+        if (postResolutionWindow > maxWindow) revert WindowTooLong(postResolutionWindow, maxWindow);
+
         // Validate template exists on resolver
         if (!ITOCResolver(resolver).isValidTemplate(templateId)) {
             revert InvalidTemplateId(templateId);
@@ -380,7 +398,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         _collectCreationFees(tocId, resolver, templateId, truthKeeper, toc.tierAtCreation);
 
         // Call resolver to create TOC (may set initial state)
-        toc.state = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload);
+        toc.state = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload, msg.sender);
 
         emit TOCCreated(tocId, resolver, trust, templateId, toc.answerType, toc.state, truthKeeper, toc.tierAtCreation);
     }

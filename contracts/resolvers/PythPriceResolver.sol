@@ -98,7 +98,8 @@ contract PythPriceResolver is ITOCResolver {
     function onTocCreated(
         uint256 tocId,
         uint32 templateId,
-        bytes calldata payload
+        bytes calldata payload,
+        address /* creator */
     ) external onlyRegistry returns (TOCState initialState) {
         if (templateId >= TEMPLATE_COUNT) {
             revert InvalidTemplate(templateId);

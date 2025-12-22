@@ -21,11 +21,13 @@ interface ITOCResolver {
     /// @param tocId The unique TOC identifier assigned by registry
     /// @param templateId The template ID within this resolver
     /// @param payload Encoded creation parameters specific to the template
+    /// @param creator The address that created the TOC
     /// @return initialState The initial state (PENDING or ACTIVE)
     function onTocCreated(
         uint256 tocId,
         uint32 templateId,
-        bytes calldata payload
+        bytes calldata payload,
+        address creator
     ) external returns (TOCState initialState);
 
     /// @notice Resolve a TOC with provided proof/data

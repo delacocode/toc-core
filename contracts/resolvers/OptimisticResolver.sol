@@ -107,6 +107,13 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         string questionPreview
     );
 
+    event ResolutionProposed(
+        uint256 indexed tocId,
+        address indexed proposer,
+        bool answer,
+        string justification
+    );
+
     // Note: ClarificationRequested, ClarificationAccepted, ClarificationRejected
     // are inherited from IClarifiable
 
@@ -158,7 +165,8 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
     function onTocCreated(
         uint256 tocId,
         uint32 templateId,
-        bytes calldata payload
+        bytes calldata payload,
+        address creator
     ) external onlyRegistry returns (TOCState initialState) {
         if (templateId == TEMPLATE_NONE || templateId >= TEMPLATE_COUNT) {
             revert InvalidTemplate(templateId);
@@ -170,12 +178,12 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         // Store question data
         _questions[tocId] = QuestionData({
             templateId: templateId,
-            creator: tx.origin, // Original caller, not registry
+            creator: creator,
             createdAt: block.timestamp,
             payload: payload
         });
 
-        emit QuestionCreated(tocId, templateId, tx.origin, questionPreview);
+        emit QuestionCreated(tocId, templateId, creator, questionPreview);
 
         // All optimistic questions start ACTIVE (no approval needed)
         return TOCState.ACTIVE;
@@ -184,7 +192,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
     /// @inheritdoc ITOCResolver
     function resolveToc(
         uint256 tocId,
-        address, // caller - not used for access control in optimistic model
+        address caller,
         bytes calldata answerPayload
     ) external onlyRegistry returns (bytes memory result) {
         QuestionData storage q = _questions[tocId];
@@ -194,6 +202,9 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
 
         // Decode answer payload
         AnswerPayload memory answer = abi.decode(answerPayload, (AnswerPayload));
+
+        // Emit event for audit trail
+        emit ResolutionProposed(tocId, caller, answer.answer, answer.justification);
 
         // All templates return boolean
         return TOCResultCodec.encodeBoolean(answer.answer);
