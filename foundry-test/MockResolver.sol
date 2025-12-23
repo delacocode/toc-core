@@ -123,7 +123,8 @@ contract MockResolver is ITOCResolver {
     function onTocCreated(
         uint256 tocId,
         uint32 templateId,
-        bytes calldata payload
+        bytes calldata payload,
+        address // creator
     ) external onlyRegistry returns (TOCState initialState) {
         if (shouldRevertOnCreate) {
             revert MockRevertOnCreate();
