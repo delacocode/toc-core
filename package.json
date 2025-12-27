@@ -5,7 +5,16 @@
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat compile",
-    "clean": "hardhat clean"
+    "clean": "hardhat clean",
+    "deploy:mock-pyth": "hardhat ignition deploy ignition/modules/MockPythOracle.ts --network sepolia",
+    "deploy:sepolia": "hardhat ignition deploy ignition/modules/TOCSystem.ts --network sepolia --parameters ignition/parameters/sepolia.json",
+    "deploy:base": "hardhat ignition deploy ignition/modules/TOCSystem.ts --network base --parameters ignition/parameters/base.json",
+    "deploy:arbitrum": "hardhat ignition deploy ignition/modules/TOCSystem.ts --network arbitrum --parameters ignition/parameters/arbitrum.json",
+    "deploy:polygon": "hardhat ignition deploy ignition/modules/TOCSystem.ts --network polygon --parameters ignition/parameters/polygon.json",
+    "configure:sepolia": "hardhat run scripts/configure-system.ts --network sepolia",
+    "configure:base": "hardhat run scripts/configure-system.ts --network base",
+    "configure:arbitrum": "hardhat run scripts/configure-system.ts --network arbitrum",
+    "configure:polygon": "hardhat run scripts/configure-system.ts --network polygon"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.0",
