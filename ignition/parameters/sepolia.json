@@ -1,0 +1,10 @@
+{
+  "PythPriceResolver": {
+    "pythAddress": "0x0000000000000000000000000000000000000000"
+  },
+  "SimpleTruthKeeper": {
+    "truthKeeperOwner": "0x0000000000000000000000000000000000000000",
+    "minDisputeWindow": 300,
+    "minTruthKeeperWindow": 600
+  }
+}
