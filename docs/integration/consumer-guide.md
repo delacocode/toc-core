@@ -13,13 +13,14 @@ contract MyMarket {
     // 1. Create a TOC when opening a market
     function openMarket(bytes calldata payload) external payable returns (uint256 tocId) {
         (, , uint256 fee) = registry.getCreationFee(resolver, templateId);
+        // Note: Max window depends on resolver trust (RESOLVER=1 day, VERIFIED=30 days)
         tocId = registry.createTOC{value: fee}(
             resolver,
             templateId,
             payload,
-            1 days,     // disputeWindow
-            1 days,     // truthKeeperWindow
-            1 days,     // escalationWindow
+            12 hours,   // disputeWindow (within RESOLVER limit)
+            12 hours,   // truthKeeperWindow
+            12 hours,   // escalationWindow
             0,          // postResolutionWindow
             truthKeeper
         );
@@ -136,7 +137,7 @@ function canSettle(uint256 tocId) public view returns (bool settleable, string m
 ```solidity
 function createTOC(
     address resolver,           // OptimisticResolver address
-    uint32 templateId,          // 0=Arbitrary, 1=Sports, 2=Event
+    uint32 templateId,          // 1=Arbitrary, 2=Sports, 3=Event (0 is reserved)
     bytes calldata payload,     // Template-specific data (see below)
     uint256 disputeWindow,      // Time to dispute after resolution proposed
     uint256 truthKeeperWindow,  // Time for TK to decide disputes
@@ -146,13 +147,25 @@ function createTOC(
 ) external payable returns (uint256 tocId);
 ```
 
+### Time Window Limits
+
+**Important:** Maximum window durations are enforced based on resolver trust level:
+
+| Trust Level | Max Window (all 4 windows) |
+|-------------|---------------------------|
+| `RESOLVER` | 1 day |
+| `VERIFIED` | 30 days |
+| `SYSTEM` | 30 days |
+
+If you specify a window longer than the max for your resolver's trust level, `createTOC()` will revert with `WindowTooLong(provided, maximum)`.
+
 ### Time Window Recommendations
 
 | Use Case | disputeWindow | truthKeeperWindow | escalationWindow | postResolutionWindow |
 |----------|---------------|-------------------|------------------|----------------------|
-| Sports bets | 1 day | 1 day | 1 day | 0 |
-| Long-term predictions | 3 days | 2 days | 2 days | 7 days |
-| High-value markets | 7 days | 3 days | 3 days | 14 days |
+| Sports bets (RESOLVER) | 12 hours | 12 hours | 12 hours | 0 |
+| Long-term predictions (VERIFIED) | 3 days | 2 days | 2 days | 7 days |
+| High-value markets (VERIFIED) | 7 days | 3 days | 3 days | 14 days |
 
 ### Fees
 
@@ -171,7 +184,9 @@ uint256 tocId = registry.createTOC{value: total}(...);
 
 ## OptimisticResolver Templates
 
-### Template 0: Arbitrary Question
+> **Note:** Template 0 is reserved (TEMPLATE_NONE). Valid templates start at 1.
+
+### Template 1: Arbitrary Question (TEMPLATE_ARBITRARY)
 
 For free-form YES/NO questions.
 
@@ -185,14 +200,14 @@ ArbitraryPayload memory payload = ArbitraryPayload({
 
 uint256 tocId = registry.createTOC{value: fee}(
     optimisticResolver,
-    0, // TEMPLATE_ARBITRARY
+    1, // TEMPLATE_ARBITRARY
     abi.encode(payload),
-    1 days, 1 days, 1 days, 0,
+    12 hours, 12 hours, 12 hours, 0, // Within RESOLVER trust limits
     truthKeeper
 );
 ```
 
-### Template 1: Sports Outcome
+### Template 2: Sports Outcome (TEMPLATE_SPORTS)
 
 For structured sports questions.
 
@@ -208,9 +223,9 @@ SportsPayload memory payload = SportsPayload({
 
 uint256 tocId = registry.createTOC{value: fee}(
     optimisticResolver,
-    1, // TEMPLATE_SPORTS
+    2, // TEMPLATE_SPORTS
     abi.encode(payload),
-    1 days, 1 days, 1 days, 0,
+    12 hours, 12 hours, 12 hours, 0, // Within RESOLVER trust limits
     truthKeeper
 );
 ```
@@ -220,7 +235,7 @@ uint256 tocId = registry.createTOC{value: fee}(
 - `SPREAD`: Resolves YES if home team covers the spread
 - `OVER_UNDER`: Resolves YES if total score exceeds the line
 
-### Template 2: Event Occurrence
+### Template 3: Event Occurrence (TEMPLATE_EVENT)
 
 For "did X happen?" questions.
 
@@ -233,9 +248,9 @@ EventPayload memory payload = EventPayload({
 
 uint256 tocId = registry.createTOC{value: fee}(
     optimisticResolver,
-    2, // TEMPLATE_EVENT
+    3, // TEMPLATE_EVENT
     abi.encode(payload),
-    3 days, 2 days, 2 days, 7 days,
+    3 days, 2 days, 2 days, 7 days, // Requires VERIFIED trust for these windows
     truthKeeper
 );
 ```
@@ -283,6 +298,35 @@ if (res.tier == AccountabilityTier.SYSTEM) {
 // Reverts if TOC is not fully finalized
 ExtensiveResult memory res = registry.getExtensiveResultStrict(tocId);
 ```
+
+---
+
+## Events to Monitor
+
+### OptimisticResolver Events
+
+```solidity
+// Emitted when a TOC is created
+event QuestionCreated(
+    uint256 indexed tocId,
+    uint32 indexed templateId,
+    address indexed creator,
+    string questionPreview
+);
+
+// Emitted when someone proposes a resolution
+event ResolutionProposed(
+    uint256 indexed tocId,
+    address indexed proposer,
+    bool answer,
+    string justification  // Audit trail for disputes
+);
+```
+
+The `ResolutionProposed` event is useful for:
+- Displaying proposed answers in your UI before finalization
+- Logging justifications for transparency and dispute reference
+- Monitoring resolution activity across your markets
 
 ---
 
@@ -427,13 +471,14 @@ contract PredictionMarketExample {
         require(msg.value >= fee, "Insufficient fee");
 
         // Create TOC
+        // Note: Windows are limited by resolver trust level (RESOLVER = 1 day max)
         uint256 tocId = registry.createTOC{value: fee}(
             resolver,
             templateId,
             payload,
-            1 days,     // disputeWindow
-            1 days,     // truthKeeperWindow
-            1 days,     // escalationWindow
+            12 hours,   // disputeWindow (within RESOLVER limit)
+            12 hours,   // truthKeeperWindow
+            12 hours,   // escalationWindow
             0,          // postResolutionWindow (none for quick settlement)
             truthKeeper
         );
