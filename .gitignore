@@ -10,3 +10,6 @@ coverage/
 coverage.json
 typechain/
 typechain-types/
+
+# Ignition deployment state (local, not committed)
+ignition/deployments/

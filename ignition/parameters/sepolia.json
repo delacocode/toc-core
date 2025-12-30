@@ -1,9 +1,9 @@
 {
   "PythPriceResolver": {
-    "pythAddress": "0x0000000000000000000000000000000000000000"
+    "pythAddress": "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21"
   },
   "SimpleTruthKeeper": {
-    "truthKeeperOwner": "0x0000000000000000000000000000000000000000",
+    "truthKeeperOwner": "0xYOUR_ADDRESS_HERE",
     "minDisputeWindow": 300,
     "minTruthKeeperWindow": 600
   }
