@@ -1,6 +1,6 @@
 {
   "PythPriceResolver": {
-    "pythAddress": "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a"
+    "pythAddress": "0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594"
   },
   "SimpleTruthKeeper": {
     "truthKeeperOwner": "0xYOUR_ADDRESS_HERE",

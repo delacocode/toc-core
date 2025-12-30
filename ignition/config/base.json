@@ -1,0 +1,54 @@
+{
+  "network": "base",
+  "chainId": 8453,
+
+  "registry": {
+    "bonds": {
+      "resolution": {
+        "token": "0x0000000000000000000000000000000000000000",
+        "minAmount": "10000000000000000"
+      },
+      "dispute": {
+        "token": "0x0000000000000000000000000000000000000000",
+        "minAmount": "5000000000000000"
+      },
+      "escalation": {
+        "token": "0x0000000000000000000000000000000000000000",
+        "minAmount": "15000000000000000"
+      }
+    },
+    "fees": {
+      "protocolFeeStandard": "100000000000000",
+      "tkSharePercent": {
+        "TK_GUARANTEED": 4000,
+        "SYSTEM": 6000
+      }
+    },
+    "treasury": "0xYOUR_TREASURY_ADDRESS"
+  },
+
+  "truthKeeper": {
+    "owner": "0xYOUR_OWNER_ADDRESS",
+    "minDisputeWindow": 300,
+    "minTruthKeeperWindow": 600,
+    "allowedResolvers": [
+      "OptimisticResolver",
+      "PythPriceResolver"
+    ]
+  },
+
+  "resolvers": {
+    "OptimisticResolver": {
+      "register": true,
+      "trust": "RESOLVER"
+    },
+    "PythPriceResolver": {
+      "register": true,
+      "trust": "RESOLVER"
+    }
+  },
+
+  "pyth": {
+    "address": "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a"
+  }
+}

@@ -15,7 +15,7 @@
 import { network } from "hardhat";
 import { createPublicClient, createWalletClient, http, parseEther, formatEther } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
-import { sepolia, arbitrum, polygon, base } from "viem/chains";
+import { sepolia, arbitrum, polygon, base, bsc } from "viem/chains";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -62,6 +62,7 @@ const chains: Record<string, typeof sepolia> = {
   arbitrum,
   polygon,
   base,
+  bsc,
 };
 
 interface DeployedAddresses {
