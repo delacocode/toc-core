@@ -18,6 +18,10 @@ import { mnemonicToAccount } from "viem/accounts";
 import { sepolia, arbitrum, polygon, base, bsc } from "viem/chains";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Contract ABIs (minimal for configuration)
 const REGISTRY_ABI = [
@@ -103,7 +107,11 @@ interface Config {
 }
 
 async function main() {
-  const networkName = network.name;
+  // Hardhat 3.0 compatibility - try network.name, fallback to env var
+  const networkName = network.name || process.env.HARDHAT_NETWORK;
+  if (!networkName) {
+    throw new Error("Could not determine network. Use --network flag.");
+  }
   console.log(`\n🔧 Configuring TOC System on ${networkName}\n`);
 
   // Load config
