@@ -1,35 +1,18 @@
 /**
- * Setup script for Sepolia deployment
- * Reads configuration from ignition/config/sepolia.json
+ * Setup script - configures deployed contracts
+ * Reads configuration from ignition/config/<network>.json
  *
- * Usage: npx hardhat run scripts/sepolia/setup.ts --network sepolia
+ * Usage: npx hardhat run scripts/setup.ts --network <network>
  */
 
-import { createPublicClient, createWalletClient, http, formatEther, encodeFunctionData } from "viem";
-import { mnemonicToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import "dotenv/config";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load config
-const configPath = path.join(__dirname, "../../ignition/config/sepolia.json");
-const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-
-// Load deployed addresses
-const deployedPath = path.join(__dirname, "../../ignition/deployments/chain-11155111/deployed_addresses.json");
-const deployed = JSON.parse(fs.readFileSync(deployedPath, "utf-8"));
-
-const ADDRESSES = {
-  registry: deployed["TOCRegistry#TOCRegistry"] as `0x${string}`,
-  optimisticResolver: deployed["OptimisticResolver#OptimisticResolver"] as `0x${string}`,
-  pythResolver: deployed["PythPriceResolver#PythPriceResolver"] as `0x${string}`,
-  truthKeeper: deployed["SimpleTruthKeeper#SimpleTruthKeeper"] as `0x${string}`,
-};
+import { formatEther, encodeFunctionData } from "viem";
+import {
+  getNetwork,
+  loadConfig,
+  loadDeployedAddresses,
+  getChainConfig,
+  createClients,
+} from "./lib/config.js";
 
 // Minimal ABIs
 const REGISTRY_ABI = [
@@ -40,7 +23,6 @@ const REGISTRY_ABI = [
   { name: "setProtocolFeeStandard", type: "function", inputs: [{ name: "fee", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
   { name: "setTreasury", type: "function", inputs: [{ name: "treasury", type: "address" }], outputs: [], stateMutability: "nonpayable" },
   { name: "registerResolver", type: "function", inputs: [{ name: "resolver", type: "address" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "owner", type: "function", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
 ] as const;
 
 const TRUTH_KEEPER_ABI = [
@@ -48,28 +30,14 @@ const TRUTH_KEEPER_ABI = [
 ] as const;
 
 async function main() {
-  console.log("\n🔧 Setting up TOC System on Sepolia\n");
-  console.log(`📄 Config: ${configPath}\n`);
+  const network = getNetwork();
+  const { chainId } = getChainConfig(network);
+  const config = loadConfig(network);
+  const addresses = loadDeployedAddresses(chainId);
+  const { publicClient, walletClient, account } = createClients(network);
 
-  const mnemonic = process.env.MNEMONIC;
-  if (!mnemonic) throw new Error("MNEMONIC not set in .env");
-
-  const rpcUrl = process.env.SEPOLIA_RPC_URL;
-  if (!rpcUrl) throw new Error("SEPOLIA_RPC_URL not set in .env");
-
-  const account = mnemonicToAccount(mnemonic);
+  console.log(`\n🔧 Setting up TOC System on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
-
-  const publicClient = createPublicClient({
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
-
-  const walletClient = createWalletClient({
-    account,
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
 
   // Helper to send tx
   async function sendTx(description: string, to: `0x${string}`, data: `0x${string}`) {
@@ -89,13 +57,13 @@ async function main() {
     }
   }
 
-  // 1. Set bonds from config
+  // 1. Set bonds
   console.log("1️⃣  Setting bonds...");
   const { bonds } = config.registry;
 
   await sendTx(
     `Resolution bond: ${formatEther(BigInt(bonds.resolution.minAmount))} ETH`,
-    ADDRESSES.registry,
+    addresses.registry,
     encodeFunctionData({
       abi: REGISTRY_ABI,
       functionName: "addAcceptableResolutionBond",
@@ -105,7 +73,7 @@ async function main() {
 
   await sendTx(
     `Dispute bond: ${formatEther(BigInt(bonds.dispute.minAmount))} ETH`,
-    ADDRESSES.registry,
+    addresses.registry,
     encodeFunctionData({
       abi: REGISTRY_ABI,
       functionName: "addAcceptableDisputeBond",
@@ -115,7 +83,7 @@ async function main() {
 
   await sendTx(
     `Escalation bond: ${formatEther(BigInt(bonds.escalation.minAmount))} ETH`,
-    ADDRESSES.registry,
+    addresses.registry,
     encodeFunctionData({
       abi: REGISTRY_ABI,
       functionName: "addAcceptableEscalationBond",
@@ -123,12 +91,12 @@ async function main() {
     })
   );
 
-  // 2. Set treasury and fees from config
+  // 2. Set treasury and fees
   console.log("\n2️⃣  Setting treasury & fees...");
 
   await sendTx(
     `Treasury: ${config.registry.treasury}`,
-    ADDRESSES.registry,
+    addresses.registry,
     encodeFunctionData({
       abi: REGISTRY_ABI,
       functionName: "setTreasury",
@@ -138,7 +106,7 @@ async function main() {
 
   await sendTx(
     `Protocol fee: ${formatEther(BigInt(config.registry.fees.protocolFeeStandard))} ETH`,
-    ADDRESSES.registry,
+    addresses.registry,
     encodeFunctionData({
       abi: REGISTRY_ABI,
       functionName: "setProtocolFeeStandard",
@@ -150,12 +118,12 @@ async function main() {
   console.log("\n3️⃣  Whitelisting TruthKeeper...");
 
   await sendTx(
-    `TruthKeeper: ${ADDRESSES.truthKeeper}`,
-    ADDRESSES.registry,
+    `TruthKeeper: ${addresses.truthKeeper}`,
+    addresses.registry,
     encodeFunctionData({
       abi: REGISTRY_ABI,
       functionName: "addWhitelistedTruthKeeper",
-      args: [ADDRESSES.truthKeeper],
+      args: [addresses.truthKeeper],
     })
   );
 
@@ -163,18 +131,18 @@ async function main() {
   console.log("\n4️⃣  Registering resolvers...");
 
   const resolverAddresses: Record<string, `0x${string}`> = {
-    OptimisticResolver: ADDRESSES.optimisticResolver,
-    PythPriceResolver: ADDRESSES.pythResolver,
+    OptimisticResolver: addresses.optimisticResolver,
+    PythPriceResolver: addresses.pythResolver,
   };
 
   for (const [name, resolverConfig] of Object.entries(config.resolvers)) {
     const address = resolverAddresses[name];
     if (!address) continue;
 
-    if ((resolverConfig as any).register) {
+    if (resolverConfig.register) {
       await sendTx(
         `Register ${name}`,
-        ADDRESSES.registry,
+        addresses.registry,
         encodeFunctionData({
           abi: REGISTRY_ABI,
           functionName: "registerResolver",
@@ -193,7 +161,7 @@ async function main() {
 
     await sendTx(
       `Allow ${resolverName}`,
-      ADDRESSES.truthKeeper,
+      addresses.truthKeeper,
       encodeFunctionData({
         abi: TRUTH_KEEPER_ABI,
         functionName: "setResolverAllowed",
@@ -204,17 +172,12 @@ async function main() {
 
   console.log("\n✅ Setup complete!\n");
   console.log("📋 Configuration Summary:");
+  console.log(`   Network:         ${network}`);
   console.log(`   Resolution bond: ${formatEther(BigInt(bonds.resolution.minAmount))} ETH`);
   console.log(`   Dispute bond:    ${formatEther(BigInt(bonds.dispute.minAmount))} ETH`);
   console.log(`   Escalation bond: ${formatEther(BigInt(bonds.escalation.minAmount))} ETH`);
   console.log(`   Protocol fee:    ${formatEther(BigInt(config.registry.fees.protocolFeeStandard))} ETH`);
   console.log(`   Treasury:        ${config.registry.treasury}`);
-  console.log();
-  console.log("📋 Deployed Addresses:");
-  console.log(`   Registry:           ${ADDRESSES.registry}`);
-  console.log(`   OptimisticResolver: ${ADDRESSES.optimisticResolver}`);
-  console.log(`   PythResolver:       ${ADDRESSES.pythResolver}`);
-  console.log(`   TruthKeeper:        ${ADDRESSES.truthKeeper}`);
   console.log();
 }
 

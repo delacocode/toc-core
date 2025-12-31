@@ -1,30 +1,18 @@
 /**
- * Query a TOC on Sepolia
- * Reads deployed addresses from ignition deployment
+ * Query TOC(s) on any supported network
  *
- * Usage: TOC_ID=1 npx hardhat run scripts/sepolia/query-toc.ts --network sepolia
+ * Usage: npx hardhat run scripts/query-toc.ts --network <network>
+ *        TOC_ID=1 npx hardhat run scripts/query-toc.ts --network <network>
  */
 
-import { createPublicClient, http, decodeAbiParameters, parseAbiParameters } from "viem";
-import { sepolia } from "viem/chains";
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import "dotenv/config";
+import { decodeAbiParameters, parseAbiParameters } from "viem";
+import {
+  getNetwork,
+  loadDeployedAddresses,
+  getChainConfig,
+  createClients,
+} from "./lib/config.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load deployed addresses
-const deployedPath = path.join(__dirname, "../../ignition/deployments/chain-11155111/deployed_addresses.json");
-const deployed = JSON.parse(fs.readFileSync(deployedPath, "utf-8"));
-
-const ADDRESSES = {
-  registry: deployed["TOCRegistry#TOCRegistry"] as `0x${string}`,
-  optimisticResolver: deployed["OptimisticResolver#OptimisticResolver"] as `0x${string}`,
-};
-
-// Registry ABI
 const REGISTRY_ABI = [
   {
     name: "getTOC",
@@ -60,7 +48,6 @@ const REGISTRY_ABI = [
   },
 ] as const;
 
-// OptimisticResolver ABI
 const RESOLVER_ABI = [
   {
     name: "getTocQuestion",
@@ -71,7 +58,6 @@ const RESOLVER_ABI = [
   },
 ] as const;
 
-// State names
 const STATE_NAMES = ["NONE", "PENDING", "ACTIVE", "PROPOSED", "DISPUTED", "ESCALATED", "RESOLVED", "REJECTED"];
 
 function formatDuration(seconds: bigint): string {
@@ -84,20 +70,15 @@ function formatDuration(seconds: bigint): string {
 
 async function main() {
   const tocId = process.env.TOC_ID;
+  const network = getNetwork();
+  const { chainId } = getChainConfig(network);
+  const addresses = loadDeployedAddresses(chainId);
+  const { publicClient } = createClients(network);
 
-  console.log(`\n🔍 Querying TOC${tocId ? ` #${tocId}` : "s"} on Sepolia\n`);
+  console.log(`\n🔍 Querying TOC${tocId ? ` #${tocId}` : "s"} on ${network}\n`);
 
-  const rpcUrl = process.env.SEPOLIA_RPC_URL;
-  if (!rpcUrl) throw new Error("SEPOLIA_RPC_URL not set in .env");
-
-  const publicClient = createPublicClient({
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
-
-  // Get total count
   const counter = await publicClient.readContract({
-    address: ADDRESSES.registry,
+    address: addresses.registry,
     abi: REGISTRY_ABI,
     functionName: "tocCounter",
   });
@@ -105,33 +86,30 @@ async function main() {
   console.log(`📊 Total TOCs created: ${counter}\n`);
 
   if (!tocId) {
-    // List recent TOCs
     const start = counter > 5n ? counter - 5n : 1n;
     console.log(`📋 Recent TOCs (${start} to ${counter}):\n`);
 
     for (let i = counter; i >= start && i >= 1n; i--) {
       try {
         const toc = await publicClient.readContract({
-          address: ADDRESSES.registry,
+          address: addresses.registry,
           abi: REGISTRY_ABI,
           functionName: "getTOC",
           args: [i],
         });
-
         console.log(`   #${i}: ${STATE_NAMES[toc.state]} | Creator: ${toc.creator.slice(0, 10)}...`);
       } catch {
-        // Skip invalid TOCs
+        // Skip
       }
     }
 
-    console.log(`\n💡 For details: TOC_ID=<id> npx hardhat run scripts/sepolia/query-toc.ts --network sepolia`);
+    console.log(`\n💡 For details: TOC_ID=<id> npx hardhat run scripts/query-toc.ts --network ${network}`);
     return;
   }
 
-  // Query specific TOC
   try {
     const toc = await publicClient.readContract({
-      address: ADDRESSES.registry,
+      address: addresses.registry,
       abi: REGISTRY_ABI,
       functionName: "getTOC",
       args: [BigInt(tocId)],
@@ -154,22 +132,20 @@ async function main() {
     console.log(`   Escalation:    ${formatDuration(toc.escalationWindow)}`);
     console.log(`   PostResolution: ${formatDuration(toc.postResolutionWindow)}`);
 
-    // Try to get question from resolver
-    if (toc.resolver.toLowerCase() === ADDRESSES.optimisticResolver.toLowerCase()) {
+    if (toc.resolver.toLowerCase() === addresses.optimisticResolver.toLowerCase()) {
       try {
         const question = await publicClient.readContract({
-          address: ADDRESSES.optimisticResolver,
+          address: addresses.optimisticResolver,
           abi: RESOLVER_ABI,
           functionName: "getTocQuestion",
           args: [BigInt(tocId)],
         });
         console.log(`\n❓ Question:\n   ${question}`);
       } catch {
-        // Question might not be available
+        // Question not available
       }
     }
 
-    // Parse result if available
     if (toc.result && toc.result !== "0x") {
       try {
         const [answer] = decodeAbiParameters(parseAbiParameters("bool"), toc.result);
@@ -179,23 +155,22 @@ async function main() {
       }
     }
 
-    // Show next action hint
     console.log("\n💡 Next action:");
     switch (toc.state) {
-      case 2: // ACTIVE
-        console.log(`   TOC_ID=${tocId} npx hardhat run scripts/sepolia/resolve-toc.ts --network sepolia`);
+      case 2:
+        console.log(`   TOC_ID=${tocId} npx hardhat run scripts/resolve-toc.ts --network ${network}`);
         break;
-      case 3: // PROPOSED
+      case 3:
         const disputeEnd = Number(toc.resolvedAt) + Number(toc.disputeWindow);
         const now = Math.floor(Date.now() / 1000);
         if (now < disputeEnd) {
-          console.log(`   Wait ${formatDuration(BigInt(disputeEnd - now))} for dispute window to end, then:`);
+          console.log(`   Wait ${formatDuration(BigInt(disputeEnd - now))} for dispute window, then:`);
         } else {
           console.log("   Dispute window ended. Run:");
         }
-        console.log(`   TOC_ID=${tocId} npx hardhat run scripts/sepolia/finalize-toc.ts --network sepolia`);
+        console.log(`   TOC_ID=${tocId} npx hardhat run scripts/finalize-toc.ts --network ${network}`);
         break;
-      case 6: // RESOLVED
+      case 6:
         console.log("   TOC is finalized. No further action needed.");
         break;
       default:

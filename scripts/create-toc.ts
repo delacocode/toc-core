@@ -1,34 +1,18 @@
 /**
- * Create a TOC on Sepolia
- * Reads configuration from ignition/config/sepolia.json
+ * Create a TOC on any supported network
  *
- * Usage: npx hardhat run scripts/sepolia/create-toc.ts --network sepolia
+ * Usage: npx hardhat run scripts/create-toc.ts --network <network>
  */
 
-import { createPublicClient, createWalletClient, http, encodeAbiParameters, parseAbiParameters, formatEther } from "viem";
-import { mnemonicToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import "dotenv/config";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load config
-const configPath = path.join(__dirname, "../../ignition/config/sepolia.json");
-const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-
-// Load deployed addresses
-const deployedPath = path.join(__dirname, "../../ignition/deployments/chain-11155111/deployed_addresses.json");
-const deployed = JSON.parse(fs.readFileSync(deployedPath, "utf-8"));
-
-const ADDRESSES = {
-  registry: deployed["TOCRegistry#TOCRegistry"] as `0x${string}`,
-  optimisticResolver: deployed["OptimisticResolver#OptimisticResolver"] as `0x${string}`,
-  truthKeeper: deployed["SimpleTruthKeeper#SimpleTruthKeeper"] as `0x${string}`,
-};
+import { encodeAbiParameters, parseAbiParameters, formatEther } from "viem";
+import {
+  getNetwork,
+  loadConfig,
+  loadDeployedAddresses,
+  getChainConfig,
+  createClients,
+  getExplorerTxUrl,
+} from "./lib/config.js";
 
 // Templates
 const TEMPLATE = {
@@ -73,31 +57,18 @@ function encodeArbitraryPayload(question: string, description: string, resolutio
 }
 
 async function main() {
-  console.log("\n📝 Creating TOC on Sepolia\n");
+  const network = getNetwork();
+  const { chainId } = getChainConfig(network);
+  const config = loadConfig(network);
+  const addresses = loadDeployedAddresses(chainId);
+  const { publicClient, walletClient, account } = createClients(network);
 
-  const mnemonic = process.env.MNEMONIC;
-  if (!mnemonic) throw new Error("MNEMONIC not set in .env");
-
-  const rpcUrl = process.env.SEPOLIA_RPC_URL;
-  if (!rpcUrl) throw new Error("SEPOLIA_RPC_URL not set in .env");
-
-  const account = mnemonicToAccount(mnemonic);
+  console.log(`\n📝 Creating TOC on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
-
-  const publicClient = createPublicClient({
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
-
-  const walletClient = createWalletClient({
-    account,
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
 
   // Get current TOC count
   const currentCount = await publicClient.readContract({
-    address: ADDRESSES.registry,
+    address: addresses.registry,
     abi: REGISTRY_ABI,
     functionName: "tocCounter",
   });
@@ -110,11 +81,11 @@ async function main() {
 
   const payload = encodeArbitraryPayload(question, description, resolutionSource, resolutionTime);
 
-  // Time windows (in seconds) - must be <= 1 day for RESOLVER trust level
-  const disputeWindow = 300n; // 5 minutes (for testing)
-  const truthKeeperWindow = 300n; // 5 minutes
-  const escalationWindow = 300n; // 5 minutes
-  const postResolutionWindow = 300n; // 5 minutes
+  // Time windows (in seconds) - short for testing
+  const disputeWindow = 300n; // 5 minutes
+  const truthKeeperWindow = 300n;
+  const escalationWindow = 300n;
+  const postResolutionWindow = 300n;
 
   // Calculate value: protocol fee + resolution bond
   const protocolFee = BigInt(config.registry.fees.protocolFeeStandard);
@@ -124,8 +95,8 @@ async function main() {
   console.log("📋 TOC Details:");
   console.log(`   Question: ${question}`);
   console.log(`   Template: ARBITRARY (1)`);
-  console.log(`   Resolver: ${ADDRESSES.optimisticResolver}`);
-  console.log(`   TruthKeeper: ${ADDRESSES.truthKeeper}`);
+  console.log(`   Resolver: ${addresses.optimisticResolver}`);
+  console.log(`   TruthKeeper: ${addresses.truthKeeper}`);
   console.log(`   Protocol fee: ${formatEther(protocolFee)} ETH`);
   console.log(`   Resolution bond: ${formatEther(resolutionBond)} ETH`);
   console.log(`   Total value: ${formatEther(value)} ETH`);
@@ -136,18 +107,18 @@ async function main() {
     console.log("⏳ Sending transaction...");
 
     const hash = await walletClient.writeContract({
-      address: ADDRESSES.registry,
+      address: addresses.registry,
       abi: REGISTRY_ABI,
       functionName: "createTOC",
       args: [
-        ADDRESSES.optimisticResolver,
+        addresses.optimisticResolver,
         TEMPLATE.ARBITRARY,
         payload,
         disputeWindow,
         truthKeeperWindow,
         escalationWindow,
         postResolutionWindow,
-        ADDRESSES.truthKeeper,
+        addresses.truthKeeper,
       ],
       value,
     });
@@ -158,13 +129,12 @@ async function main() {
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     console.log(`   Block: ${receipt.blockNumber}`);
 
-    // The new TOC ID should be currentCount + 1
     const newTocId = currentCount + 1n;
 
     console.log("\n✅ TOC Created!");
     console.log(`   TOC ID: ${newTocId}`);
-    console.log(`   Transaction: https://sepolia.etherscan.io/tx/${hash}`);
-    console.log(`\n💡 Next: TOC_ID=${newTocId} npx hardhat run scripts/sepolia/resolve-toc.ts --network sepolia`);
+    console.log(`   Transaction: ${getExplorerTxUrl(network, hash)}`);
+    console.log(`\n💡 Next: TOC_ID=${newTocId} npx hardhat run scripts/resolve-toc.ts --network ${network}`);
 
   } catch (error: any) {
     console.error("\n❌ Failed to create TOC:");

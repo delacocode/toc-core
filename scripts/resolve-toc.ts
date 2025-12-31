@@ -1,36 +1,22 @@
 /**
- * Resolve a TOC on Sepolia
- * Reads configuration from ignition/config/sepolia.json
+ * Resolve a TOC on any supported network
  *
- * Usage: TOC_ID=1 npx hardhat run scripts/sepolia/resolve-toc.ts --network sepolia
+ * Usage: TOC_ID=1 npx hardhat run scripts/resolve-toc.ts --network <network>
+ * Options: ANSWER=false JUSTIFICATION="reason"
  */
 
-import { createPublicClient, createWalletClient, http, encodeAbiParameters, parseAbiParameters, formatEther } from "viem";
-import { mnemonicToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import "dotenv/config";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load config
-const configPath = path.join(__dirname, "../../ignition/config/sepolia.json");
-const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-
-// Load deployed addresses
-const deployedPath = path.join(__dirname, "../../ignition/deployments/chain-11155111/deployed_addresses.json");
-const deployed = JSON.parse(fs.readFileSync(deployedPath, "utf-8"));
-
-const ADDRESSES = {
-  registry: deployed["TOCRegistry#TOCRegistry"] as `0x${string}`,
-};
+import { encodeAbiParameters, parseAbiParameters, formatEther } from "viem";
+import {
+  getNetwork,
+  loadConfig,
+  loadDeployedAddresses,
+  getChainConfig,
+  createClients,
+  getExplorerTxUrl,
+} from "./lib/config.js";
 
 const ETH = "0x0000000000000000000000000000000000000000" as const;
 
-// Registry ABI (minimal)
 const REGISTRY_ABI = [
   {
     name: "resolveTOC",
@@ -71,10 +57,8 @@ const REGISTRY_ABI = [
   },
 ] as const;
 
-// State names
 const STATE_NAMES = ["NONE", "PENDING", "ACTIVE", "PROPOSED", "DISPUTED", "ESCALATED", "RESOLVED", "REJECTED"];
 
-// Encode AnswerPayload for OptimisticResolver
 function encodeAnswerPayload(answer: boolean, justification: string): `0x${string}` {
   return encodeAbiParameters(
     parseAbiParameters("bool answer, string justification"),
@@ -85,41 +69,27 @@ function encodeAnswerPayload(answer: boolean, justification: string): `0x${strin
 async function main() {
   const tocId = process.env.TOC_ID;
   if (!tocId) {
-    console.error("Usage: TOC_ID=<id> npx hardhat run scripts/sepolia/resolve-toc.ts --network sepolia");
+    console.error("Usage: TOC_ID=<id> npx hardhat run scripts/resolve-toc.ts --network <network>");
     process.exit(1);
   }
 
-  // Resolution parameters (can be customized via env vars)
-  const answer = process.env.ANSWER !== "false"; // Default to YES
+  const answer = process.env.ANSWER !== "false";
   const justification = process.env.JUSTIFICATION || "Resolution based on available data.";
 
-  console.log(`\n⚖️  Resolving TOC #${tocId} on Sepolia\n`);
+  const network = getNetwork();
+  const { chainId } = getChainConfig(network);
+  const config = loadConfig(network);
+  const addresses = loadDeployedAddresses(chainId);
+  const { publicClient, walletClient, account } = createClients(network);
 
-  const mnemonic = process.env.MNEMONIC;
-  if (!mnemonic) throw new Error("MNEMONIC not set in .env");
-
-  const rpcUrl = process.env.SEPOLIA_RPC_URL;
-  if (!rpcUrl) throw new Error("SEPOLIA_RPC_URL not set in .env");
-
-  const account = mnemonicToAccount(mnemonic);
+  console.log(`\n⚖️  Resolving TOC #${tocId} on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
 
-  const publicClient = createPublicClient({
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
-
-  const walletClient = createWalletClient({
-    account,
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
-
-  // First, check the TOC state
+  // Check TOC state
   console.log("📋 Checking TOC state...");
   try {
     const toc = await publicClient.readContract({
-      address: ADDRESSES.registry,
+      address: addresses.registry,
       abi: REGISTRY_ABI,
       functionName: "getTOC",
       args: [BigInt(tocId)],
@@ -129,7 +99,7 @@ async function main() {
     console.log(`   Resolver: ${toc.resolver}`);
     console.log(`   Created: ${new Date(Number(toc.createdAt) * 1000).toISOString()}`);
 
-    if (toc.state !== 2) { // Not ACTIVE
+    if (toc.state !== 2) {
       console.error(`\n❌ TOC is not in ACTIVE state (current: ${STATE_NAMES[toc.state]})`);
       process.exit(1);
     }
@@ -138,7 +108,6 @@ async function main() {
     process.exit(1);
   }
 
-  // Resolution bond from config
   const bondAmount = BigInt(config.registry.bonds.resolution.minAmount);
   const payload = encodeAnswerPayload(answer, justification);
 
@@ -152,7 +121,7 @@ async function main() {
     console.log("⏳ Sending transaction...");
 
     const hash = await walletClient.writeContract({
-      address: ADDRESSES.registry,
+      address: addresses.registry,
       abi: REGISTRY_ABI,
       functionName: "resolveTOC",
       args: [BigInt(tocId), ETH, bondAmount, payload],
@@ -166,10 +135,9 @@ async function main() {
     console.log(`   Block: ${receipt.blockNumber}`);
 
     console.log("\n✅ TOC Resolved (Proposed)!");
-    console.log(`   Transaction: https://sepolia.etherscan.io/tx/${hash}`);
-    console.log(`\n💡 The TOC is now in PROPOSED state.`);
-    console.log(`   Wait for the dispute window to expire, then run:`);
-    console.log(`   TOC_ID=${tocId} npx hardhat run scripts/sepolia/finalize-toc.ts --network sepolia`);
+    console.log(`   Transaction: ${getExplorerTxUrl(network, hash)}`);
+    console.log(`\n💡 Wait for dispute window, then run:`);
+    console.log(`   TOC_ID=${tocId} npx hardhat run scripts/finalize-toc.ts --network ${network}`);
 
   } catch (error: any) {
     console.error("\n❌ Failed to resolve TOC:");

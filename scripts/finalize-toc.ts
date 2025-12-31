@@ -1,30 +1,17 @@
 /**
- * Finalize a TOC on Sepolia
- * Reads deployed addresses from ignition deployment
+ * Finalize a TOC on any supported network
  *
- * Usage: TOC_ID=1 npx hardhat run scripts/sepolia/finalize-toc.ts --network sepolia
+ * Usage: TOC_ID=1 npx hardhat run scripts/finalize-toc.ts --network <network>
  */
 
-import { createPublicClient, createWalletClient, http } from "viem";
-import { mnemonicToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import "dotenv/config";
+import {
+  getNetwork,
+  loadDeployedAddresses,
+  getChainConfig,
+  createClients,
+  getExplorerTxUrl,
+} from "./lib/config.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load deployed addresses
-const deployedPath = path.join(__dirname, "../../ignition/deployments/chain-11155111/deployed_addresses.json");
-const deployed = JSON.parse(fs.readFileSync(deployedPath, "utf-8"));
-
-const ADDRESSES = {
-  registry: deployed["TOCRegistry#TOCRegistry"] as `0x${string}`,
-};
-
-// Registry ABI (minimal)
 const REGISTRY_ABI = [
   {
     name: "finalizeTOC",
@@ -60,43 +47,28 @@ const REGISTRY_ABI = [
   },
 ] as const;
 
-// State names
 const STATE_NAMES = ["NONE", "PENDING", "ACTIVE", "PROPOSED", "DISPUTED", "ESCALATED", "RESOLVED", "REJECTED"];
 
 async function main() {
   const tocId = process.env.TOC_ID;
   if (!tocId) {
-    console.error("Usage: TOC_ID=<id> npx hardhat run scripts/sepolia/finalize-toc.ts --network sepolia");
+    console.error("Usage: TOC_ID=<id> npx hardhat run scripts/finalize-toc.ts --network <network>");
     process.exit(1);
   }
 
-  console.log(`\n🏁 Finalizing TOC #${tocId} on Sepolia\n`);
+  const network = getNetwork();
+  const { chainId } = getChainConfig(network);
+  const addresses = loadDeployedAddresses(chainId);
+  const { publicClient, walletClient, account } = createClients(network);
 
-  const mnemonic = process.env.MNEMONIC;
-  if (!mnemonic) throw new Error("MNEMONIC not set in .env");
-
-  const rpcUrl = process.env.SEPOLIA_RPC_URL;
-  if (!rpcUrl) throw new Error("SEPOLIA_RPC_URL not set in .env");
-
-  const account = mnemonicToAccount(mnemonic);
+  console.log(`\n🏁 Finalizing TOC #${tocId} on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
-
-  const publicClient = createPublicClient({
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
-
-  const walletClient = createWalletClient({
-    account,
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
 
   // Check TOC state
   console.log("📋 Checking TOC state...");
   try {
     const toc = await publicClient.readContract({
-      address: ADDRESSES.registry,
+      address: addresses.registry,
       abi: REGISTRY_ABI,
       functionName: "getTOC",
       args: [BigInt(tocId)],
@@ -104,17 +76,16 @@ async function main() {
 
     console.log(`   Current state: ${STATE_NAMES[toc.state] || toc.state}`);
 
-    if (toc.state === 6) { // RESOLVED
+    if (toc.state === 6) {
       console.log("\n✅ TOC is already finalized!");
       return;
     }
 
-    if (toc.state !== 3) { // Not PROPOSED
-      console.error(`\n❌ TOC must be in PROPOSED state to finalize (current: ${STATE_NAMES[toc.state]})`);
+    if (toc.state !== 3) {
+      console.error(`\n❌ TOC must be in PROPOSED state (current: ${STATE_NAMES[toc.state]})`);
       process.exit(1);
     }
 
-    // Check if dispute window has passed
     const disputeEnd = Number(toc.resolvedAt) + Number(toc.disputeWindow);
     const now = Math.floor(Date.now() / 1000);
 
@@ -133,12 +104,11 @@ async function main() {
     process.exit(1);
   }
 
-  // Finalize
   try {
     console.log("\n⏳ Sending finalize transaction...");
 
     const hash = await walletClient.writeContract({
-      address: ADDRESSES.registry,
+      address: addresses.registry,
       abi: REGISTRY_ABI,
       functionName: "finalizeTOC",
       args: [BigInt(tocId)],
@@ -151,11 +121,10 @@ async function main() {
     console.log(`   Block: ${receipt.blockNumber}`);
 
     console.log("\n✅ TOC Finalized!");
-    console.log(`   Transaction: https://sepolia.etherscan.io/tx/${hash}`);
+    console.log(`   Transaction: ${getExplorerTxUrl(network, hash)}`);
 
-    // Show final state
     const toc = await publicClient.readContract({
-      address: ADDRESSES.registry,
+      address: addresses.registry,
       abi: REGISTRY_ABI,
       functionName: "getTOC",
       args: [BigInt(tocId)],
