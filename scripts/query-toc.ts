@@ -70,7 +70,7 @@ function formatDuration(seconds: bigint): string {
 
 async function main() {
   const tocId = process.env.TOC_ID;
-  const network = getNetwork();
+  const network = await getNetwork();
   const { chainId } = getChainConfig(network);
   const addresses = loadDeployedAddresses(chainId);
   const { publicClient } = createClients(network);

@@ -69,12 +69,29 @@ export interface DeployedAddresses {
   truthKeeper: `0x${string}`;
 }
 
-export function getNetwork(): string {
-  const network = process.env.HARDHAT_NETWORK;
-  if (!network) {
-    throw new Error("Network not specified. Use: npx hardhat run <script> --network <network>");
+let _cachedNetwork: string | null = null;
+
+export async function getNetwork(): Promise<string> {
+  if (_cachedNetwork) return _cachedNetwork;
+
+  // Try HARDHAT_NETWORK env var first
+  if (process.env.HARDHAT_NETWORK) {
+    _cachedNetwork = process.env.HARDHAT_NETWORK;
+    return _cachedNetwork;
   }
-  return network;
+
+  // Try Hardhat 3.0 globalOptions
+  try {
+    const hre = await import("hardhat");
+    if (hre.globalOptions?.network) {
+      _cachedNetwork = hre.globalOptions.network;
+      return _cachedNetwork;
+    }
+  } catch {
+    // Not in Hardhat context
+  }
+
+  throw new Error("Network not specified. Use: npx hardhat run <script> --network <network>");
 }
 
 export function loadConfig(network: string): NetworkConfig {

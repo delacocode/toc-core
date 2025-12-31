@@ -56,7 +56,7 @@ async function main() {
     process.exit(1);
   }
 
-  const network = getNetwork();
+  const network = await getNetwork();
   const { chainId } = getChainConfig(network);
   const addresses = loadDeployedAddresses(chainId);
   const { publicClient, walletClient, account } = createClients(network);

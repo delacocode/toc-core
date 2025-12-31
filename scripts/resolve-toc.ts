@@ -76,7 +76,7 @@ async function main() {
   const answer = process.env.ANSWER !== "false";
   const justification = process.env.JUSTIFICATION || "Resolution based on available data.";
 
-  const network = getNetwork();
+  const network = await getNetwork();
   const { chainId } = getChainConfig(network);
   const config = loadConfig(network);
   const addresses = loadDeployedAddresses(chainId);

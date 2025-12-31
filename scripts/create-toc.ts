@@ -57,7 +57,7 @@ function encodeArbitraryPayload(question: string, description: string, resolutio
 }
 
 async function main() {
-  const network = getNetwork();
+  const network = await getNetwork();
   const { chainId } = getChainConfig(network);
   const config = loadConfig(network);
   const addresses = loadDeployedAddresses(chainId);
