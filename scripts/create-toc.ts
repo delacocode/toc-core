@@ -2,6 +2,22 @@
  * Create a TOC on any supported network
  *
  * Usage: npx hardhat run scripts/create-toc.ts --network <network>
+ *
+ * Environment variables:
+ *   QUESTION         - The question to resolve (required)
+ *   DESCRIPTION      - Detailed description (optional)
+ *   SOURCE           - Resolution source URL (optional)
+ *   RESOLUTION_TIME  - Unix timestamp for resolution (optional, default: 1 year)
+ *   DISPUTE_WINDOW   - Dispute window in seconds (optional, default: 300)
+ *   TK_WINDOW        - TruthKeeper window in seconds (optional, default: 300)
+ *   ESCALATION_WINDOW - Escalation window in seconds (optional, default: 300)
+ *   POST_RESOLUTION_WINDOW - Post-resolution window in seconds (optional, default: 300)
+ *
+ * Example:
+ *   QUESTION="Will ETH be above $5000 on Jan 1, 2026?" \
+ *   DESCRIPTION="Resolves YES if ETH price exceeds $5000 USD" \
+ *   SOURCE="https://coingecko.com/en/coins/ethereum" \
+ *   npx hardhat run scripts/create-toc.ts --network sepolia
  */
 
 import { encodeAbiParameters, parseAbiParameters, formatEther } from "viem";
@@ -57,6 +73,35 @@ function encodeArbitraryPayload(question: string, description: string, resolutio
 }
 
 async function main() {
+  // Get configuration from env vars
+  const question = process.env.QUESTION;
+  if (!question) {
+    console.error("Error: QUESTION environment variable is required");
+    console.error("\nUsage:");
+    console.error('  QUESTION="Will ETH hit $5000?" npx hardhat run scripts/create-toc.ts --network sepolia');
+    console.error("\nOptional variables:");
+    console.error("  DESCRIPTION      - Detailed description");
+    console.error("  SOURCE           - Resolution source URL");
+    console.error("  RESOLUTION_TIME  - Unix timestamp for resolution");
+    console.error("  DISPUTE_WINDOW   - Dispute window in seconds (default: 300)");
+    console.error("  TK_WINDOW        - TruthKeeper window in seconds (default: 300)");
+    console.error("  ESCALATION_WINDOW - Escalation window in seconds (default: 300)");
+    console.error("  POST_RESOLUTION_WINDOW - Post-resolution window in seconds (default: 300)");
+    process.exit(1);
+  }
+
+  const description = process.env.DESCRIPTION || "";
+  const resolutionSource = process.env.SOURCE || "";
+  const resolutionTime = process.env.RESOLUTION_TIME
+    ? BigInt(process.env.RESOLUTION_TIME)
+    : BigInt(Math.floor(Date.now() / 1000) + 86400 * 365); // Default: 1 year from now
+
+  // Time windows (in seconds)
+  const disputeWindow = BigInt(process.env.DISPUTE_WINDOW || "300");
+  const truthKeeperWindow = BigInt(process.env.TK_WINDOW || "300");
+  const escalationWindow = BigInt(process.env.ESCALATION_WINDOW || "300");
+  const postResolutionWindow = BigInt(process.env.POST_RESOLUTION_WINDOW || "300");
+
   const network = await getNetwork();
   const { chainId } = getChainConfig(network);
   const config = loadConfig(network);
@@ -73,19 +118,7 @@ async function main() {
     functionName: "tocCounter",
   });
 
-  // Create an arbitrary question
-  const question = "Will ETH be above $5000 on January 1st, 2026?";
-  const description = "This question resolves YES if the price of ETH is above $5000 USD at any point on January 1st, 2026 according to CoinGecko.";
-  const resolutionSource = "https://www.coingecko.com/en/coins/ethereum";
-  const resolutionTime = BigInt(Math.floor(Date.now() / 1000) + 86400 * 365); // 1 year from now
-
   const payload = encodeArbitraryPayload(question, description, resolutionSource, resolutionTime);
-
-  // Time windows (in seconds) - short for testing
-  const disputeWindow = 300n; // 5 minutes
-  const truthKeeperWindow = 300n;
-  const escalationWindow = 300n;
-  const postResolutionWindow = 300n;
 
   // Calculate value: protocol fee + resolution bond
   const protocolFee = BigInt(config.registry.fees.protocolFeeStandard);
@@ -94,13 +127,16 @@ async function main() {
 
   console.log("📋 TOC Details:");
   console.log(`   Question: ${question}`);
+  if (description) console.log(`   Description: ${description}`);
+  if (resolutionSource) console.log(`   Source: ${resolutionSource}`);
+  console.log(`   Resolution time: ${new Date(Number(resolutionTime) * 1000).toISOString()}`);
   console.log(`   Template: ARBITRARY (1)`);
   console.log(`   Resolver: ${addresses.optimisticResolver}`);
   console.log(`   TruthKeeper: ${addresses.truthKeeper}`);
   console.log(`   Protocol fee: ${formatEther(protocolFee)} ETH`);
   console.log(`   Resolution bond: ${formatEther(resolutionBond)} ETH`);
   console.log(`   Total value: ${formatEther(value)} ETH`);
-  console.log(`   Time windows: 5 minutes each (for testing)`);
+  console.log(`   Time windows: dispute=${disputeWindow}s, tk=${truthKeeperWindow}s, escalation=${escalationWindow}s, post=${postResolutionWindow}s`);
   console.log();
 
   try {
@@ -134,7 +170,9 @@ async function main() {
     console.log("\n✅ TOC Created!");
     console.log(`   TOC ID: ${newTocId}`);
     console.log(`   Transaction: ${getExplorerTxUrl(network, hash)}`);
-    console.log(`\n💡 Next: TOC_ID=${newTocId} npx hardhat run scripts/resolve-toc.ts --network ${network}`);
+    console.log(`\n💡 Next steps:`);
+    console.log(`   Query:   TOC_ID=${newTocId} npx hardhat run scripts/query-toc.ts --network ${network}`);
+    console.log(`   Resolve: TOC_ID=${newTocId} npx hardhat run scripts/resolve-toc.ts --network ${network}`);
 
   } catch (error: any) {
     console.error("\n❌ Failed to create TOC:");
