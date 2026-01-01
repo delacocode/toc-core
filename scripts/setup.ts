@@ -14,31 +14,7 @@ import {
   getChainConfig,
   createClients,
 } from "./lib/config.js";
-
-// Minimal ABIs with view functions for idempotency checks
-const REGISTRY_ABI = [
-  // Write functions
-  { name: "addAcceptableResolutionBond", type: "function", inputs: [{ name: "token", type: "address" }, { name: "minAmount", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "addAcceptableDisputeBond", type: "function", inputs: [{ name: "token", type: "address" }, { name: "minAmount", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "addAcceptableEscalationBond", type: "function", inputs: [{ name: "token", type: "address" }, { name: "minAmount", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "addWhitelistedTruthKeeper", type: "function", inputs: [{ name: "tk", type: "address" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "setProtocolFeeStandard", type: "function", inputs: [{ name: "fee", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "setTreasury", type: "function", inputs: [{ name: "treasury", type: "address" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "registerResolver", type: "function", inputs: [{ name: "resolver", type: "address" }], outputs: [], stateMutability: "nonpayable" },
-  // View functions for idempotency
-  { name: "isAcceptableResolutionBond", type: "function", inputs: [{ name: "token", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "", type: "bool" }], stateMutability: "view" },
-  { name: "isAcceptableDisputeBond", type: "function", inputs: [{ name: "token", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "", type: "bool" }], stateMutability: "view" },
-  { name: "isAcceptableEscalationBond", type: "function", inputs: [{ name: "token", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "", type: "bool" }], stateMutability: "view" },
-  { name: "isWhitelistedTruthKeeper", type: "function", inputs: [{ name: "tk", type: "address" }], outputs: [{ name: "", type: "bool" }], stateMutability: "view" },
-  { name: "isRegisteredResolver", type: "function", inputs: [{ name: "resolver", type: "address" }], outputs: [{ name: "", type: "bool" }], stateMutability: "view" },
-  { name: "treasury", type: "function", inputs: [], outputs: [{ name: "", type: "address" }], stateMutability: "view" },
-  { name: "protocolFeeStandard", type: "function", inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view" },
-] as const;
-
-const TRUTH_KEEPER_ABI = [
-  { name: "setResolverAllowed", type: "function", inputs: [{ name: "resolver", type: "address" }, { name: "allowed", type: "bool" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "allowedResolvers", type: "function", inputs: [{ name: "resolver", type: "address" }], outputs: [{ name: "", type: "bool" }], stateMutability: "view" },
-] as const;
+import { getRegistryAbi, getTruthKeeperAbi } from "./lib/abis.js";
 
 async function main() {
   const network = await getNetwork();
@@ -46,6 +22,8 @@ async function main() {
   const config = loadConfig(network);
   const addresses = loadDeployedAddresses(chainId);
   const { publicClient, walletClient, account } = createClients(network);
+  const registryAbi = getRegistryAbi();
+  const truthKeeperAbi = getTruthKeeperAbi();
 
   console.log(`\n🔧 Setting up TOC System on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
@@ -71,7 +49,7 @@ async function main() {
   // Check if resolution bond already set
   const resolutionBondOk = await publicClient.readContract({
     address: addresses.registry,
-    abi: REGISTRY_ABI,
+    abi: registryAbi,
     functionName: "isAcceptableResolutionBond",
     args: [bonds.resolution.token as `0x${string}`, BigInt(bonds.resolution.minAmount)],
   });
@@ -82,7 +60,7 @@ async function main() {
       `Resolution bond: ${formatEther(BigInt(bonds.resolution.minAmount))} ETH`,
       addresses.registry,
       encodeFunctionData({
-        abi: REGISTRY_ABI,
+        abi: registryAbi,
         functionName: "addAcceptableResolutionBond",
         args: [bonds.resolution.token as `0x${string}`, BigInt(bonds.resolution.minAmount)],
       })
@@ -92,7 +70,7 @@ async function main() {
   // Check if dispute bond already set
   const disputeBondOk = await publicClient.readContract({
     address: addresses.registry,
-    abi: REGISTRY_ABI,
+    abi: registryAbi,
     functionName: "isAcceptableDisputeBond",
     args: [bonds.dispute.token as `0x${string}`, BigInt(bonds.dispute.minAmount)],
   });
@@ -103,7 +81,7 @@ async function main() {
       `Dispute bond: ${formatEther(BigInt(bonds.dispute.minAmount))} ETH`,
       addresses.registry,
       encodeFunctionData({
-        abi: REGISTRY_ABI,
+        abi: registryAbi,
         functionName: "addAcceptableDisputeBond",
         args: [bonds.dispute.token as `0x${string}`, BigInt(bonds.dispute.minAmount)],
       })
@@ -113,7 +91,7 @@ async function main() {
   // Check if escalation bond already set
   const escalationBondOk = await publicClient.readContract({
     address: addresses.registry,
-    abi: REGISTRY_ABI,
+    abi: registryAbi,
     functionName: "isAcceptableEscalationBond",
     args: [bonds.escalation.token as `0x${string}`, BigInt(bonds.escalation.minAmount)],
   });
@@ -124,7 +102,7 @@ async function main() {
       `Escalation bond: ${formatEther(BigInt(bonds.escalation.minAmount))} ETH`,
       addresses.registry,
       encodeFunctionData({
-        abi: REGISTRY_ABI,
+        abi: registryAbi,
         functionName: "addAcceptableEscalationBond",
         args: [bonds.escalation.token as `0x${string}`, BigInt(bonds.escalation.minAmount)],
       })
@@ -137,9 +115,9 @@ async function main() {
   // Check if treasury already set
   const currentTreasury = await publicClient.readContract({
     address: addresses.registry,
-    abi: REGISTRY_ABI,
+    abi: registryAbi,
     functionName: "treasury",
-  });
+  }) as string;
   if (currentTreasury.toLowerCase() === config.registry.treasury.toLowerCase()) {
     console.log(`   Treasury: ${config.registry.treasury}... ⏭️  Already set`);
   } else {
@@ -147,7 +125,7 @@ async function main() {
       `Treasury: ${config.registry.treasury}`,
       addresses.registry,
       encodeFunctionData({
-        abi: REGISTRY_ABI,
+        abi: registryAbi,
         functionName: "setTreasury",
         args: [config.registry.treasury as `0x${string}`],
       })
@@ -157,9 +135,9 @@ async function main() {
   // Check if protocol fee already set
   const currentFee = await publicClient.readContract({
     address: addresses.registry,
-    abi: REGISTRY_ABI,
+    abi: registryAbi,
     functionName: "protocolFeeStandard",
-  });
+  }) as bigint;
   if (currentFee === BigInt(config.registry.fees.protocolFeeStandard)) {
     console.log(`   Protocol fee: ${formatEther(BigInt(config.registry.fees.protocolFeeStandard))} ETH... ⏭️  Already set`);
   } else {
@@ -167,7 +145,7 @@ async function main() {
       `Protocol fee: ${formatEther(BigInt(config.registry.fees.protocolFeeStandard))} ETH`,
       addresses.registry,
       encodeFunctionData({
-        abi: REGISTRY_ABI,
+        abi: registryAbi,
         functionName: "setProtocolFeeStandard",
         args: [BigInt(config.registry.fees.protocolFeeStandard)],
       })
@@ -179,7 +157,7 @@ async function main() {
 
   const tkWhitelisted = await publicClient.readContract({
     address: addresses.registry,
-    abi: REGISTRY_ABI,
+    abi: registryAbi,
     functionName: "isWhitelistedTruthKeeper",
     args: [addresses.truthKeeper],
   });
@@ -190,7 +168,7 @@ async function main() {
       `TruthKeeper: ${addresses.truthKeeper}`,
       addresses.registry,
       encodeFunctionData({
-        abi: REGISTRY_ABI,
+        abi: registryAbi,
         functionName: "addWhitelistedTruthKeeper",
         args: [addresses.truthKeeper],
       })
@@ -212,7 +190,7 @@ async function main() {
     if (resolverConfig.register) {
       const isRegistered = await publicClient.readContract({
         address: addresses.registry,
-        abi: REGISTRY_ABI,
+        abi: registryAbi,
         functionName: "isRegisteredResolver",
         args: [address],
       });
@@ -223,7 +201,7 @@ async function main() {
           `Register ${name}`,
           addresses.registry,
           encodeFunctionData({
-            abi: REGISTRY_ABI,
+            abi: registryAbi,
             functionName: "registerResolver",
             args: [address],
           })
@@ -241,7 +219,7 @@ async function main() {
 
     const isAllowed = await publicClient.readContract({
       address: addresses.truthKeeper,
-      abi: TRUTH_KEEPER_ABI,
+      abi: truthKeeperAbi,
       functionName: "allowedResolvers",
       args: [address],
     });
@@ -252,7 +230,7 @@ async function main() {
         `Allow ${resolverName}`,
         addresses.truthKeeper,
         encodeFunctionData({
-          abi: TRUTH_KEEPER_ABI,
+          abi: truthKeeperAbi,
           functionName: "setResolverAllowed",
           args: [address, true],
         })

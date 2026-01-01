@@ -5,7 +5,7 @@
  * Options: ANSWER=false JUSTIFICATION="reason"
  */
 
-import { encodeAbiParameters, parseAbiParameters, formatEther } from "viem";
+import { formatEther } from "viem";
 import {
   getNetwork,
   loadConfig,
@@ -14,57 +14,8 @@ import {
   createClients,
   getExplorerTxUrl,
 } from "./lib/config.js";
-
-const ETH = "0x0000000000000000000000000000000000000000" as const;
-
-const REGISTRY_ABI = [
-  {
-    name: "resolveTOC",
-    type: "function",
-    inputs: [
-      { name: "tocId", type: "uint256" },
-      { name: "bondToken", type: "address" },
-      { name: "bondAmount", type: "uint256" },
-      { name: "payload", type: "bytes" },
-    ],
-    outputs: [],
-    stateMutability: "payable",
-  },
-  {
-    name: "getTOC",
-    type: "function",
-    inputs: [{ name: "tocId", type: "uint256" }],
-    outputs: [
-      {
-        name: "",
-        type: "tuple",
-        components: [
-          { name: "resolver", type: "address" },
-          { name: "truthKeeper", type: "address" },
-          { name: "creator", type: "address" },
-          { name: "createdAt", type: "uint256" },
-          { name: "resolvedAt", type: "uint256" },
-          { name: "state", type: "uint8" },
-          { name: "result", type: "bytes" },
-          { name: "disputeWindow", type: "uint256" },
-          { name: "truthKeeperWindow", type: "uint256" },
-          { name: "escalationWindow", type: "uint256" },
-          { name: "postResolutionWindow", type: "uint256" },
-        ],
-      },
-    ],
-    stateMutability: "view",
-  },
-] as const;
-
-const STATE_NAMES = ["NONE", "PENDING", "ACTIVE", "PROPOSED", "DISPUTED", "ESCALATED", "RESOLVED", "REJECTED"];
-
-function encodeAnswerPayload(answer: boolean, justification: string): `0x${string}` {
-  return encodeAbiParameters(
-    parseAbiParameters("bool answer, string justification"),
-    [answer, justification]
-  );
-}
+import { encodeAnswerPayload } from "./lib/payloads.js";
+import { getRegistryAbi, STATE_NAMES, ETH_ADDRESS } from "./lib/abis.js";
 
 async function main() {
   const tocId = process.env.TOC_ID;
@@ -81,6 +32,7 @@ async function main() {
   const config = loadConfig(network);
   const addresses = loadDeployedAddresses(chainId);
   const { publicClient, walletClient, account } = createClients(network);
+  const abi = getRegistryAbi();
 
   console.log(`\n⚖️  Resolving TOC #${tocId} on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
@@ -90,16 +42,15 @@ async function main() {
   try {
     const toc = await publicClient.readContract({
       address: addresses.registry,
-      abi: REGISTRY_ABI,
-      functionName: "getTOC",
+      abi,
+      functionName: "getTOCInfo",
       args: [BigInt(tocId)],
-    });
+    }) as any;
 
     console.log(`   State: ${STATE_NAMES[toc.state] || toc.state}`);
     console.log(`   Resolver: ${toc.resolver}`);
-    console.log(`   Created: ${new Date(Number(toc.createdAt) * 1000).toISOString()}`);
 
-    if (toc.state !== 2) {
+    if (toc.state !== 3) { // ACTIVE
       console.error(`\n❌ TOC is not in ACTIVE state (current: ${STATE_NAMES[toc.state]})`);
       process.exit(1);
     }
@@ -109,7 +60,7 @@ async function main() {
   }
 
   const bondAmount = BigInt(config.registry.bonds.resolution.minAmount);
-  const payload = encodeAnswerPayload(answer, justification);
+  const payload = encodeAnswerPayload({ answer, justification });
 
   console.log("\n📋 Resolution Details:");
   console.log(`   Answer: ${answer ? "YES" : "NO"}`);
@@ -122,9 +73,9 @@ async function main() {
 
     const hash = await walletClient.writeContract({
       address: addresses.registry,
-      abi: REGISTRY_ABI,
+      abi,
       functionName: "resolveTOC",
-      args: [BigInt(tocId), ETH, bondAmount, payload],
+      args: [BigInt(tocId), ETH_ADDRESS, bondAmount, payload],
       value: bondAmount,
     });
 

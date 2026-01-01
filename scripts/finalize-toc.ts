@@ -11,43 +11,7 @@ import {
   createClients,
   getExplorerTxUrl,
 } from "./lib/config.js";
-
-const REGISTRY_ABI = [
-  {
-    name: "finalizeTOC",
-    type: "function",
-    inputs: [{ name: "tocId", type: "uint256" }],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    name: "getTOC",
-    type: "function",
-    inputs: [{ name: "tocId", type: "uint256" }],
-    outputs: [
-      {
-        name: "",
-        type: "tuple",
-        components: [
-          { name: "resolver", type: "address" },
-          { name: "truthKeeper", type: "address" },
-          { name: "creator", type: "address" },
-          { name: "createdAt", type: "uint256" },
-          { name: "resolvedAt", type: "uint256" },
-          { name: "state", type: "uint8" },
-          { name: "result", type: "bytes" },
-          { name: "disputeWindow", type: "uint256" },
-          { name: "truthKeeperWindow", type: "uint256" },
-          { name: "escalationWindow", type: "uint256" },
-          { name: "postResolutionWindow", type: "uint256" },
-        ],
-      },
-    ],
-    stateMutability: "view",
-  },
-] as const;
-
-const STATE_NAMES = ["NONE", "PENDING", "ACTIVE", "PROPOSED", "DISPUTED", "ESCALATED", "RESOLVED", "REJECTED"];
+import { getRegistryAbi, STATE_NAMES } from "./lib/abis.js";
 
 async function main() {
   const tocId = process.env.TOC_ID;
@@ -60,40 +24,43 @@ async function main() {
   const { chainId } = getChainConfig(network);
   const addresses = loadDeployedAddresses(chainId);
   const { publicClient, walletClient, account } = createClients(network);
+  const abi = getRegistryAbi();
 
   console.log(`\n🏁 Finalizing TOC #${tocId} on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
 
   // Check TOC state
   console.log("📋 Checking TOC state...");
+  let disputeDeadline: bigint;
+
   try {
     const toc = await publicClient.readContract({
       address: addresses.registry,
-      abi: REGISTRY_ABI,
-      functionName: "getTOC",
+      abi,
+      functionName: "getTOCInfo",
       args: [BigInt(tocId)],
-    });
+    }) as any;
 
     console.log(`   Current state: ${STATE_NAMES[toc.state] || toc.state}`);
+    disputeDeadline = toc.disputeDeadline;
 
-    if (toc.state === 6) {
+    if (toc.state === 7) { // RESOLVED
       console.log("\n✅ TOC is already finalized!");
       return;
     }
 
-    if (toc.state !== 3) {
-      console.error(`\n❌ TOC must be in PROPOSED state (current: ${STATE_NAMES[toc.state]})`);
+    if (toc.state !== 4) { // RESOLVING
+      console.error(`\n❌ TOC must be in RESOLVING state (current: ${STATE_NAMES[toc.state]})`);
       process.exit(1);
     }
 
-    const disputeEnd = Number(toc.resolvedAt) + Number(toc.disputeWindow);
     const now = Math.floor(Date.now() / 1000);
 
-    if (now < disputeEnd) {
-      const remaining = disputeEnd - now;
+    if (now < Number(disputeDeadline)) {
+      const remaining = Number(disputeDeadline) - now;
       console.log(`\n⏳ Dispute window not yet expired.`);
       console.log(`   Time remaining: ${remaining}s (${Math.ceil(remaining / 60)} minutes)`);
-      console.log(`   Expires at: ${new Date(disputeEnd * 1000).toISOString()}`);
+      console.log(`   Expires at: ${new Date(Number(disputeDeadline) * 1000).toISOString()}`);
       process.exit(1);
     }
 
@@ -109,7 +76,7 @@ async function main() {
 
     const hash = await walletClient.writeContract({
       address: addresses.registry,
-      abi: REGISTRY_ABI,
+      abi,
       functionName: "finalizeTOC",
       args: [BigInt(tocId)],
     });
@@ -125,10 +92,10 @@ async function main() {
 
     const toc = await publicClient.readContract({
       address: addresses.registry,
-      abi: REGISTRY_ABI,
-      functionName: "getTOC",
+      abi,
+      functionName: "getTOCInfo",
       args: [BigInt(tocId)],
-    });
+    }) as any;
 
     console.log(`\n📋 Final State: ${STATE_NAMES[toc.state]}`);
 

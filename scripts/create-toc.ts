@@ -20,7 +20,7 @@
  *   npx hardhat run scripts/create-toc.ts --network sepolia
  */
 
-import { encodeAbiParameters, parseAbiParameters, formatEther } from "viem";
+import { formatEther } from "viem";
 import {
   getNetwork,
   loadConfig,
@@ -29,48 +29,8 @@ import {
   createClients,
   getExplorerTxUrl,
 } from "./lib/config.js";
-
-// Templates
-const TEMPLATE = {
-  ARBITRARY: 1,
-  SPORTS: 2,
-  EVENT: 3,
-} as const;
-
-// Registry ABI (minimal)
-const REGISTRY_ABI = [
-  {
-    name: "createTOC",
-    type: "function",
-    inputs: [
-      { name: "resolver", type: "address" },
-      { name: "templateId", type: "uint32" },
-      { name: "payload", type: "bytes" },
-      { name: "disputeWindow", type: "uint256" },
-      { name: "truthKeeperWindow", type: "uint256" },
-      { name: "escalationWindow", type: "uint256" },
-      { name: "postResolutionWindow", type: "uint256" },
-      { name: "truthKeeper", type: "address" },
-    ],
-    outputs: [{ name: "tocId", type: "uint256" }],
-    stateMutability: "payable",
-  },
-  {
-    name: "tocCounter",
-    type: "function",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
-] as const;
-
-// Encode ArbitraryPayload
-function encodeArbitraryPayload(question: string, description: string, resolutionSource: string, resolutionTime: bigint): `0x${string}` {
-  return encodeAbiParameters(
-    parseAbiParameters("string question, string description, string resolutionSource, uint256 resolutionTime"),
-    [question, description, resolutionSource, resolutionTime]
-  );
-}
+import { encodeArbitraryPayload, TEMPLATE } from "./lib/payloads.js";
+import { getRegistryAbi } from "./lib/abis.js";
 
 async function main() {
   // Get configuration from env vars
@@ -107,18 +67,24 @@ async function main() {
   const config = loadConfig(network);
   const addresses = loadDeployedAddresses(chainId);
   const { publicClient, walletClient, account } = createClients(network);
+  const abi = getRegistryAbi();
 
   console.log(`\n📝 Creating TOC on ${network}\n`);
   console.log(`🔑 Account: ${account.address}\n`);
 
-  // Get current TOC count
-  const currentCount = await publicClient.readContract({
+  // Get next TOC ID (will be assigned to new TOC)
+  const nextId = await publicClient.readContract({
     address: addresses.registry,
-    abi: REGISTRY_ABI,
-    functionName: "tocCounter",
+    abi,
+    functionName: "nextTocId",
   });
 
-  const payload = encodeArbitraryPayload(question, description, resolutionSource, resolutionTime);
+  const payload = encodeArbitraryPayload({
+    question,
+    description,
+    resolutionSource,
+    resolutionTime,
+  });
 
   // Calculate value: protocol fee + resolution bond
   const protocolFee = BigInt(config.registry.fees.protocolFeeStandard);
@@ -144,7 +110,7 @@ async function main() {
 
     const hash = await walletClient.writeContract({
       address: addresses.registry,
-      abi: REGISTRY_ABI,
+      abi,
       functionName: "createTOC",
       args: [
         addresses.optimisticResolver,
@@ -165,7 +131,7 @@ async function main() {
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     console.log(`   Block: ${receipt.blockNumber}`);
 
-    const newTocId = currentCount + 1n;
+    const newTocId = nextId;
 
     console.log("\n✅ TOC Created!");
     console.log(`   TOC ID: ${newTocId}`);
