@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "exportedAt": "2026-01-02T13:52:48.112Z",
+  "networks": {
+    "sepolia": {
+      "chainId": 11155111,
+      "name": "Sepolia Testnet",
+      "registry": "0x9d4ec2d6694d25aB5632cB77666a0b000c036067",
+      "optimisticResolver": "0x934248aea156E62D88aD3F9628c0353f38bC8074",
+      "pythResolver": "0xb0436E07DB66c646898abf16A38dC63A7131dA1f",
+      "truthKeeper": "0x38E70A295F28C29846A2Aa797DEbc67C10BBE9AC"
+    }
+  }
+}

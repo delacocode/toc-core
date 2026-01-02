@@ -257,6 +257,103 @@ uint256 tocId = registry.createTOC{value: fee}(
 
 ---
 
+## PythPriceResolver Templates
+
+The PythPriceResolver uses Pyth Network oracle data for automated, trustless price resolution. Unlike the OptimisticResolver, Pyth TOCs go directly to ACTIVE state and resolve based on verifiable on-chain price data.
+
+### Template 0: Snapshot (Above/Below)
+
+Is the price above or below a threshold at the deadline?
+
+```solidity
+SnapshotPayload memory payload = SnapshotPayload({
+    priceId: 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, // BTC/USD
+    threshold: 10000000000000, // $100,000 in Pyth format (8 decimals)
+    isAbove: true,             // Resolves YES if price > threshold
+    deadline: 1735689600       // When to check the price
+});
+
+uint256 tocId = registry.createTOC{value: fee}(
+    pythResolver,
+    0, // TEMPLATE_SNAPSHOT
+    abi.encode(payload.priceId, payload.threshold, payload.isAbove, payload.deadline),
+    5 minutes, 5 minutes, 5 minutes, 0,
+    truthKeeper
+);
+```
+
+### Template 1: Range
+
+Is the price within a range at the deadline?
+
+```solidity
+RangePayload memory payload = RangePayload({
+    priceId: 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, // ETH/USD
+    lowerBound: 300000000000,  // $3,000
+    upperBound: 400000000000,  // $4,000
+    deadline: 1735689600
+});
+
+uint256 tocId = registry.createTOC{value: fee}(
+    pythResolver,
+    1, // TEMPLATE_RANGE
+    abi.encode(payload.priceId, payload.lowerBound, payload.upperBound, payload.deadline),
+    5 minutes, 5 minutes, 5 minutes, 0,
+    truthKeeper
+);
+```
+
+### Template 2: Reached By
+
+Did the price reach a target before the deadline?
+
+```solidity
+ReachedByPayload memory payload = ReachedByPayload({
+    priceId: 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, // BTC/USD
+    targetPrice: 15000000000000, // $150,000
+    isAbove: true,               // Must go ABOVE this price
+    deadline: 1735689600         // Must reach target BEFORE this time
+});
+
+uint256 tocId = registry.createTOC{value: fee}(
+    pythResolver,
+    2, // TEMPLATE_REACHED_BY
+    abi.encode(payload.priceId, payload.targetPrice, payload.isAbove, payload.deadline),
+    5 minutes, 5 minutes, 5 minutes, 0,
+    truthKeeper
+);
+```
+
+### Supported Price Feeds
+
+| Asset | Pyth Price ID |
+|-------|---------------|
+| BTC/USD | `0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43` |
+| ETH/USD | `0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace` |
+| SOL/USD | `0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d` |
+| USDC/USD | `0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a` |
+| USDT/USD | `0x2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b` |
+
+Full list: https://www.pyth.network/developers/price-feed-ids
+
+### Price Format
+
+Pyth uses 8 decimal places. Use these helpers:
+
+```typescript
+// Convert USD to Pyth format: $100,000 → 10000000000000
+function usdToPythPrice(usd: number): bigint {
+    return BigInt(Math.round(usd * 1e8));
+}
+
+// Convert Pyth to USD: 10000000000000 → $100,000
+function pythPriceToUsd(pythPrice: bigint): number {
+    return Number(pythPrice) / 1e8;
+}
+```
+
+---
+
 ## Reading Results
 
 ### Simple Result
@@ -577,18 +674,207 @@ contract PredictionMarketExample {
 
 ---
 
+## Resolving TOCs
+
+### Resolving OptimisticResolver TOCs
+
+OptimisticResolver requires a two-step process:
+
+```solidity
+// Step 1: Propose resolution with bond
+AnswerPayload memory answer = AnswerPayload({
+    answer: true,  // YES or NO
+    justification: "ETH price exceeded $10,000 on Dec 15, 2025 per CoinGecko"
+});
+
+uint256 bondAmount = 0.01 ether;  // Get actual minimum from registry
+registry.resolveTOC{value: bondAmount}(
+    tocId,
+    address(0),  // ETH for bond
+    bondAmount,
+    abi.encode(answer)
+);
+// TOC is now in RESOLVING state
+
+// Step 2: Wait for dispute window, then finalize
+// Anyone can call this after the dispute window passes
+registry.finalizeTOC(tocId);
+// TOC is now RESOLVED
+```
+
+**Important:** If disputed during the window, the TOC goes to `DISPUTED_ROUND_1` and the TruthKeeper must resolve it.
+
+### Resolving PythPriceResolver TOCs
+
+Pyth TOCs resolve in a single step using oracle price data:
+
+```solidity
+// Fetch price update from Pyth Hermes API (off-chain)
+bytes[] memory priceUpdateData = fetchFromHermes(priceId);
+
+// Submit resolution with price proof
+registry.resolveTOC{value: bondAmount}(
+    tocId,
+    address(0),
+    bondAmount,
+    abi.encode(priceUpdateData)
+);
+// TOC goes directly to RESOLVED (no dispute window needed)
+```
+
+---
+
+## Choosing a Resolver
+
+| Resolver | Best For | Resolution | Trust Model |
+|----------|----------|------------|-------------|
+| **OptimisticResolver** | Subjective questions, sports, events | Human proposal + dispute | Optimistic with escalation |
+| **PythPriceResolver** | Price-based outcomes | Automated via oracle | Trustless (Pyth Network) |
+
+### OptimisticResolver Flow
+
+```
+createTOC() → PENDING → [TK approves] → ACTIVE → resolveTOC() → RESOLVING
+                                                                    ↓
+                              [dispute window] ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
+                                       ↓
+                              [no dispute] → finalizeTOC() → RESOLVED
+```
+
+- Requires human proposer to submit answer with bond
+- Dispute window allows challenges
+- Best for questions that need human judgment
+
+### PythPriceResolver Flow
+
+```
+createTOC() → ACTIVE → [deadline passes] → resolveTOC() → RESOLVED
+```
+
+- Immediately active (no approval needed)
+- Resolution uses Pyth price proofs
+- Fully automated - no human judgment needed
+
+---
+
+## Integrating PythPriceResolver
+
+### Creating a Pyth-Based Market
+
+```solidity
+contract PythMarket {
+    ITOCRegistry public registry;
+    address public pythResolver;
+    address public truthKeeper;
+
+    /// @notice Create a price prediction market
+    /// @param priceId Pyth price feed ID (e.g., BTC/USD)
+    /// @param threshold Price threshold (8 decimals)
+    /// @param isAbove True if betting price goes above threshold
+    /// @param deadline When to check the price
+    function createPriceMarket(
+        bytes32 priceId,
+        int64 threshold,
+        bool isAbove,
+        uint256 deadline
+    ) external payable returns (uint256 tocId) {
+        // Encode snapshot payload
+        bytes memory payload = abi.encode(priceId, threshold, isAbove, deadline);
+
+        (, , uint256 fee) = registry.getCreationFee(pythResolver, 0);
+
+        tocId = registry.createTOC{value: fee}(
+            pythResolver,
+            0,  // TEMPLATE_SNAPSHOT
+            payload,
+            5 minutes,  // disputeWindow
+            5 minutes,  // truthKeeperWindow
+            5 minutes,  // escalationWindow
+            0,          // postResolutionWindow
+            truthKeeper
+        );
+        // TOC is immediately ACTIVE for Pyth resolver
+    }
+}
+```
+
+### Resolving a Pyth TOC
+
+Resolution requires Pyth price update data from the Hermes API:
+
+```solidity
+/// @notice Resolve a Pyth TOC with price data
+/// @param tocId The TOC to resolve
+/// @param priceUpdateData Encoded price data from Pyth Hermes API
+function resolvePythTOC(uint256 tocId, bytes[] calldata priceUpdateData) external {
+    // Encode the price update data for the resolver
+    bytes memory resolverPayload = abi.encode(priceUpdateData);
+
+    // Resolution bond (may be minimal for Pyth)
+    uint256 bondAmount = 0.001 ether;
+
+    registry.resolveTOC{value: bondAmount}(
+        tocId,
+        address(0), // ETH for bond
+        bondAmount,
+        resolverPayload
+    );
+    // TOC goes directly to RESOLVED
+}
+```
+
+### Off-Chain: Fetching Pyth Price Data
+
+To resolve a Pyth TOC, fetch price updates from the Hermes API:
+
+```typescript
+const HERMES_API = "https://hermes.pyth.network";
+
+async function fetchPythUpdateData(priceId: string): Promise<string[]> {
+    const cleanId = priceId.replace("0x", "");
+    const url = `${HERMES_API}/v2/updates/price/latest?ids[]=${cleanId}&encoding=base64`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    // Convert base64 to hex for on-chain use
+    return data.binary.data.map((b64: string) =>
+        "0x" + Buffer.from(b64, "base64").toString("hex")
+    );
+}
+
+// Use with ethers.js or viem
+const priceData = await fetchPythUpdateData(BTC_USD_PRICE_ID);
+await registry.resolveTOC(tocId, ETH_ADDRESS, bondAmount,
+    ethers.utils.defaultAbiCoder.encode(["bytes[]"], [priceData])
+);
+```
+
+---
+
 ## Next Steps
 
 1. **Copy `ITOCConsumer.sol`** to your project
-2. **Deploy contracts:**
-   - TOCRegistry (or get existing address)
-   - OptimisticResolver (or get existing address)
-   - SimpleTruthKeeper (configure with your resolver allowlist)
-3. **Configure SimpleTruthKeeper:**
-   - Set resolver allowlist: `tk.setResolverAllowed(resolver, true)`
-   - Optionally set per-resolver time windows
+2. **Get deployed addresses** from `exports/toc-addresses.json`:
+   ```json
+   {
+     "networks": {
+       "sepolia": {
+         "chainId": 11155111,
+         "registry": "0x...",
+         "optimisticResolver": "0x...",
+         "pythResolver": "0x...",
+         "truthKeeper": "0x..."
+       }
+     }
+   }
+   ```
+   Generate fresh exports: `npx hardhat run scripts/export-addresses.ts`
+3. **Choose your resolver:**
+   - Use OptimisticResolver for human-judgment questions
+   - Use PythPriceResolver for automated price resolution
 4. **Create markets** using `createTOC()` with appropriate payloads
 5. **Poll state** to determine when markets can settle
-6. **Read results** and distribute winnings
+6. **Read results** using `getExtensiveResult()` and `TOCResultCodec`
 
 For full TOC documentation, see the [GitBook docs](../gitbook/README.md).
