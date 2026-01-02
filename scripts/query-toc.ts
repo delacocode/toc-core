@@ -35,6 +35,46 @@ function formatTime(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+// Format Pyth price (8 decimals) to USD
+function formatPythPrice(rawPrice: string): string {
+  const price = Number(rawPrice) / 1e8;
+  return price.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+// Parse and format Pyth question to human-readable form
+function formatPythQuestion(question: string): string {
+  // Pattern: "Will price be above/below X at timestamp Y?"
+  const snapshotMatch = question.match(/Will price be (above|below) (-?\d+) at timestamp (\d+)\?/);
+  if (snapshotMatch) {
+    const [, direction, rawPrice, timestamp] = snapshotMatch;
+    const price = formatPythPrice(rawPrice);
+    const time = formatTime(Number(timestamp));
+    return `Will price be ${direction} ${price} at ${time}?`;
+  }
+
+  // Pattern: "Will price be between X and Y at timestamp Z?"
+  const rangeMatch = question.match(/Will price be between (-?\d+) and (-?\d+) at timestamp (\d+)\?/);
+  if (rangeMatch) {
+    const [, rawLower, rawUpper, timestamp] = rangeMatch;
+    const lower = formatPythPrice(rawLower);
+    const upper = formatPythPrice(rawUpper);
+    const time = formatTime(Number(timestamp));
+    return `Will price be between ${lower} and ${upper} at ${time}?`;
+  }
+
+  // Pattern: "Will price reach above/below X by timestamp Y?"
+  const reachedMatch = question.match(/Will price reach (above|below) (-?\d+) by timestamp (\d+)\?/);
+  if (reachedMatch) {
+    const [, direction, rawPrice, timestamp] = reachedMatch;
+    const price = formatPythPrice(rawPrice);
+    const time = formatTime(Number(timestamp));
+    return `Will price reach ${direction} ${price} by ${time}?`;
+  }
+
+  // Fallback: return original
+  return question;
+}
+
 async function main() {
   const tocId = process.env.TOC_ID;
   const network = await getNetwork();
@@ -164,7 +204,10 @@ async function main() {
           args: [BigInt(tocId)],
         }) as string;
 
-        console.log(`🔮 ${question}`);
+        // Parse Pyth question and format nicely
+        // Format: "Will price be above/below X at timestamp Y?" or "Will price be between X and Y at timestamp Z?"
+        const formattedQuestion = formatPythQuestion(question);
+        console.log(`🔮 ${formattedQuestion}`);
         console.log(`📊 Resolver: Pyth Oracle (automatic price resolution)\n`);
       } catch {
         // Question not available
