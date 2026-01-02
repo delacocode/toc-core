@@ -13,7 +13,7 @@ import {
   getChainConfig,
   createClients,
 } from "./lib/config.js";
-import { getRegistryAbi, getResolverAbi, STATE_NAMES } from "./lib/abis.js";
+import { getRegistryAbi, getResolverAbi, getPythResolverAbi, STATE_NAMES } from "./lib/abis.js";
 
 // Format duration in human readable form
 function formatDuration(seconds: number): string {
@@ -44,6 +44,7 @@ async function main() {
   const { publicClient } = createClients(network);
   const registryAbi = getRegistryAbi();
   const resolverAbi = getResolverAbi();
+  const pythResolverAbi = getPythResolverAbi();
 
   // Bond amounts from config
   const bonds = {
@@ -120,8 +121,12 @@ async function main() {
     console.log(`  TOC #${tocId}  ${stateEmoji} ${STATE_NAMES[toc.state]}`);
     console.log(`═══════════════════════════════════════════════════════════════\n`);
 
-    // Question (if OptimisticResolver)
-    if (toc.resolver.toLowerCase() === addresses.optimisticResolver.toLowerCase()) {
+    // Detect resolver type
+    const isOptimisticResolver = toc.resolver.toLowerCase() === addresses.optimisticResolver.toLowerCase();
+    const isPythResolver = toc.resolver.toLowerCase() === addresses.pythResolver.toLowerCase();
+
+    // Question (from resolver)
+    if (isOptimisticResolver) {
       try {
         const question = await publicClient.readContract({
           address: addresses.optimisticResolver,
@@ -147,6 +152,20 @@ async function main() {
           }
         }
         console.log();
+      } catch {
+        // Question not available
+      }
+    } else if (isPythResolver) {
+      try {
+        const question = await publicClient.readContract({
+          address: addresses.pythResolver,
+          abi: pythResolverAbi,
+          functionName: "getTocQuestion",
+          args: [BigInt(tocId)],
+        }) as string;
+
+        console.log(`🔮 ${question}`);
+        console.log(`📊 Resolver: Pyth Oracle (automatic price resolution)\n`);
       } catch {
         // Question not available
       }
@@ -229,19 +248,36 @@ async function main() {
 
     switch (toc.state) {
       case 3: // ACTIVE
-        console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
-        console.log(`   │  1. PROPOSE RESOLUTION                                      │`);
-        console.log(`   ├─────────────────────────────────────────────────────────────┤`);
-        console.log(`   │  Bond required:  ${formatEther(bonds.resolution)} ETH`.padEnd(62) + "│");
-        console.log(`   │  Condition:      Anyone can propose                         │`);
-        console.log(`   │  Next state:     RESOLVING (dispute window opens)           │`);
-        console.log(`   │  Timeline:       ${formatDuration(Number(toc.disputeWindow))} dispute window starts`.padEnd(62) + "│");
-        console.log(`   ├─────────────────────────────────────────────────────────────┤`);
-        console.log(`   │  Command:                                                   │`);
-        console.log(`   │  $ TOC_ID=${tocId} ANSWER=true \\`.padEnd(62) + "│");
-        console.log(`   │    JUSTIFICATION="your reasoning" \\`.padEnd(62) + "│");
-        console.log(`   │    npx hardhat run scripts/resolve-toc.ts --network ${network}`.padEnd(62) + "│");
-        console.log(`   └─────────────────────────────────────────────────────────────┘`);
+        if (isPythResolver) {
+          // Pyth resolver - automatic resolution with price data
+          console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+          console.log(`   │  1. RESOLVE WITH PYTH PRICE DATA                            │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Bond required:  None (automatic resolution)                │`);
+          console.log(`   │  Condition:      Deadline must have passed                  │`);
+          console.log(`   │  Data required:  Pyth price update from Hermes API          │`);
+          console.log(`   │  Next state:     RESOLVED (immediate, no dispute)           │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Command:                                                   │`);
+          console.log(`   │  $ TOC_ID=${tocId} npx hardhat run \\`.padEnd(62) + "│");
+          console.log(`   │    scripts/resolve-pyth-toc.ts --network ${network}`.padEnd(62) + "│");
+          console.log(`   └─────────────────────────────────────────────────────────────┘`);
+        } else {
+          // Optimistic resolver - manual proposal with bond
+          console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+          console.log(`   │  1. PROPOSE RESOLUTION                                      │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Bond required:  ${formatEther(bonds.resolution)} ETH`.padEnd(62) + "│");
+          console.log(`   │  Condition:      Anyone can propose                         │`);
+          console.log(`   │  Next state:     RESOLVING (dispute window opens)           │`);
+          console.log(`   │  Timeline:       ${formatDuration(Number(toc.disputeWindow))} dispute window starts`.padEnd(62) + "│");
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Command:                                                   │`);
+          console.log(`   │  $ TOC_ID=${tocId} ANSWER=true \\`.padEnd(62) + "│");
+          console.log(`   │    JUSTIFICATION="your reasoning" \\`.padEnd(62) + "│");
+          console.log(`   │    npx hardhat run scripts/resolve-toc.ts --network ${network}`.padEnd(62) + "│");
+          console.log(`   └─────────────────────────────────────────────────────────────┘`);
+        }
         break;
 
       case 4: // RESOLVING
