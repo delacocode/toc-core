@@ -5,9 +5,10 @@
  *        TOC_ID=1 npx hardhat run scripts/query-toc.ts --network <network>
  */
 
-import { decodeAbiParameters, parseAbiParameters } from "viem";
+import { decodeAbiParameters, parseAbiParameters, formatEther } from "viem";
 import {
   getNetwork,
+  loadConfig,
   loadDeployedAddresses,
   getChainConfig,
   createClients,
@@ -34,21 +35,22 @@ function formatTime(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
-// Get status indicator
-function getStatusIndicator(isPast: boolean, isActive: boolean): string {
-  if (isPast) return "✅";
-  if (isActive) return "⏳";
-  return "⏸️";
-}
-
 async function main() {
   const tocId = process.env.TOC_ID;
   const network = await getNetwork();
   const { chainId } = getChainConfig(network);
+  const config = loadConfig(network);
   const addresses = loadDeployedAddresses(chainId);
   const { publicClient } = createClients(network);
   const registryAbi = getRegistryAbi();
   const resolverAbi = getResolverAbi();
+
+  // Bond amounts from config
+  const bonds = {
+    resolution: BigInt(config.registry.bonds.resolution.minAmount),
+    dispute: BigInt(config.registry.bonds.dispute.minAmount),
+    escalation: BigInt(config.registry.bonds.escalation.minAmount),
+  };
 
   console.log(`\n🔍 Querying TOC${tocId ? ` #${tocId}` : "s"} on ${network}\n`);
 
@@ -114,9 +116,9 @@ async function main() {
       8: "❌", // CANCELLED
     }[toc.state] || "❓";
 
-    console.log(`═══════════════════════════════════════════════════════════`);
+    console.log(`═══════════════════════════════════════════════════════════════`);
     console.log(`  TOC #${tocId}  ${stateEmoji} ${STATE_NAMES[toc.state]}`);
-    console.log(`═══════════════════════════════════════════════════════════\n`);
+    console.log(`═══════════════════════════════════════════════════════════════\n`);
 
     // Question (if OptimisticResolver)
     if (toc.resolver.toLowerCase() === addresses.optimisticResolver.toLowerCase()) {
@@ -154,34 +156,35 @@ async function main() {
     if (toc.result && toc.result !== "0x") {
       try {
         const [answer] = decodeAbiParameters(parseAbiParameters("bool"), toc.result);
-        console.log(`┌─────────────────────────────────────────────────────────┐`);
-        console.log(`│  RESULT: ${answer ? "YES ✅" : "NO ❌"}${toc.hasCorrectedResult ? " (corrected via dispute)" : ""}`.padEnd(59) + "│");
-        console.log(`└─────────────────────────────────────────────────────────┘\n`);
+        console.log(`┌───────────────────────────────────────────────────────────────┐`);
+        console.log(`│  RESULT: ${answer ? "YES ✅" : "NO ❌"}${toc.hasCorrectedResult ? " (corrected via dispute)" : ""}`.padEnd(65) + "│");
+        console.log(`└───────────────────────────────────────────────────────────────┘\n`);
       } catch {
         console.log(`📦 Result (raw): ${toc.result}\n`);
       }
     }
 
     // Addresses
-    console.log(`📍 Addresses:`);
+    console.log(`📍 Contracts:`);
     console.log(`   Resolver:      ${toc.resolver}`);
     console.log(`   TruthKeeper:   ${toc.truthKeeper}\n`);
 
     // Timeline based on state
-    console.log(`⏱️  Timeline:`);
-
     const disputeDeadline = Number(toc.disputeDeadline);
     const tkDeadline = Number(toc.truthKeeperDeadline);
     const escalationDeadline = Number(toc.escalationDeadline);
     const postDisputeDeadline = Number(toc.postDisputeDeadline);
     const resolutionTime = Number(toc.resolutionTime);
 
+    console.log(`⏱️  Current Status:`);
+
     if (toc.state === 3) { // ACTIVE
-      console.log(`   🟢 ACTIVE - Awaiting resolution proposal`);
-      console.log(`   ├─ Dispute window:    ${formatDuration(Number(toc.disputeWindow))}`);
+      console.log(`   🟢 ACTIVE - Awaiting resolution proposal\n`);
+      console.log(`   Configured time windows:`);
+      console.log(`   ├─ Dispute window:     ${formatDuration(Number(toc.disputeWindow))}`);
       console.log(`   ├─ TruthKeeper window: ${formatDuration(Number(toc.truthKeeperWindow))}`);
-      console.log(`   ├─ Escalation window: ${formatDuration(Number(toc.escalationWindow))}`);
-      console.log(`   └─ Post-resolution:   ${formatDuration(Number(toc.postResolutionWindow))}`);
+      console.log(`   ├─ Escalation window:  ${formatDuration(Number(toc.escalationWindow))}`);
+      console.log(`   └─ Post-resolution:    ${formatDuration(Number(toc.postResolutionWindow))}`);
     } else if (toc.state === 4) { // RESOLVING
       const remaining = disputeDeadline - now;
       console.log(`   ✅ Resolution proposed at: ${formatTime(resolutionTime)}`);
@@ -189,10 +192,10 @@ async function main() {
       if (remaining > 0) {
         console.log(`      ├─ Ends at:    ${formatTime(disputeDeadline)}`);
         console.log(`      ├─ Remaining:  ${formatDuration(remaining)}`);
-        console.log(`      └─ Status:     OPEN - Anyone can dispute`);
+        console.log(`      └─ Status:     🟡 OPEN - Anyone can dispute`);
       } else {
         console.log(`      ├─ Ended at:   ${formatTime(disputeDeadline)}`);
-        console.log(`      └─ Status:     CLOSED - Ready to finalize`);
+        console.log(`      └─ Status:     🟢 CLOSED - Ready to finalize`);
       }
     } else if (toc.state === 5) { // DISPUTED_ROUND_1
       const remaining = tkDeadline - now;
@@ -201,7 +204,7 @@ async function main() {
       if (remaining > 0) {
         console.log(`   ├─ Remaining:   ${formatDuration(remaining)}`);
       } else {
-        console.log(`   ├─ Deadline passed - Awaiting TK decision`);
+        console.log(`   ├─ Deadline passed`);
       }
       console.log(`   └─ Next: TruthKeeper will approve or reject dispute`);
     } else if (toc.state === 6) { // DISPUTED_ROUND_2
@@ -221,34 +224,113 @@ async function main() {
       }
     }
 
-    // Actions
-    console.log(`\n💡 Actions:`);
+    // Possible Actions with requirements
+    console.log(`\n💡 Possible Actions:\n`);
+
     switch (toc.state) {
       case 3: // ACTIVE
-        console.log(`   Propose resolution:`);
-        console.log(`   $ TOC_ID=${tocId} ANSWER=true JUSTIFICATION="reason" npx hardhat run scripts/resolve-toc.ts --network ${network}`);
+        console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+        console.log(`   │  1. PROPOSE RESOLUTION                                      │`);
+        console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+        console.log(`   │  Bond required:  ${formatEther(bonds.resolution)} ETH`.padEnd(62) + "│");
+        console.log(`   │  Condition:      Anyone can propose                         │`);
+        console.log(`   │  Next state:     RESOLVING (dispute window opens)           │`);
+        console.log(`   │  Timeline:       ${formatDuration(Number(toc.disputeWindow))} dispute window starts`.padEnd(62) + "│");
+        console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+        console.log(`   │  Command:                                                   │`);
+        console.log(`   │  $ TOC_ID=${tocId} ANSWER=true \\`.padEnd(62) + "│");
+        console.log(`   │    JUSTIFICATION="your reasoning" \\`.padEnd(62) + "│");
+        console.log(`   │    npx hardhat run scripts/resolve-toc.ts --network ${network}`.padEnd(62) + "│");
+        console.log(`   └─────────────────────────────────────────────────────────────┘`);
         break;
+
       case 4: // RESOLVING
-        if (disputeDeadline > now) {
-          console.log(`   ⏳ Wait for dispute window to close (${formatDuration(disputeDeadline - now)} remaining)`);
-          console.log(`   Or dispute this resolution if you disagree.`);
+        const remaining = disputeDeadline - now;
+        if (remaining > 0) {
+          console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+          console.log(`   │  1. DISPUTE (challenge the proposed resolution)             │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Bond required:  ${formatEther(bonds.dispute)} ETH`.padEnd(62) + "│");
+          console.log(`   │  Condition:      Disagree with proposed answer              │`);
+          console.log(`   │  Time left:      ${formatDuration(remaining)}`.padEnd(62) + "│");
+          console.log(`   │  Next state:     DISPUTED_ROUND_1 (TruthKeeper reviews)     │`);
+          console.log(`   └─────────────────────────────────────────────────────────────┘`);
+          console.log();
+          console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+          console.log(`   │  2. WAIT FOR FINALIZATION                                   │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Bond required:  None (anyone can call finalize)            │`);
+          console.log(`   │  Condition:      Wait for dispute window to close           │`);
+          console.log(`   │  Time left:      ${formatDuration(remaining)}`.padEnd(62) + "│");
+          console.log(`   │  Next state:     RESOLVED                                   │`);
+          console.log(`   └─────────────────────────────────────────────────────────────┘`);
         } else {
-          console.log(`   Finalize the resolution:`);
-          console.log(`   $ TOC_ID=${tocId} npx hardhat run scripts/finalize-toc.ts --network ${network}`);
+          console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+          console.log(`   │  1. FINALIZE                                                │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Bond required:  None                                       │`);
+          console.log(`   │  Condition:      Dispute window has closed ✓                │`);
+          console.log(`   │  Next state:     RESOLVED (final, immutable)                │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  Command:                                                   │`);
+          console.log(`   │  $ TOC_ID=${tocId} npx hardhat run scripts/finalize-toc.ts \\`.padEnd(62) + "│");
+          console.log(`   │    --network ${network}`.padEnd(62) + "│");
+          console.log(`   └─────────────────────────────────────────────────────────────┘`);
         }
         break;
+
       case 5: // DISPUTED_ROUND_1
-        console.log(`   Awaiting TruthKeeper decision.`);
+        console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+        console.log(`   │  AWAITING TRUTHKEEPER DECISION                              │`);
+        console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+        console.log(`   │  TruthKeeper will either:                                   │`);
+        console.log(`   │  • APPROVE dispute → Result corrected, disputer wins bond   │`);
+        console.log(`   │  • REJECT dispute  → Original result stands                 │`);
+        console.log(`   │                                                             │`);
+        console.log(`   │  If you disagree with TK decision, you can escalate:        │`);
+        console.log(`   │  Bond required:  ${formatEther(bonds.escalation)} ETH (escalation)`.padEnd(62) + "│");
+        console.log(`   │  Next state:     DISPUTED_ROUND_2 (admin review)            │`);
+        console.log(`   └─────────────────────────────────────────────────────────────┘`);
         break;
+
       case 6: // DISPUTED_ROUND_2
-        console.log(`   Awaiting admin/community decision.`);
+        console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+        console.log(`   │  AWAITING ADMIN/COMMUNITY DECISION                          │`);
+        console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+        console.log(`   │  This is the final escalation level.                        │`);
+        console.log(`   │  Admin or community governance will make final decision.    │`);
+        console.log(`   └─────────────────────────────────────────────────────────────┘`);
         break;
+
       case 7: // RESOLVED
-        console.log(`   ✅ TOC is finalized. No further action needed.`);
+        if (postDisputeDeadline > 0 && postDisputeDeadline > now) {
+          const postRemaining = postDisputeDeadline - now;
+          console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+          console.log(`   │  POST-RESOLUTION DISPUTE WINDOW OPEN                        │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  You can still dispute if new evidence emerges              │`);
+          console.log(`   │  Bond required:  ${formatEther(bonds.dispute)} ETH`.padEnd(62) + "│");
+          console.log(`   │  Time left:      ${formatDuration(postRemaining)}`.padEnd(62) + "│");
+          console.log(`   └─────────────────────────────────────────────────────────────┘`);
+        } else {
+          console.log(`   ┌─────────────────────────────────────────────────────────────┐`);
+          console.log(`   │  ✅ FINAL - NO FURTHER ACTIONS AVAILABLE                    │`);
+          console.log(`   ├─────────────────────────────────────────────────────────────┤`);
+          console.log(`   │  This TOC is fully resolved and immutable.                  │`);
+          console.log(`   │  The result cannot be changed.                              │`);
+          console.log(`   └─────────────────────────────────────────────────────────────┘`);
+        }
         break;
+
       default:
-        console.log(`   Check state and take appropriate action.`);
+        console.log(`   State ${toc.state} - check contract for available actions.`);
     }
+
+    // Bond summary
+    console.log(`\n💰 Bond Requirements (this network):`);
+    console.log(`   Resolution:  ${formatEther(bonds.resolution)} ETH`);
+    console.log(`   Dispute:     ${formatEther(bonds.dispute)} ETH`);
+    console.log(`   Escalation:  ${formatEther(bonds.escalation)} ETH`);
 
     console.log();
 
