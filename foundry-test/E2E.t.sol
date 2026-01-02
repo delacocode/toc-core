@@ -93,6 +93,17 @@ contract E2ETest is Test {
         // 8. Register both resolvers
         registry.registerResolver(address(pythResolver));
         registry.registerResolver(address(optimisticResolver));
+
+        // 9. Initialize price feeds so they exist in MockPyth for validation
+        _initializePriceFeeds();
+    }
+
+    /// @notice Initialize price feeds in MockPyth so they exist for TOC creation validation
+    function _initializePriceFeeds() internal {
+        bytes[] memory updates = new bytes[](2);
+        updates[0] = _createPriceUpdate(BTC_USD, 50000_00000000, 100_00000000, -8, uint64(block.timestamp));
+        updates[1] = _createPriceUpdate(ETH_USD, 3000_00000000, 10_00000000, -8, uint64(block.timestamp));
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
     }
 
     // ============ Helper Functions ============

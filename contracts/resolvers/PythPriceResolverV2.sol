@@ -329,6 +329,7 @@ contract PythPriceResolverV2 is ITOCResolver {
 
     error InvalidTemplate(uint32 templateId);
     error InvalidPriceId();
+    error PriceFeedNotFound(bytes32 priceId);
     error DeadlineInPast();
     error InvalidBounds();
     error InvalidPercentage();
@@ -364,6 +365,20 @@ contract PythPriceResolverV2 is ITOCResolver {
         owner = msg.sender;
     }
 
+    // ============ Price Feed Validation ============
+
+    /// @notice Validate that a Pyth price feed exists by querying current price
+    /// @dev Reverts if the price feed doesn't exist in Pyth oracle
+    function _validatePriceFeedExists(bytes32 priceId) internal view {
+        // getPriceUnsafe will revert if the feed doesn't exist
+        // We don't care about the price value or recency here, just that it exists
+        try pyth.getPriceUnsafe(priceId) returns (PythStructs.Price memory) {
+            // Feed exists, validation passed
+        } catch {
+            revert PriceFeedNotFound(priceId);
+        }
+    }
+
     // ============ Admin Functions ============
 
     /// @notice Set the display name for a template (admin only)
@@ -397,6 +412,28 @@ contract PythPriceResolverV2 is ITOCResolver {
     ) external onlyRegistry returns (TOCState initialState) {
         if (templateId == TEMPLATE_NONE || templateId >= TEMPLATE_COUNT) {
             revert InvalidTemplate(templateId);
+        }
+
+        // Validate price feed(s) exist - all payloads have priceId as first 32 bytes
+        bytes32 priceId;
+        assembly {
+            priceId := calldataload(payload.offset)
+        }
+        if (priceId == bytes32(0)) revert InvalidPriceId();
+        _validatePriceFeedExists(priceId);
+
+        // Dual-asset templates have priceIdB as second 32 bytes
+        if (templateId == TEMPLATE_ASSET_COMPARE ||
+            templateId == TEMPLATE_RATIO_THRESHOLD ||
+            templateId == TEMPLATE_SPREAD_THRESHOLD ||
+            templateId == TEMPLATE_FLIP) {
+            bytes32 priceIdB;
+            assembly {
+                priceIdB := calldataload(add(payload.offset, 32))
+            }
+            if (priceIdB == bytes32(0)) revert InvalidPriceId();
+            if (priceId == priceIdB) revert SamePriceIds();
+            _validatePriceFeedExists(priceIdB);
         }
 
         _tocTemplates[tocId] = templateId;
@@ -700,7 +737,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitSnapshot(uint256 tocId, bytes calldata payload) internal {
         SnapshotPayload memory p = abi.decode(payload, (SnapshotPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         emit SnapshotTOCCreated(tocId, p.priceId, p.threshold, p.isAbove, p.deadline);
@@ -797,7 +833,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitRange(uint256 tocId, bytes calldata payload) internal {
         RangePayload memory p = abi.decode(payload, (RangePayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
         if (p.lowerBound >= p.upperBound) revert InvalidBounds();
 
@@ -830,7 +865,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitReachedTarget(uint256 tocId, bytes calldata payload) internal {
         ReachedTargetPayload memory p = abi.decode(payload, (ReachedTargetPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         emit ReachedTargetTOCCreated(tocId, p.priceId, p.target, p.isAbove, p.deadline);
@@ -901,7 +935,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitTouchedBoth(uint256 tocId, bytes calldata payload) internal {
         TouchedBothPayload memory p = abi.decode(payload, (TouchedBothPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         emit TouchedBothTOCCreated(tocId, p.priceId, p.targetA, p.targetB, p.deadline);
@@ -979,7 +1012,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitStayed(uint256 tocId, bytes calldata payload) internal {
         StayedPayload memory p = abi.decode(payload, (StayedPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.startTime >= p.deadline) revert InvalidTimeRange();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
@@ -989,7 +1021,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitStayedInRange(uint256 tocId, bytes calldata payload) internal {
         StayedInRangePayload memory p = abi.decode(payload, (StayedInRangePayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.lowerBound >= p.upperBound) revert InvalidBounds();
         if (p.startTime >= p.deadline) revert InvalidTimeRange();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
@@ -1000,7 +1031,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitBreakout(uint256 tocId, bytes calldata payload) internal {
         BreakoutPayload memory p = abi.decode(payload, (BreakoutPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         // If referenceTimestamp and referencePrice are both 0, user will call setReferencePrice later
@@ -1240,7 +1270,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitPercentageChange(uint256 tocId, bytes calldata payload) internal {
         PercentageChangePayload memory p = abi.decode(payload, (PercentageChangePayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
         if (p.percentageBps == 0) revert InvalidPercentage();
 
@@ -1318,7 +1347,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitPercentageEither(uint256 tocId, bytes calldata payload) internal {
         PercentageEitherPayload memory p = abi.decode(payload, (PercentageEitherPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
         if (p.percentageBps == 0) revert InvalidPercentage();
 
@@ -1389,7 +1417,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitEndVsStart(uint256 tocId, bytes calldata payload) internal {
         EndVsStartPayload memory p = abi.decode(payload, (EndVsStartPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         // If referenceTimestamp and referencePrice are both 0, user will call setReferencePrice later
@@ -1460,9 +1487,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitAssetCompare(uint256 tocId, bytes calldata payload) internal {
         AssetComparePayload memory p = abi.decode(payload, (AssetComparePayload));
 
-        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         emit AssetCompareTOCCreated(tocId, p.priceIdA, p.priceIdB, p.deadline, p.aGreater);
@@ -1548,9 +1572,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitRatioThreshold(uint256 tocId, bytes calldata payload) internal {
         RatioThresholdPayload memory p = abi.decode(payload, (RatioThresholdPayload));
 
-        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
         if (p.ratioBps == 0) revert InvalidPercentage();
 
@@ -1597,9 +1618,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitSpreadThreshold(uint256 tocId, bytes calldata payload) internal {
         SpreadThresholdPayload memory p = abi.decode(payload, (SpreadThresholdPayload));
 
-        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         emit SpreadThresholdTOCCreated(tocId, p.priceIdA, p.priceIdB, p.deadline, p.spreadThreshold, p.isAbove);
@@ -1644,9 +1662,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitFlip(uint256 tocId, bytes calldata payload) internal {
         FlipPayload memory p = abi.decode(payload, (FlipPayload));
 
-        if (p.priceIdA == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdB == bytes32(0)) revert InvalidPriceId();
-        if (p.priceIdA == p.priceIdB) revert SamePriceIds();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         // If reference prices are set, store them
@@ -1832,7 +1847,6 @@ contract PythPriceResolverV2 is ITOCResolver {
     function _validateAndEmitFirstToTarget(uint256 tocId, bytes calldata payload) internal {
         FirstToTargetPayload memory p = abi.decode(payload, (FirstToTargetPayload));
 
-        if (p.priceId == bytes32(0)) revert InvalidPriceId();
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
 
         emit FirstToTargetTOCCreated(tocId, p.priceId, p.targetA, p.targetB, p.deadline);

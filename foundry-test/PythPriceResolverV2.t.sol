@@ -57,6 +57,17 @@ contract PythPriceResolverV2Test is Test {
 
         // Fund resolver for Pyth fees
         vm.deal(address(resolver), 1 ether);
+
+        // Initialize price feeds so they exist in MockPyth
+        _initializePriceFeeds();
+    }
+
+    /// @notice Initialize price feeds in MockPyth so they exist for validation
+    function _initializePriceFeeds() internal {
+        bytes[] memory updates = new bytes[](2);
+        updates[0] = _createPriceUpdate(BTC_USD, 50000_00000000, 100_00000000, -8, uint64(block.timestamp));
+        updates[1] = _createPriceUpdate(ETH_USD, 3000_00000000, 10_00000000, -8, uint64(block.timestamp));
+        mockPyth.updatePriceFeeds{value: PYTH_FEE * 2}(updates);
     }
 
     // ============ Helper Functions ============
@@ -3035,6 +3046,353 @@ contract PythPriceResolverV2Test is Test {
         // Try to set name for template >= TEMPLATE_COUNT
         vm.expectRevert("Invalid template");
         resolver.setTemplateName(16, "Invalid");
+    }
+
+    // ============ Non-Existing Price Feed Tests ============
+
+    bytes32 constant NON_EXISTING_PRICE_ID = bytes32(uint256(999));
+
+    function test_RevertSnapshot_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(100000_00000000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            1, // TEMPLATE_SNAPSHOT
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertRange_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(40000_00000000),
+            int64(60000_00000000)
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            2, // TEMPLATE_RANGE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertReachedTarget_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(100000_00000000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            3, // TEMPLATE_REACHED_TARGET
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertTouchedBoth_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(60000_00000000),
+            int64(40000_00000000)
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            4, // TEMPLATE_TOUCHED_BOTH
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertStayed_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(100000_00000000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            5, // TEMPLATE_STAYED
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertStayedInRange_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(40000_00000000),
+            int64(60000_00000000)
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            6, // TEMPLATE_STAYED_IN_RANGE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertBreakout_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(60000_00000000),
+            int64(40000_00000000)
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            7, // TEMPLATE_BREAKOUT
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertPercentageChange_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(10_0000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            8, // TEMPLATE_PERCENTAGE_CHANGE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertPercentageEither_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(10_0000)
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            9, // TEMPLATE_PERCENTAGE_EITHER
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertEndVsStart_NonExistingPriceFeed() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            10, // TEMPLATE_END_VS_START
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertAssetCompare_NonExistingPriceFeedA() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            ETH_USD,
+            block.timestamp + 1 days,
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            11, // TEMPLATE_ASSET_COMPARE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertAssetCompare_NonExistingPriceFeedB() public {
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            11, // TEMPLATE_ASSET_COMPARE
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertRatioThreshold_NonExistingPriceFeedA() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            ETH_USD,
+            block.timestamp + 1 days,
+            int64(15_000000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            12, // TEMPLATE_RATIO_THRESHOLD
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertRatioThreshold_NonExistingPriceFeedB() public {
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(15_000000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            12, // TEMPLATE_RATIO_THRESHOLD
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertSpreadThreshold_NonExistingPriceFeedA() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            ETH_USD,
+            block.timestamp + 1 days,
+            int64(1000_00000000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            13, // TEMPLATE_SPREAD_THRESHOLD
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertSpreadThreshold_NonExistingPriceFeedB() public {
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(1000_00000000),
+            true
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            13, // TEMPLATE_SPREAD_THRESHOLD
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertFlip_NonExistingPriceFeedA() public {
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            ETH_USD,
+            block.timestamp + 1 days
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            14, // TEMPLATE_FLIP
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertFlip_NonExistingPriceFeedB() public {
+        bytes memory payload = abi.encode(
+            BTC_USD,
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            14, // TEMPLATE_FLIP
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
+    }
+
+    function test_RevertFirstToTarget_NonExistingPriceFeed() public {
+        // FirstToTarget has single priceId with two targets (targetA, targetB)
+        bytes memory payload = abi.encode(
+            NON_EXISTING_PRICE_ID,
+            block.timestamp + 1 days,
+            int64(100000_00000000),  // targetA
+            int64(40000_00000000)    // targetB
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(PythPriceResolverV2.PriceFeedNotFound.selector, NON_EXISTING_PRICE_ID));
+        registry.createTOC{value: 0.001 ether}(
+            address(resolver),
+            15, // TEMPLATE_FIRST_TO_TARGET
+            payload,
+            0, 0, 0, 0,
+            truthKeeper
+        );
     }
 
     receive() external payable {}
