@@ -28,7 +28,7 @@ contract TOCRegistryWithHelpersTest is TestHelpers {
     uint256 constant MIN_ESCALATION_BOND = 0.15 ether;
     uint256 constant DEFAULT_DISPUTE_WINDOW = 24 hours;
     uint256 constant DEFAULT_TK_WINDOW = 24 hours;
-    uint256 constant DEFAULT_ESCALATION_WINDOW = 48 hours;
+    uint256 constant DEFAULT_ESCALATION_WINDOW = 24 hours; // Max for RESOLVER trust level is 1 day
     uint256 constant DEFAULT_POST_RESOLUTION_WINDOW = 24 hours;
     uint256 constant PROTOCOL_FEE = 0.001 ether;
 

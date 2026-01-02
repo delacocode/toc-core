@@ -517,7 +517,7 @@ abstract contract TestHelpers is Test {
             payload: payload,
             disputeWindow: 24 hours,
             tkWindow: 24 hours,
-            escalationWindow: 48 hours,
+            escalationWindow: 24 hours, // Max for RESOLVER trust level is 1 day
             postResolutionWindow: 24 hours,
             truthKeeper: truthKeeper,
             fee: fee

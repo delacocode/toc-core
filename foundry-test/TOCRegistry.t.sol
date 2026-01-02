@@ -27,7 +27,7 @@ contract TOCRegistryTest is Test {
     uint256 constant MIN_ESCALATION_BOND = 0.15 ether;
     uint256 constant DEFAULT_DISPUTE_WINDOW = 24 hours;
     uint256 constant DEFAULT_TK_WINDOW = 24 hours;
-    uint256 constant DEFAULT_ESCALATION_WINDOW = 48 hours;
+    uint256 constant DEFAULT_ESCALATION_WINDOW = 24 hours; // Max for RESOLVER trust level is 1 day
     uint256 constant DEFAULT_POST_RESOLUTION_WINDOW = 24 hours;
 
     address truthKeeper;
@@ -720,7 +720,7 @@ contract TOCRegistryTest is Test {
         registry.registerResolver(address(resolver));
 
         uint256 customDisputeWindow = 12 hours;
-        uint256 customPostResolutionWindow = 48 hours;
+        uint256 customPostResolutionWindow = 18 hours; // Max for RESOLVER trust level is 1 day
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),
