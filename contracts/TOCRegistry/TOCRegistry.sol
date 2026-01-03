@@ -94,6 +94,8 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
     error DisputeWindowPassed(uint256 deadline, uint256 current);
     error AlreadyDisputed(uint256 tocId);
     error NotResolver(address caller, address expected);
+    error NotCreator(address caller, address expected);
+    error InvalidAddress(address addr);
     error TransferFailed();
     error InsufficientValue(uint256 sent, uint256 required);
     error NoCorrectedAnswerProvided(uint256 tocId);
@@ -402,6 +404,31 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         toc.state = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload, msg.sender);
 
         emit TOCCreated(tocId, resolver, trust, templateId, toc.answerType, toc.state, truthKeeper, toc.tierAtCreation);
+    }
+
+    /// @inheritdoc ITOCRegistry
+    function transferCreator(uint256 tocId, address newCreator) external nonReentrant {
+        TOC storage toc = _tocs[tocId];
+
+        // Only current creator can transfer
+        if (msg.sender != toc.creator) {
+            revert NotCreator(msg.sender, toc.creator);
+        }
+
+        // Can only transfer while ACTIVE (before resolution starts)
+        if (toc.state != TOCState.ACTIVE) {
+            revert InvalidState(toc.state, TOCState.ACTIVE);
+        }
+
+        // New creator must be valid
+        if (newCreator == address(0)) {
+            revert InvalidAddress(newCreator);
+        }
+
+        address previousCreator = toc.creator;
+        toc.creator = newCreator;
+
+        emit CreatorTransferred(tocId, previousCreator, newCreator);
     }
 
     /// @inheritdoc ITOCRegistry

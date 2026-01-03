@@ -43,9 +43,9 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
     // ============ Structs ============
 
     /// @notice Core question data stored for each TOC
+    /// @dev Creator is read from registry.getTOC(tocId).creator
     struct QuestionData {
         uint32 templateId;
-        address creator;
         uint256 createdAt;
         bytes payload;
     }
@@ -175,10 +175,9 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         // Validate and extract question preview based on template
         string memory questionPreview = _validateAndGetPreview(templateId, payload);
 
-        // Store question data
+        // Store question data (creator is stored in registry)
         _questions[tocId] = QuestionData({
             templateId: templateId,
-            creator: creator,
             createdAt: block.timestamp,
             payload: payload
         });
@@ -264,9 +263,12 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
             revert TocNotManaged(tocId);
         }
 
+        // Get TOC from registry (creator is stored there)
+        TOC memory toc = registry.getTOC(tocId);
+
         // Only creator can request clarifications
-        if (msg.sender != q.creator) {
-            revert OnlyCreator(msg.sender, q.creator);
+        if (msg.sender != toc.creator) {
+            revert OnlyCreator(msg.sender, toc.creator);
         }
 
         // Check text length
@@ -275,7 +277,6 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         }
 
         // Can only clarify while TOC is ACTIVE or PENDING
-        TOC memory toc = registry.getTOC(tocId);
         if (toc.state != TOCState.ACTIVE && toc.state != TOCState.PENDING) {
             revert CannotClarifyAfterResolution(toc.state);
         }
@@ -380,13 +381,16 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         if (q.createdAt == 0) {
             revert TocNotManaged(tocId);
         }
-        if (msg.sender != q.creator) {
-            revert OnlyCreator(msg.sender, q.creator);
+
+        // Get TOC from registry (creator is stored there)
+        TOC memory toc = registry.getTOC(tocId);
+
+        if (msg.sender != toc.creator) {
+            revert OnlyCreator(msg.sender, toc.creator);
         }
         if (bytes(clarification).length > MAX_TEXT_LENGTH) {
             revert TextTooLong(bytes(clarification).length, MAX_TEXT_LENGTH);
         }
-        TOC memory toc = registry.getTOC(tocId);
         if (toc.state != TOCState.ACTIVE && toc.state != TOCState.PENDING) {
             revert CannotClarifyAfterResolution(toc.state);
         }
@@ -408,7 +412,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
     /// @notice Get question data for a TOC
     /// @param tocId The TOC identifier
     /// @return templateId The template used
-    /// @return creator The question creator
+    /// @return creator The question creator (from registry)
     /// @return createdAt Creation timestamp
     function getQuestionData(uint256 tocId) external view returns (
         uint32 templateId,
@@ -416,7 +420,8 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         uint256 createdAt
     ) {
         QuestionData storage q = _questions[tocId];
-        return (q.templateId, q.creator, q.createdAt);
+        TOC memory toc = registry.getTOC(tocId);
+        return (q.templateId, toc.creator, q.createdAt);
     }
 
     // ============ Internal Validation ============

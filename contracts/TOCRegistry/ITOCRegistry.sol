@@ -32,6 +32,7 @@ interface ITOCRegistry {
     );
     event TOCApproved(uint256 indexed tocId);
     event TOCRejected(uint256 indexed tocId, string reason);
+    event CreatorTransferred(uint256 indexed tocId, address indexed previousCreator, address indexed newCreator);
 
     // Resolution
     event TOCResolutionProposed(
@@ -195,6 +196,12 @@ interface ITOCRegistry {
         uint256 postResolutionWindow,
         address truthKeeper
     ) external payable returns (uint256 tocId);
+
+    /// @notice Transfer TOC creator to a new address
+    /// @dev Only callable by current creator while TOC is ACTIVE
+    /// @param tocId The TOC identifier
+    /// @param newCreator The new creator address
+    function transferCreator(uint256 tocId, address newCreator) external;
 
     /// @notice Propose resolution for a TOC (requires bond)
     /// @param tocId The TOC to resolve
