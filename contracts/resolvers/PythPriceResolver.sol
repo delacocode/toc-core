@@ -337,18 +337,22 @@ contract PythPriceResolver is ITOCResolver {
         // Parse multiple price updates to check historical prices
         bytes[] memory updateDataArray = abi.decode(pythUpdateData, (bytes[]));
 
-        // Update Pyth with all price data
+        // Prepare price ID array
+        bytes32[] memory priceIds = new bytes32[](1);
+        priceIds[0] = data.priceId;
+
+        // Parse prices from update data - allow any time from start to deadline
         uint256 fee = pyth.getUpdateFee(updateDataArray);
-        pyth.updatePriceFeeds{value: fee}(updateDataArray);
+        PythStructs.PriceFeed[] memory priceFeeds = pyth.parsePriceFeedUpdates{value: fee}(
+            updateDataArray,
+            priceIds,
+            0, // minPublishTime: any time
+            uint64(data.deadline) // maxPublishTime: up to deadline
+        );
 
-        // Check each update to see if target was reached
-        for (uint256 i = 0; i < updateDataArray.length; i++) {
-            PythStructs.Price memory priceData = pyth.getPriceNoOlderThan(
-                data.priceId,
-                uint256(data.deadline - block.timestamp + 3600) // Allow some age tolerance
-            );
-
-            int64 price = priceData.price;
+        // Check each price update to see if target was reached
+        for (uint256 i = 0; i < priceFeeds.length; i++) {
+            int64 price = priceFeeds[i].price.price;
 
             if (data.isAbove && price >= data.targetPrice) {
                 data.reached = true;
@@ -377,19 +381,33 @@ contract PythPriceResolver is ITOCResolver {
         // Decode as array of update data
         bytes[] memory updateDataArray = abi.decode(pythUpdateData, (bytes[]));
 
-        // Update Pyth prices
-        uint256 fee = pyth.getUpdateFee(updateDataArray);
-        pyth.updatePriceFeeds{value: fee}(updateDataArray);
+        // Calculate timestamp bounds (1 hour tolerance around deadline)
+        uint64 minPublishTime = deadline > 3600 ? uint64(deadline - 3600) : 0;
+        uint64 maxPublishTime = uint64(deadline + 3600);
 
-        // Get price - must be close to deadline time
-        PythStructs.Price memory priceData = pyth.getPriceNoOlderThan(
-            priceId,
-            3600 // 1 hour tolerance
+        // Prepare price ID array
+        bytes32[] memory priceIds = new bytes32[](1);
+        priceIds[0] = priceId;
+
+        // Parse price from update data without updating on-chain state
+        // This works with historical prices and validates timestamp bounds
+        uint256 fee = pyth.getUpdateFee(updateDataArray);
+        PythStructs.PriceFeed[] memory priceFeeds = pyth.parsePriceFeedUpdates{value: fee}(
+            updateDataArray,
+            priceIds,
+            minPublishTime,
+            maxPublishTime
         );
 
-        // Verify price is from around deadline time (within 1 hour)
-        if (priceData.publishTime < deadline - 3600 || priceData.publishTime > deadline + 3600) {
-            revert PriceDataTooOld(priceData.publishTime, deadline);
+        if (priceFeeds.length == 0) {
+            revert InvalidPriceData();
+        }
+
+        PythStructs.Price memory priceData = priceFeeds[0].price;
+
+        // Validate price is positive
+        if (priceData.price <= 0) {
+            revert InvalidPriceData();
         }
 
         return priceData.price;
