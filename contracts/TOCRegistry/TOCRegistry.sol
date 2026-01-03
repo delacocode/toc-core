@@ -357,6 +357,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         // Store TOC with user-specified dispute windows
         // Note: We inline some calls to avoid stack too deep
         TOC storage toc = _tocs[tocId];
+        toc.creator = msg.sender;
         toc.resolver = resolver;
         toc.answerType = ITOCResolver(resolver).getTemplateAnswerType(templateId);
         toc.disputeWindow = disputeWindow;
@@ -893,6 +894,7 @@ contract TOCRegistry is ITOCRegistry, ReentrancyGuard, Ownable {
         TOC storage toc = _tocs[tocId];
 
         info = TOCInfo({
+            creator: toc.creator,
             resolver: toc.resolver,
             state: toc.state,
             answerType: toc.answerType,

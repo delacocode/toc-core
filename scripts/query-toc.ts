@@ -227,7 +227,8 @@ async function main() {
     }
 
     // Addresses
-    console.log(`📍 Contracts:`);
+    console.log(`📍 Addresses:`);
+    console.log(`   Creator:       ${toc.creator}`);
     console.log(`   Resolver:      ${toc.resolver}`);
     console.log(`   TruthKeeper:   ${toc.truthKeeper}\n`);
 

@@ -65,6 +65,7 @@ enum TKApprovalResponse {
 
 /// @notice Core TOC data stored in registry
 struct TOC {
+    address creator;                // Who created this TOC
     address resolver;               // Which resolver manages this TOC
     TOCState state;                 // Current state
     AnswerType answerType;          // Type of answer this TOC will return
@@ -147,6 +148,7 @@ struct ResolverConfig {
 /// @notice Extended TOC info with resolver context
 struct TOCInfo {
     // TOC fields
+    address creator;
     address resolver;
     TOCState state;
     AnswerType answerType;
