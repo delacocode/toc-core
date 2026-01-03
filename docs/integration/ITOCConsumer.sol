@@ -171,6 +171,25 @@ interface ITOCRegistry {
     /// @return The next TOC ID
     function nextTocId() external view returns (uint256);
 
+    // ============ TOC Resolution ============
+
+    /// @notice Propose resolution for a TOC (requires bond)
+    /// @param tocId The TOC to resolve
+    /// @param bondToken Token to use for bond (address(0) for ETH)
+    /// @param bondAmount Amount of bond to post
+    /// @param payload Resolver-specific resolution data
+    function resolveTOC(
+        uint256 tocId,
+        address bondToken,
+        uint256 bondAmount,
+        bytes calldata payload
+    ) external payable;
+
+    /// @notice Finalize a TOC after dispute window expires (OptimisticResolver only)
+    /// @param tocId The TOC to finalize
+    /// @dev Anyone can call this once the dispute window has passed
+    function finalizeTOC(uint256 tocId) external;
+
     // ============ Fee Information ============
 
     /// @notice Get the total creation fee for a TOC
@@ -225,4 +244,36 @@ struct EventPayload {
 struct AnswerPayload {
     bool answer;
     string justification;
+}
+
+// ============ PythPriceResolver Payloads ============
+// These show how to encode payloads for PythPriceResolver templates.
+// Note: Pyth uses packed encoding, not struct encoding.
+// Use abi.encode(priceId, threshold, isAbove, deadline) directly.
+
+/// @notice Payload for Pyth Template 0: Snapshot (Above/Below)
+/// @dev Encoded as: abi.encode(priceId, threshold, isAbove, deadline)
+struct PythSnapshotPayload {
+    bytes32 priceId;    // Pyth price feed ID
+    int64 threshold;    // Price threshold (8 decimals, e.g., 100000e8 = $100,000)
+    bool isAbove;       // true = above, false = below
+    uint256 deadline;   // When to check the price
+}
+
+/// @notice Payload for Pyth Template 1: Range
+/// @dev Encoded as: abi.encode(priceId, lowerBound, upperBound, deadline)
+struct PythRangePayload {
+    bytes32 priceId;    // Pyth price feed ID
+    int64 lowerBound;   // Lower price bound (8 decimals)
+    int64 upperBound;   // Upper price bound (8 decimals)
+    uint256 deadline;   // When to check the price
+}
+
+/// @notice Payload for Pyth Template 2: Reached By
+/// @dev Encoded as: abi.encode(priceId, targetPrice, isAbove, deadline)
+struct PythReachedByPayload {
+    bytes32 priceId;    // Pyth price feed ID
+    int64 targetPrice;  // Target price (8 decimals)
+    bool isAbove;       // true = must go above, false = must go below
+    uint256 deadline;   // Must reach target before this time
 }

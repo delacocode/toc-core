@@ -850,11 +850,140 @@ await registry.resolveTOC(tocId, ETH_ADDRESS, bondAmount,
 );
 ```
 
+### Demo: Pyth Price Market Contract
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./ITOCConsumer.sol";
+
+/// @title PythPriceMarketExample
+/// @notice Prediction market for price outcomes using Pyth resolver
+contract PythPriceMarketExample {
+    ITOCRegistry public immutable registry;
+    address public immutable pythResolver;
+    address public immutable truthKeeper;
+
+    // Pyth price IDs (same across all networks)
+    bytes32 public constant BTC_USD = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43;
+    bytes32 public constant ETH_USD = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace;
+
+    struct PriceMarket {
+        uint256 tocId;
+        bytes32 priceId;
+        int64 threshold;
+        bool isAbove;
+        uint256 deadline;
+        bool settled;
+        bool outcome;
+    }
+
+    mapping(uint256 => PriceMarket) public markets;
+    uint256 public nextMarketId;
+
+    event PriceMarketCreated(uint256 indexed marketId, uint256 indexed tocId, bytes32 priceId, int64 threshold);
+    event PriceMarketSettled(uint256 indexed marketId, bool outcome);
+
+    constructor(address _registry, address _pythResolver, address _truthKeeper) {
+        registry = ITOCRegistry(_registry);
+        pythResolver = _pythResolver;
+        truthKeeper = _truthKeeper;
+    }
+
+    /// @notice Create a price prediction market
+    /// @param priceId Pyth price feed ID
+    /// @param threshold Price threshold (8 decimals, e.g., 100000e8 = $100,000)
+    /// @param isAbove True if betting price goes above threshold
+    /// @param deadline Unix timestamp when to check the price
+    function createPriceMarket(
+        bytes32 priceId,
+        int64 threshold,
+        bool isAbove,
+        uint256 deadline
+    ) external payable returns (uint256 marketId) {
+        require(deadline > block.timestamp, "Deadline must be in future");
+
+        // Encode Pyth snapshot payload
+        bytes memory payload = abi.encode(priceId, threshold, isAbove, deadline);
+
+        (, , uint256 fee) = registry.getCreationFee(pythResolver, 0);
+        require(msg.value >= fee, "Insufficient fee");
+
+        // Create TOC - goes directly to ACTIVE for Pyth
+        uint256 tocId = registry.createTOC{value: fee}(
+            pythResolver,
+            0,  // TEMPLATE_SNAPSHOT
+            payload,
+            5 minutes,
+            5 minutes,
+            5 minutes,
+            0,
+            truthKeeper
+        );
+
+        marketId = nextMarketId++;
+        markets[marketId] = PriceMarket({
+            tocId: tocId,
+            priceId: priceId,
+            threshold: threshold,
+            isAbove: isAbove,
+            deadline: deadline,
+            settled: false,
+            outcome: false
+        });
+
+        emit PriceMarketCreated(marketId, tocId, priceId, threshold);
+    }
+
+    /// @notice Resolve a market with Pyth price data (anyone can call after deadline)
+    /// @param marketId The market to resolve
+    /// @param priceUpdateData Price update from Pyth Hermes API
+    function resolveMarket(uint256 marketId, bytes[] calldata priceUpdateData) external payable {
+        PriceMarket storage market = markets[marketId];
+        require(!market.settled, "Already settled");
+        require(block.timestamp >= market.deadline, "Deadline not reached");
+
+        // Encode price data for resolver
+        bytes memory resolverPayload = abi.encode(priceUpdateData);
+
+        // Minimal bond for Pyth resolution
+        uint256 bondAmount = 0.001 ether;
+
+        registry.resolveTOC{value: bondAmount}(
+            market.tocId,
+            address(0),
+            bondAmount,
+            resolverPayload
+        );
+    }
+
+    /// @notice Settle a market after resolution
+    function settleMarket(uint256 marketId) external {
+        PriceMarket storage market = markets[marketId];
+        require(!market.settled, "Already settled");
+
+        TOC memory toc = registry.getTOC(market.tocId);
+        require(toc.state == TOCState.RESOLVED, "Not resolved");
+
+        ExtensiveResult memory res = registry.getExtensiveResult(market.tocId);
+        market.outcome = TOCResultCodec.decodeBoolean(res.result);
+        market.settled = true;
+
+        emit PriceMarketSettled(marketId, market.outcome);
+
+        // TODO: Distribute winnings based on outcome
+    }
+}
+```
+
 ---
 
 ## Next Steps
 
-1. **Copy `ITOCConsumer.sol`** to your project
+1. **Copy integration files** to your project:
+   - `ITOCConsumer.sol` - Solidity interface and types
+   - `exports/toc-types.ts` - TypeScript types, ABIs, and utilities
 2. **Get deployed addresses** from `exports/toc-addresses.json`:
    ```json
    {

@@ -134,7 +134,10 @@ async function main() {
 
   console.log(`📄 Exported to: ${exportPath}`);
   console.log(`   Networks: ${networksFound}`);
-  console.log(`\n💡 Copy this file to your consumer project (e.g., coco)`);
+  console.log(`\n💡 Copy these files to your consumer project:`);
+  console.log(`   - exports/toc-addresses.json  (deployed addresses)`);
+  console.log(`   - exports/toc-types.ts        (TypeScript types & ABIs)`);
+  console.log(`   - docs/integration/ITOCConsumer.sol (Solidity interface)`);
 }
 
 main().catch(console.error);
