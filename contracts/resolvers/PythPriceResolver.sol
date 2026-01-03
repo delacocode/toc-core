@@ -22,6 +22,9 @@ contract PythPriceResolver is ITOCResolver {
     uint32 public constant TEMPLATE_REACHED_BY = 2;
     uint32 public constant TEMPLATE_COUNT = 3;
 
+    /// @notice Maximum allowed time difference between price publish time and deadline
+    uint256 public constant PRICE_TOLERANCE_SECONDS = 5;
+
     // ============ Immutables ============
 
     IPyth public immutable pyth;
@@ -381,9 +384,11 @@ contract PythPriceResolver is ITOCResolver {
         // Decode as array of update data
         bytes[] memory updateDataArray = abi.decode(pythUpdateData, (bytes[]));
 
-        // Calculate timestamp bounds (1 hour tolerance around deadline)
-        uint64 minPublishTime = deadline > 3600 ? uint64(deadline - 3600) : 0;
-        uint64 maxPublishTime = uint64(deadline + 3600);
+        // Calculate timestamp bounds (tight tolerance around deadline)
+        uint64 minPublishTime = deadline > PRICE_TOLERANCE_SECONDS
+            ? uint64(deadline - PRICE_TOLERANCE_SECONDS)
+            : 0;
+        uint64 maxPublishTime = uint64(deadline + PRICE_TOLERANCE_SECONDS);
 
         // Prepare price ID array
         bytes32[] memory priceIds = new bytes32[](1);
