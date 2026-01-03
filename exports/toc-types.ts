@@ -243,8 +243,8 @@ export function isPending(state: TOCState): boolean {
 
 // ============ ABI Fragments ============
 
-/** Minimal ABI for ITOCRegistry consumer functions */
-export const TOC_REGISTRY_ABI = [
+/** Minimal ABI for ITruthEngine consumer functions */
+export const TRUTH_ENGINE_ABI = [
   {
     name: "createTOC",
     type: "function",

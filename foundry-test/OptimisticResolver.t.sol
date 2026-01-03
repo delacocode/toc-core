@@ -2,8 +2,8 @@
 pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
-import "contracts/TOCRegistry/TOCRegistry.sol";
-import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/TruthEngine/TruthEngine.sol";
+import "contracts/TruthEngine/TOCTypes.sol";
 import "contracts/resolvers/OptimisticResolver.sol";
 import "contracts/resolvers/IClarifiable.sol";
 import "contracts/libraries/TOCResultCodec.sol";
@@ -12,7 +12,7 @@ import "./MockTruthKeeper.sol";
 /// @title OptimisticResolverTest
 /// @notice Tests for OptimisticResolver contract
 contract OptimisticResolverTest is Test {
-    TOCRegistry registry;
+    TruthEngine registry;
     OptimisticResolver resolver;
     MockTruthKeeper truthKeeperContract;
 
@@ -41,7 +41,7 @@ contract OptimisticResolverTest is Test {
         vm.deal(creator, 10 ether);
 
         // Deploy registry
-        registry = new TOCRegistry();
+        registry = new TruthEngine();
 
         // Deploy optimistic resolver
         resolver = new OptimisticResolver(address(registry));

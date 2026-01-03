@@ -8,7 +8,7 @@ This guide explains how to integrate TOC (Truth On Chain) into your prediction m
 import "./ITOCConsumer.sol";
 
 contract MyMarket {
-    ITOCRegistry public registry;
+    ITruthEngine public registry;
 
     // 1. Create a TOC when opening a market
     function openMarket(bytes calldata payload) external payable returns (uint256 tocId) {
@@ -465,7 +465,7 @@ When a TOC is created, the TruthKeeper returns one of:
 ```solidity
 // Deploy SimpleTruthKeeper
 SimpleTruthKeeper tk = new SimpleTruthKeeper(
-    registryAddress,    // TOCRegistry address
+    registryAddress,    // TruthEngine address
     ownerAddress,       // Who can configure
     1 hours,            // Default min dispute window
     4 hours             // Default min TK window
@@ -530,7 +530,7 @@ import "./ITOCConsumer.sol";
 /// @notice Minimal prediction market using TOC for resolution
 /// @dev Starter template - extend with positions, liquidity, etc.
 contract PredictionMarketExample {
-    ITOCRegistry public immutable registry;
+    ITruthEngine public immutable registry;
     address public immutable resolver;
     address public immutable truthKeeper;
 
@@ -551,7 +551,7 @@ contract PredictionMarketExample {
     error MarketCancelled(uint256 marketId);
 
     constructor(address _registry, address _resolver, address _truthKeeper) {
-        registry = ITOCRegistry(_registry);
+        registry = ITruthEngine(_registry);
         resolver = _resolver;
         truthKeeper = _truthKeeper;
     }
@@ -763,7 +763,7 @@ createTOC() → ACTIVE → [deadline passes] → resolveTOC() → RESOLVED
 
 ```solidity
 contract PythMarket {
-    ITOCRegistry public registry;
+    ITruthEngine public registry;
     address public pythResolver;
     address public truthKeeper;
 
@@ -861,7 +861,7 @@ import "./ITOCConsumer.sol";
 /// @title PythPriceMarketExample
 /// @notice Prediction market for price outcomes using Pyth resolver
 contract PythPriceMarketExample {
-    ITOCRegistry public immutable registry;
+    ITruthEngine public immutable registry;
     address public immutable pythResolver;
     address public immutable truthKeeper;
 
@@ -886,7 +886,7 @@ contract PythPriceMarketExample {
     event PriceMarketSettled(uint256 indexed marketId, bool outcome);
 
     constructor(address _registry, address _pythResolver, address _truthKeeper) {
-        registry = ITOCRegistry(_registry);
+        registry = ITruthEngine(_registry);
         pythResolver = _pythResolver;
         truthKeeper = _truthKeeper;
     }

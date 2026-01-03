@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import {ITruthKeeper} from "./TOCRegistry/ITruthKeeper.sol";
-import {TKApprovalResponse} from "./TOCRegistry/TOCTypes.sol";
+import {ITruthKeeper} from "./TruthEngine/ITruthKeeper.sol";
+import {TKApprovalResponse} from "./TruthEngine/TOCTypes.sol";
 
 /// @title SimpleTruthKeeper
 /// @notice Minimal TruthKeeper for initial launch with resolver allowlist and time window validation

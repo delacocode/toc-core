@@ -67,12 +67,12 @@ async function main() {
 
   const deployedAddresses = JSON.parse(fs.readFileSync(deploymentPath, "utf-8"));
 
-  console.log(`\nConfiguring TOCRegistry on ${network}...`);
+  console.log(`\nConfiguring TruthEngine on ${network}...`);
   console.log(`Using deployed addresses from: ${deploymentPath}\n`);
 
   const registry = await hre.viem.getContractAt(
-    "TOCRegistry",
-    deployedAddresses["TOCRegistry#TOCRegistry"]
+    "TruthEngine",
+    deployedAddresses["TruthEngine#TruthEngine"]
   );
 
   // 1. Set treasury
@@ -134,7 +134,7 @@ async function main() {
 
   console.log("\nConfiguration complete!");
   console.log("\nDeployed addresses:");
-  console.log(`  TOCRegistry: ${deployedAddresses["TOCRegistry#TOCRegistry"]}`);
+  console.log(`  TruthEngine: ${deployedAddresses["TruthEngine#TruthEngine"]}`);
   console.log(`  OptimisticResolver: ${optAddr}`);
   console.log(`  PythPriceResolver: ${pythAddr}`);
   console.log(`  SimpleTruthKeeper: ${tkAddr}`);

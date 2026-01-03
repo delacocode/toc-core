@@ -103,10 +103,10 @@ library TOCResultCodec {
 
 // ============ Registry Interface ============
 
-/// @title ITOCRegistry
+/// @title ITruthEngine
 /// @notice Consumer-focused interface for TOC Registry
 /// @dev Subset of full interface - includes only functions needed by consumers
-interface ITOCRegistry {
+interface ITruthEngine {
     // ============ TOC Creation ============
 
     /// @notice Create a new TOC

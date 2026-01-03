@@ -24,7 +24,7 @@ The TOC (Truth On Chain) system is a modular "Truth on Chain" infrastructure for
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      TOCRegistry                             │
+│                      TruthEngine                             │
 │  - Manages TOC lifecycle                                     │
 │  - Routes to resolvers                                       │
 │  - Handles disputes                                          │
@@ -44,7 +44,7 @@ The TOC (Truth On Chain) system is a modular "Truth on Chain" infrastructure for
 
 ## Core Contracts
 
-### 1. TOCRegistry.sol
+### 1. TruthEngine.sol
 
 The central contract managing all TOCs. Responsibilities:
 
@@ -147,7 +147,7 @@ interface ITOCResolver {
 }
 ```
 
-### 4. ITOCRegistry.sol
+### 4. ITruthEngine.sol
 
 Registry interface for external interactions. See full interface in the contract file.
 
@@ -446,7 +446,7 @@ registry.resolveTOC{value: pythFee}(
 
 ```solidity
 contract MyResolver is ITOCResolver {
-    ITOCRegistry public immutable registry;
+    ITruthEngine public immutable registry;
 
     // Template definitions
     uint32 public constant TEMPLATE_MY_QUESTION = 0;
@@ -501,7 +501,7 @@ contract MyResolver is ITOCResolver {
 }
 ```
 
-### Step 2: Register with TOCRegistry
+### Step 2: Register with TruthEngine
 
 ```solidity
 // Admin registers the resolver
@@ -602,11 +602,11 @@ event BondSlashed(uint256 tocId, address from, address token, uint256 amount);
 
 ```
 contracts/
-├── TOCRegistry/
+├── TruthEngine/
 │   ├── TOCTypes.sol          # Shared type definitions
 │   ├── ITOCResolver.sol      # Resolver interface
-│   ├── ITOCRegistry.sol      # Registry interface
-│   └── TOCRegistry.sol       # Main registry implementation
+│   ├── ITruthEngine.sol      # Registry interface
+│   └── TruthEngine.sol       # Main registry implementation
 ├── resolvers/
 │   └── PythPriceResolver.sol # Example resolver
 └── mocks/
@@ -634,7 +634,7 @@ When setting up the new repo:
    - Test each answer type
 
 4. **Deployment**
-   - Deploy TOCRegistry first
+   - Deploy TruthEngine first
    - Deploy resolvers with registry address
    - Register resolvers
    - Configure acceptable bonds

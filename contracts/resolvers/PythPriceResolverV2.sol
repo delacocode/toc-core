@@ -3,9 +3,9 @@ pragma solidity ^0.8.29;
 
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import "../TOCRegistry/ITOCResolver.sol";
-import "../TOCRegistry/ITOCRegistry.sol";
-import "../TOCRegistry/TOCTypes.sol";
+import "../TruthEngine/ITOCResolver.sol";
+import "../TruthEngine/ITruthEngine.sol";
+import "../TruthEngine/TOCTypes.sol";
 import "../libraries/TOCResultCodec.sol";
 
 /// @title PythPriceResolverV2
@@ -44,7 +44,7 @@ contract PythPriceResolverV2 is ITOCResolver {
     // ============ Immutables ============
 
     IPyth public immutable pyth;
-    ITOCRegistry public immutable registry;
+    ITruthEngine public immutable registry;
 
     // ============ Storage ============
 
@@ -361,7 +361,7 @@ contract PythPriceResolverV2 is ITOCResolver {
 
     constructor(address _pyth, address _registry) {
         pyth = IPyth(_pyth);
-        registry = ITOCRegistry(_registry);
+        registry = ITruthEngine(_registry);
         owner = msg.sender;
     }
 

@@ -88,7 +88,7 @@ Every TOC has an immutable accountability tier captured at creation:
                               │ getResult() / getExtensiveResult()
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                        TOCRegistry                           │
+│                        TruthEngine                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │   Resolver  │  │     TOC     │  │      Dispute        │  │
 │  │  Management │  │  Lifecycle  │  │     Resolution      │  │

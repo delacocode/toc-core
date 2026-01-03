@@ -3,10 +3,10 @@ pragma solidity ^0.8.29;
 
 import "./TOCTypes.sol";
 
-/// @title ITOCRegistry
-/// @notice Interface for the TOC Registry contract
+/// @title ITruthEngine
+/// @notice Interface for the TruthEngine contract
 /// @dev Central contract managing TOC lifecycle, resolvers, and disputes
-interface ITOCRegistry {
+interface ITruthEngine {
     // ============ Events ============
 
     // Resolver management

@@ -8,10 +8,10 @@ async function main() {
   const mockPyth = await hre.viem.deployContract("MockPythOracle");
   console.log(`   MockPythOracle deployed at: ${mockPyth.address}\n`);
 
-  // 2. Deploy TOCRegistry
-  console.log("2. Deploying TOCRegistry...");
-  const registry = await hre.viem.deployContract("TOCRegistry");
-  console.log(`   TOCRegistry deployed at: ${registry.address}\n`);
+  // 2. Deploy TruthEngine
+  console.log("2. Deploying TruthEngine...");
+  const registry = await hre.viem.deployContract("TruthEngine");
+  console.log(`   TruthEngine deployed at: ${registry.address}\n`);
 
   // 3. Deploy OptimisticResolver
   console.log("3. Deploying OptimisticResolver...");
@@ -44,7 +44,7 @@ async function main() {
   console.log("=".repeat(50));
   console.log("\nDeployed Addresses:");
   console.log(`  MockPythOracle:      ${mockPyth.address}`);
-  console.log(`  TOCRegistry:         ${registry.address}`);
+  console.log(`  TruthEngine:         ${registry.address}`);
   console.log(`  OptimisticResolver:  ${optimisticResolver.address}`);
   console.log(`  PythPriceResolver:   ${pythResolver.address}`);
   console.log(`  SimpleTruthKeeper:   ${truthKeeper.address}`);

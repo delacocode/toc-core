@@ -2,15 +2,15 @@
 pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
-import "contracts/TOCRegistry/TOCRegistry.sol";
-import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/TruthEngine/TruthEngine.sol";
+import "contracts/TruthEngine/TOCTypes.sol";
 import "contracts/libraries/TOCResultCodec.sol";
 
 /// @title TestHelpers
 /// @notice Reusable test helpers that combine action execution with full effect verification
 /// @dev Each helper captures state before, expects events, executes action, and asserts all state changes
 abstract contract TestHelpers is Test {
-    // ============ Events (must match ITOCRegistry) ============
+    // ============ Events (must match ITruthEngine) ============
 
     event TOCCreated(
         uint256 indexed tocId,
@@ -146,7 +146,7 @@ abstract contract TestHelpers is Test {
     /// @param tier The accountability tier
     /// @return split The calculated fee split
     function _calculateFeeSplit(
-        TOCRegistry registry,
+        TruthEngine registry,
         uint256 totalFee,
         AccountabilityTier tier
     ) internal view returns (FeeSplit memory split) {
@@ -168,7 +168,7 @@ abstract contract TestHelpers is Test {
     /// @notice Create a TOC and verify all effects including events
     /// @dev Captures state before, expects events, executes, and asserts state after
     function _createTocAndVerify(
-        TOCRegistry registry,
+        TruthEngine registry,
         CreateTOCParams memory params,
         CreateTOCExpected memory expected
     ) internal returns (uint256 tocId) {
@@ -255,7 +255,7 @@ abstract contract TestHelpers is Test {
 
     /// @notice Resolve a TOC and verify all effects including events
     function _resolveTocAndVerify(
-        TOCRegistry registry,
+        TruthEngine registry,
         ResolveTOCParams memory params,
         ResolveTOCExpected memory expected
     ) internal {
@@ -339,7 +339,7 @@ abstract contract TestHelpers is Test {
 
     /// @notice Dispute a TOC and verify all effects including events
     function _disputeAndVerify(
-        TOCRegistry registry,
+        TruthEngine registry,
         DisputeParams memory params,
         DisputeExpected memory expected
     ) internal {
@@ -398,7 +398,7 @@ abstract contract TestHelpers is Test {
 
     /// @notice Finalize a TOC and verify all effects including events
     function _finalizeAndVerify(
-        TOCRegistry registry,
+        TruthEngine registry,
         uint256 tocId,
         bytes memory expectedResult
     ) internal {
@@ -458,7 +458,7 @@ abstract contract TestHelpers is Test {
 
     /// @notice Resolve a dispute and verify all effects
     function _resolveDisputeAndVerify(
-        TOCRegistry registry,
+        TruthEngine registry,
         uint256 tocId,
         DisputeResolution resolution,
         bytes memory correctedResult,

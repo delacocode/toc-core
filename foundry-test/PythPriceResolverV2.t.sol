@@ -2,8 +2,8 @@
 pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
-import "contracts/TOCRegistry/TOCRegistry.sol";
-import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/TruthEngine/TruthEngine.sol";
+import "contracts/TruthEngine/TOCTypes.sol";
 import "contracts/resolvers/PythPriceResolverV2.sol";
 import "contracts/libraries/TOCResultCodec.sol";
 import {MockPyth} from "@pythnetwork/pyth-sdk-solidity/MockPyth.sol";
@@ -13,7 +13,7 @@ import "./MockTruthKeeper.sol";
 /// @title PythPriceResolverV2Test
 /// @notice Tests for PythPriceResolverV2 contract
 contract PythPriceResolverV2Test is Test {
-    TOCRegistry registry;
+    TruthEngine registry;
     PythPriceResolverV2 resolver;
     MockPyth mockPyth;
     MockTruthKeeper truthKeeperContract;
@@ -38,7 +38,7 @@ contract PythPriceResolverV2Test is Test {
         mockPyth = new MockPyth(3600, PYTH_FEE);
 
         // Deploy registry
-        registry = new TOCRegistry();
+        registry = new TruthEngine();
 
         // Deploy resolver
         resolver = new PythPriceResolverV2(address(mockPyth), address(registry));

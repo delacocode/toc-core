@@ -24,7 +24,7 @@ Every answer in TOC carries:
                               │ getResult() / getExtensiveResult()
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                        TOCRegistry                           │
+│                        TruthEngine                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │   Resolver  │  │     TOC     │  │      Dispute        │  │
 │  │  Management │  │  Lifecycle  │  │     Resolution      │  │

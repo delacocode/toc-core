@@ -109,7 +109,7 @@ export function loadDeployedAddresses(chainId: number): DeployedAddresses {
   }
   const deployed = JSON.parse(fs.readFileSync(deployedPath, "utf-8"));
   return {
-    registry: deployed["TOCRegistry#TOCRegistry"] as `0x${string}`,
+    registry: deployed["TruthEngine#TruthEngine"] as `0x${string}`,
     optimisticResolver: deployed["OptimisticResolver#OptimisticResolver"] as `0x${string}`,
     pythResolver: deployed["PythPriceResolver#PythPriceResolver"] as `0x${string}`,
     truthKeeper: deployed["SimpleTruthKeeper#SimpleTruthKeeper"] as `0x${string}`,

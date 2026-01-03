@@ -28,7 +28,7 @@ const NETWORKS: Record<string, { chainId: number; name: string }> = {
 
 // Contract name mappings (Ignition format -> export format)
 const CONTRACT_MAPPINGS: Record<string, string> = {
-  "TOCRegistry#TOCRegistry": "registry",
+  "TruthEngine#TruthEngine": "registry",
   "OptimisticResolver#OptimisticResolver": "optimisticResolver",
   "PythPriceResolver#PythPriceResolver": "pythResolver",
   "SimpleTruthKeeper#SimpleTruthKeeper": "truthKeeper",

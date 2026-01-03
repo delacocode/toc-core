@@ -3,7 +3,7 @@ pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
 import "contracts/SimpleTruthKeeper.sol";
-import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/TruthEngine/TOCTypes.sol";
 
 contract SimpleTruthKeeperTest is Test {
     SimpleTruthKeeper public tk;

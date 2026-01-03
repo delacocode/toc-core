@@ -2,18 +2,18 @@
 pragma solidity ^0.8.29;
 
 import "./TestHelpers.sol";
-import "contracts/TOCRegistry/TOCRegistry.sol";
-import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/TruthEngine/TruthEngine.sol";
+import "contracts/TruthEngine/TOCTypes.sol";
 import "./MockResolver.sol";
 import "./MockERC20.sol";
 import "./MockTruthKeeper.sol";
 import "contracts/libraries/TOCResultCodec.sol";
 
-/// @title TOCRegistryWithHelpersTest
+/// @title TruthEngineWithHelpersTest
 /// @notice Demonstrates usage of TestHelpers for comprehensive test verification
 /// @dev Each test uses helpers that verify all effects: state changes, events, and internal calls
-contract TOCRegistryWithHelpersTest is TestHelpers {
-    TOCRegistry registry;
+contract TruthEngineWithHelpersTest is TestHelpers {
+    TruthEngine registry;
     MockResolver resolver;
     MockERC20 bondToken;
     MockTruthKeeper truthKeeperContract;
@@ -43,7 +43,7 @@ contract TOCRegistryWithHelpersTest is TestHelpers {
         disputer = address(0x3);
 
         // Deploy registry
-        registry = new TOCRegistry();
+        registry = new TruthEngine();
 
         // Deploy mock resolver with registry address
         resolver = new MockResolver(address(registry));

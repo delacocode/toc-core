@@ -3,9 +3,9 @@ pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
-import "contracts/TOCRegistry/TOCRegistry.sol";
-import "contracts/TOCRegistry/TOCTypes.sol";
-import "contracts/TOCRegistry/ITOCRegistry.sol";
+import "contracts/TruthEngine/TruthEngine.sol";
+import "contracts/TruthEngine/TOCTypes.sol";
+import "contracts/TruthEngine/ITruthEngine.sol";
 import "contracts/resolvers/PythPriceResolverV2.sol";
 import "contracts/resolvers/OptimisticResolver.sol";
 import "contracts/libraries/TOCResultCodec.sol";
@@ -18,7 +18,7 @@ import "./MockTruthKeeper.sol";
 /// @dev Tests the complete integration of Registry, Resolvers, TruthKeeper, and dispute flows
 contract E2ETest is Test {
     // ============ Contracts ============
-    TOCRegistry public registry;
+    TruthEngine public registry;
     MockPyth public mockPyth;
     PythPriceResolverV2 public pythResolver;
     OptimisticResolver public optimisticResolver;
@@ -63,8 +63,8 @@ contract E2ETest is Test {
         vm.deal(resolver2, 100 ether);
         vm.deal(disputer, 100 ether);
 
-        // 1. Deploy TOCRegistry
-        registry = new TOCRegistry();
+        // 1. Deploy TruthEngine
+        registry = new TruthEngine();
 
         // 2. Deploy MockPyth (validTimePeriod=3600, updateFee=1wei)
         mockPyth = new MockPyth(3600, PYTH_FEE);

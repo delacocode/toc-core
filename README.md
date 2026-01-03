@@ -28,7 +28,7 @@ Consumers don't guess at trust - they see it explicitly and choose accordingly.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        TOCRegistry                           │
+│                        TruthEngine                           │
 │  - TOC lifecycle management (create, resolve, dispute)       │
 │  - Bond handling and slashing                                │
 │  - Fee collection and distribution                           │
@@ -60,7 +60,7 @@ Consumers don't guess at trust - they see it explicitly and choose accordingly.
 
 | Contract | Description |
 |----------|-------------|
-| `TOCRegistry.sol` | Central registry managing TOC lifecycle, disputes, and results |
+| `TruthEngine.sol` | Central registry managing TOC lifecycle, disputes, and results |
 | `SimpleTruthKeeper.sol` | Production TruthKeeper with resolver allowlist and time validation |
 
 ### Resolvers
@@ -74,7 +74,7 @@ Consumers don't guess at trust - they see it explicitly and choose accordingly.
 
 | Contract | Description |
 |----------|-------------|
-| `ITOCRegistry.sol` | Registry interface for consumers |
+| `ITruthEngine.sol` | Registry interface for consumers |
 | `ITOCResolver.sol` | Interface for resolver implementations |
 | `ITruthKeeper.sol` | Interface for TruthKeeper implementations |
 
@@ -105,10 +105,10 @@ npx hardhat test --verbose
 ## Quick Start
 
 ```solidity
-import "./ITOCRegistry.sol";
+import "./ITruthEngine.sol";
 
 contract MyMarket {
-    ITOCRegistry public registry;
+    ITruthEngine public registry;
 
     function createMarket(bytes calldata payload) external payable returns (uint256 tocId) {
         (, , uint256 fee) = registry.getCreationFee(resolver, templateId);

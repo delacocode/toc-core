@@ -1,8 +1,8 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-import TOCRegistryModule from "./TOCRegistry";
+import TruthEngineModule from "./TruthEngine";
 
 const OptimisticResolverModule = buildModule("OptimisticResolver", (m) => {
-  const { registry } = m.useModule(TOCRegistryModule);
+  const { registry } = m.useModule(TruthEngineModule);
   const resolver = m.contract("OptimisticResolver", [registry]);
   return { resolver };
 });

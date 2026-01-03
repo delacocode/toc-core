@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import {ITruthKeeper} from "../TOCRegistry/ITruthKeeper.sol";
-import {TKApprovalResponse} from "../TOCRegistry/TOCTypes.sol";
+import {ITruthKeeper} from "../TruthEngine/ITruthKeeper.sol";
+import {TKApprovalResponse} from "../TruthEngine/TOCTypes.sol";
 
 /// @title MockTruthKeeper
 /// @notice Simple mock TruthKeeper for testing - always approves TOCs

@@ -2,17 +2,17 @@
 pragma solidity ^0.8.29;
 
 import "forge-std/Test.sol";
-import "contracts/TOCRegistry/TOCRegistry.sol";
-import "contracts/TOCRegistry/TOCTypes.sol";
+import "contracts/TruthEngine/TruthEngine.sol";
+import "contracts/TruthEngine/TOCTypes.sol";
 import "./MockResolver.sol";
 import "./MockERC20.sol";
 import "./MockTruthKeeper.sol";
 import "contracts/libraries/TOCResultCodec.sol";
 
-/// @title TOCRegistryTest
-/// @notice Comprehensive tests for TOCRegistry contract
-contract TOCRegistryTest is Test {
-    TOCRegistry registry;
+/// @title TruthEngineTest
+/// @notice Comprehensive tests for TruthEngine contract
+contract TruthEngineTest is Test {
+    TruthEngine registry;
     MockResolver resolver;
     MockERC20 bondToken;
     MockTruthKeeper truthKeeperContract;
@@ -41,7 +41,7 @@ contract TOCRegistryTest is Test {
         disputer = address(0x3);
 
         // Deploy registry
-        registry = new TOCRegistry();
+        registry = new TruthEngine();
 
         // Deploy mock resolver with registry address
         resolver = new MockResolver(address(registry));

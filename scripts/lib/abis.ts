@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const ARTIFACTS_DIR = path.join(__dirname, "../../artifacts/contracts");
 
 const ARTIFACT_PATHS = {
-  TOCRegistry: "TOCRegistry/TOCRegistry.sol/TOCRegistry.json",
+  TruthEngine: "TruthEngine/TruthEngine.sol/TruthEngine.json",
   OptimisticResolver: "resolvers/OptimisticResolver.sol/OptimisticResolver.json",
   SimpleTruthKeeper: "SimpleTruthKeeper.sol/SimpleTruthKeeper.json",
   PythPriceResolver: "resolvers/PythPriceResolver.sol/PythPriceResolver.json",
@@ -49,7 +49,7 @@ export function loadAbi(contractName: ContractName): readonly unknown[] {
 }
 
 // Lazy-loaded ABIs (load on first access)
-export const getRegistryAbi = () => loadAbi("TOCRegistry");
+export const getRegistryAbi = () => loadAbi("TruthEngine");
 export const getResolverAbi = () => loadAbi("OptimisticResolver");
 export const getTruthKeeperAbi = () => loadAbi("SimpleTruthKeeper");
 export const getPythResolverAbi = () => loadAbi("PythPriceResolver");

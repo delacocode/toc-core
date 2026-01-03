@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.29;
 
-import {ITruthKeeper} from "contracts/TOCRegistry/ITruthKeeper.sol";
-import {ITOCRegistry} from "contracts/TOCRegistry/ITOCRegistry.sol";
-import {TKApprovalResponse, DisputeResolution} from "contracts/TOCRegistry/TOCTypes.sol";
+import {ITruthKeeper} from "contracts/TruthEngine/ITruthKeeper.sol";
+import {ITruthEngine} from "contracts/TruthEngine/ITruthEngine.sol";
+import {TKApprovalResponse, DisputeResolution} from "contracts/TruthEngine/TOCTypes.sol";
 
 /// @title MockTruthKeeper
-/// @notice Mock TruthKeeper for testing the TOCRegistry
+/// @notice Mock TruthKeeper for testing the TruthEngine
 /// @dev Simple implementation that approves all TOCs by default
 contract MockTruthKeeper is ITruthKeeper {
     address public registry;
@@ -121,11 +121,11 @@ contract MockTruthKeeper is ITruthKeeper {
         DisputeResolution resolution,
         bytes calldata correctedResult
     ) external {
-        ITOCRegistry(registryAddr).resolveTruthKeeperDispute(tocId, resolution, correctedResult);
+        ITruthEngine(registryAddr).resolveTruthKeeperDispute(tocId, resolution, correctedResult);
     }
 
     function withdrawFees(address registryAddr) external {
-        ITOCRegistry(registryAddr).withdrawTKFees();
+        ITruthEngine(registryAddr).withdrawTKFees();
     }
 
     receive() external payable {}

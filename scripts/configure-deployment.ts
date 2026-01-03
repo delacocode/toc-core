@@ -70,7 +70,7 @@ const chains: Record<string, typeof sepolia> = {
 };
 
 interface DeployedAddresses {
-  "TOCRegistry#TOCRegistry": string;
+  "TruthEngine#TruthEngine": string;
   "OptimisticResolver#OptimisticResolver": string;
   "PythPriceResolver#PythPriceResolver"?: string;
   "SimpleTruthKeeper#SimpleTruthKeeper": string;
@@ -132,7 +132,7 @@ async function main() {
   const deployed: DeployedAddresses = JSON.parse(fs.readFileSync(deploymentPath, "utf-8"));
 
   console.log("📋 Deployed Addresses:");
-  console.log(`   Registry:        ${deployed["TOCRegistry#TOCRegistry"]}`);
+  console.log(`   Registry:        ${deployed["TruthEngine#TruthEngine"]}`);
   console.log(`   OptimisticResolver: ${deployed["OptimisticResolver#OptimisticResolver"]}`);
   if (deployed["PythPriceResolver#PythPriceResolver"]) {
     console.log(`   PythResolver:    ${deployed["PythPriceResolver#PythPriceResolver"]}`);
@@ -175,7 +175,7 @@ async function main() {
 
   console.log(`🔑 Deployer: ${account.address}\n`);
 
-  const registryAddress = deployed["TOCRegistry#TOCRegistry"] as `0x${string}`;
+  const registryAddress = deployed["TruthEngine#TruthEngine"] as `0x${string}`;
   const truthKeeperAddress = deployed["SimpleTruthKeeper#SimpleTruthKeeper"] as `0x${string}`;
   const optimisticResolverAddress = deployed["OptimisticResolver#OptimisticResolver"] as `0x${string}`;
   const pythResolverAddress = deployed["PythPriceResolver#PythPriceResolver"] as `0x${string}` | undefined;

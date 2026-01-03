@@ -16,7 +16,7 @@ interface ITOCResolver {
     /// @return True if this resolver manages the TOC
     function isTocManaged(uint256 tocId) external view returns (bool);
 
-    /// @notice Called by TOCRegistry when a TOC is created
+    /// @notice Called by TruthEngine when a TOC is created
     /// @dev Should revert if payload is invalid for the template
     /// @param tocId The unique TOC identifier assigned by registry
     /// @param templateId The template ID within this resolver
@@ -31,7 +31,7 @@ interface ITOCResolver {
     ) external returns (TOCState initialState);
 
     /// @notice Resolve a TOC with provided proof/data
-    /// @dev Called by TOCRegistry when someone proposes resolution.
+    /// @dev Called by TruthEngine when someone proposes resolution.
     ///      Result must be ABI-encoded based on template's answerType:
     ///      - BOOLEAN: abi.encode(bool)
     ///      - NUMERIC: abi.encode(int256)
