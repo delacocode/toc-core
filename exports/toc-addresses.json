@@ -1,14 +1,22 @@
 {
   "version": "1.0.0",
-  "exportedAt": "2026-01-02T13:52:48.112Z",
+  "exportedAt": "2026-01-04T18:06:17.022Z",
   "networks": {
     "sepolia": {
       "chainId": 11155111,
       "name": "Sepolia Testnet",
-      "registry": "0x9d4ec2d6694d25aB5632cB77666a0b000c036067",
-      "optimisticResolver": "0x934248aea156E62D88aD3F9628c0353f38bC8074",
-      "pythResolver": "0xb0436E07DB66c646898abf16A38dC63A7131dA1f",
-      "truthKeeper": "0x38E70A295F28C29846A2Aa797DEbc67C10BBE9AC"
+      "registry": "0x50C0A2A8E748b8744f0E4a4F458779328A597dF6",
+      "optimisticResolver": "0x9BEA77Ec8E10Df6b60df7EBBf4AF686261feC5C2",
+      "pythResolver": "0x0B5C9BFe9F4A2a1bF0644D8266b7570B508d0A11",
+      "truthKeeper": "0xF2c31D9435666eEfEB8c1edAc1659e91daaCE01a"
+    },
+    "base": {
+      "chainId": 8453,
+      "name": "Base",
+      "registry": "0x50C0A2A8E748b8744f0E4a4F458779328A597dF6",
+      "optimisticResolver": "0x9BEA77Ec8E10Df6b60df7EBBf4AF686261feC5C2",
+      "pythResolver": "0x0B5C9BFe9F4A2a1bF0644D8266b7570B508d0A11",
+      "truthKeeper": "0xF2c31D9435666eEfEB8c1edAc1659e91daaCE01a"
     }
   }
 }

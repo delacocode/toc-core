@@ -1,6 +1,6 @@
 {
-  "chainId": 11155111,
-  "network": "sepolia",
+  "chainId": 8453,
+  "network": "base",
   "contracts": {
     "TruthEngine": "0x50C0A2A8E748b8744f0E4a4F458779328A597dF6",
     "OptimisticResolver": "0x9BEA77Ec8E10Df6b60df7EBBf4AF686261feC5C2",

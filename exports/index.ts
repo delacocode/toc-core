@@ -9,11 +9,11 @@ import TruthEngineABI from "./sepolia/abis/TruthEngine.json" with { type: "json"
 import ITruthEngineABI from "./sepolia/abis/ITruthEngine.json" with { type: "json" };
 import OptimisticResolverABI from "./sepolia/abis/OptimisticResolver.json" with { type: "json" };
 import PythPriceResolverABI from "./sepolia/abis/PythPriceResolver.json" with { type: "json" };
-import PythPriceResolverV2ABI from "./sepolia/abis/PythPriceResolverV2.json" with { type: "json" };
 import SimpleTruthKeeperABI from "./sepolia/abis/SimpleTruthKeeper.json" with { type: "json" };
 
 // Import addresses
 import sepoliaAddresses from "./sepolia/addresses.json" with { type: "json" };
+import baseAddresses from "./base/addresses.json" with { type: "json" };
 
 // Export ABIs
 export const abis = {
@@ -21,18 +21,18 @@ export const abis = {
   ITruthEngine: ITruthEngineABI,
   OptimisticResolver: OptimisticResolverABI,
   PythPriceResolver: PythPriceResolverABI,
-  PythPriceResolverV2: PythPriceResolverV2ABI,
   SimpleTruthKeeper: SimpleTruthKeeperABI,
 } as const;
 
 // Export addresses by network
 export const addresses = {
   sepolia: sepoliaAddresses,
+  base: baseAddresses,
 } as const;
 
 // Convenience exports
-export { TruthEngineABI, ITruthEngineABI, OptimisticResolverABI, PythPriceResolverABI, PythPriceResolverV2ABI, SimpleTruthKeeperABI };
-export { sepoliaAddresses };
+export { TruthEngineABI, ITruthEngineABI, OptimisticResolverABI, PythPriceResolverABI, SimpleTruthKeeperABI };
+export { sepoliaAddresses, baseAddresses };
 
 // Types
 export type NetworkName = keyof typeof addresses;

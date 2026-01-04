@@ -24,11 +24,11 @@
         "SYSTEM": 6000
       }
     },
-    "treasury": "0xYOUR_TREASURY_ADDRESS"
+    "treasury": "0xE79992Cb355A91EEe25c8b2846c85B5c7735E70e"
   },
 
   "truthKeeper": {
-    "owner": "0xYOUR_OWNER_ADDRESS",
+    "owner": "0xE79992Cb355A91EEe25c8b2846c85B5c7735E70e",
     "minDisputeWindow": 300,
     "minTruthKeeperWindow": 600,
     "allowedResolvers": [

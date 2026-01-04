@@ -16,6 +16,13 @@ import {
 } from "./lib/config.js";
 import { getRegistryAbi, getTruthKeeperAbi } from "./lib/abis.js";
 
+// BondType enum values (matches TOCTypes.sol)
+const BondType = {
+  RESOLUTION: 0,
+  DISPUTE: 1,
+  ESCALATION: 2,
+} as const;
+
 async function main() {
   const network = await getNetwork();
   const { chainId } = getChainConfig(network);
@@ -46,68 +53,52 @@ async function main() {
   console.log("1️⃣  Setting bonds...");
   const { bonds } = config.registry;
 
-  // Check if resolution bond already set
-  const resolutionBondOk = await publicClient.readContract({
-    address: addresses.registry,
-    abi: registryAbi,
-    functionName: "isAcceptableResolutionBond",
-    args: [bonds.resolution.token as `0x${string}`, BigInt(bonds.resolution.minAmount)],
-  });
-  if (resolutionBondOk) {
-    console.log(`   Resolution bond: ${formatEther(BigInt(bonds.resolution.minAmount))} ETH... ⏭️  Already set`);
-  } else {
-    await sendTx(
-      `Resolution bond: ${formatEther(BigInt(bonds.resolution.minAmount))} ETH`,
-      addresses.registry,
-      encodeFunctionData({
-        abi: registryAbi,
-        functionName: "addAcceptableResolutionBond",
-        args: [bonds.resolution.token as `0x${string}`, BigInt(bonds.resolution.minAmount)],
-      })
-    );
+  // Helper to check and set bonds
+  async function setupBond(
+    name: string,
+    bondType: number,
+    token: `0x${string}`,
+    minAmount: bigint
+  ) {
+    const isOk = await publicClient.readContract({
+      address: addresses.registry,
+      abi: registryAbi,
+      functionName: "isAcceptableBond",
+      args: [bondType, token, minAmount],
+    });
+    if (isOk) {
+      console.log(`   ${name} bond: ${formatEther(minAmount)} ETH... ⏭️  Already set`);
+    } else {
+      await sendTx(
+        `${name} bond: ${formatEther(minAmount)} ETH`,
+        addresses.registry,
+        encodeFunctionData({
+          abi: registryAbi,
+          functionName: "addAcceptableBond",
+          args: [bondType, token, minAmount],
+        })
+      );
+    }
   }
 
-  // Check if dispute bond already set
-  const disputeBondOk = await publicClient.readContract({
-    address: addresses.registry,
-    abi: registryAbi,
-    functionName: "isAcceptableDisputeBond",
-    args: [bonds.dispute.token as `0x${string}`, BigInt(bonds.dispute.minAmount)],
-  });
-  if (disputeBondOk) {
-    console.log(`   Dispute bond: ${formatEther(BigInt(bonds.dispute.minAmount))} ETH... ⏭️  Already set`);
-  } else {
-    await sendTx(
-      `Dispute bond: ${formatEther(BigInt(bonds.dispute.minAmount))} ETH`,
-      addresses.registry,
-      encodeFunctionData({
-        abi: registryAbi,
-        functionName: "addAcceptableDisputeBond",
-        args: [bonds.dispute.token as `0x${string}`, BigInt(bonds.dispute.minAmount)],
-      })
-    );
-  }
-
-  // Check if escalation bond already set
-  const escalationBondOk = await publicClient.readContract({
-    address: addresses.registry,
-    abi: registryAbi,
-    functionName: "isAcceptableEscalationBond",
-    args: [bonds.escalation.token as `0x${string}`, BigInt(bonds.escalation.minAmount)],
-  });
-  if (escalationBondOk) {
-    console.log(`   Escalation bond: ${formatEther(BigInt(bonds.escalation.minAmount))} ETH... ⏭️  Already set`);
-  } else {
-    await sendTx(
-      `Escalation bond: ${formatEther(BigInt(bonds.escalation.minAmount))} ETH`,
-      addresses.registry,
-      encodeFunctionData({
-        abi: registryAbi,
-        functionName: "addAcceptableEscalationBond",
-        args: [bonds.escalation.token as `0x${string}`, BigInt(bonds.escalation.minAmount)],
-      })
-    );
-  }
+  await setupBond(
+    "Resolution",
+    BondType.RESOLUTION,
+    bonds.resolution.token as `0x${string}`,
+    BigInt(bonds.resolution.minAmount)
+  );
+  await setupBond(
+    "Dispute",
+    BondType.DISPUTE,
+    bonds.dispute.token as `0x${string}`,
+    BigInt(bonds.dispute.minAmount)
+  );
+  await setupBond(
+    "Escalation",
+    BondType.ESCALATION,
+    bonds.escalation.token as `0x${string}`,
+    BigInt(bonds.escalation.minAmount)
+  );
 
   // 2. Set treasury and fees
   console.log("\n2️⃣  Setting treasury & fees...");

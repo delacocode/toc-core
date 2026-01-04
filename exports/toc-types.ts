@@ -53,20 +53,21 @@ export enum SportQuestionType {
 
 /** Core TOC data */
 export interface TOC {
-  resolver: `0x${string}`;
-  state: TOCState;
-  answerType: AnswerType;
-  resolutionTime: bigint;
-  disputeWindow: bigint;
-  truthKeeperWindow: bigint;
-  escalationWindow: bigint;
-  postResolutionWindow: bigint;
-  disputeDeadline: bigint;
-  truthKeeperDeadline: bigint;
-  escalationDeadline: bigint;
-  postDisputeDeadline: bigint;
-  truthKeeper: `0x${string}`;
-  tierAtCreation: AccountabilityTier;
+  creator: `0x${string}`;           // Who created this TOC
+  resolver: `0x${string}`;          // Which resolver manages this TOC
+  state: TOCState;                  // Current state
+  answerType: AnswerType;           // Type of answer this TOC will return
+  resolutionTime: bigint;           // Timestamp when resolved
+  disputeWindow: bigint;            // Time to dispute initial proposal
+  truthKeeperWindow: bigint;        // Time for TruthKeeper to decide
+  escalationWindow: bigint;         // Time to challenge TruthKeeper decision
+  postResolutionWindow: bigint;     // Time to dispute after RESOLVED
+  disputeDeadline: bigint;          // End of pre-resolution dispute window
+  truthKeeperDeadline: bigint;      // End of TruthKeeper decision window
+  escalationDeadline: bigint;       // End of escalation window
+  postDisputeDeadline: bigint;      // End of post-resolution dispute window
+  truthKeeper: `0x${string}`;       // Assigned TruthKeeper for this TOC
+  tierAtCreation: AccountabilityTier; // Immutable snapshot of tier
 }
 
 /** Result with full resolution context for consumers */
@@ -253,10 +254,10 @@ export const TRUTH_ENGINE_ABI = [
       { name: "resolver", type: "address" },
       { name: "templateId", type: "uint32" },
       { name: "payload", type: "bytes" },
-      { name: "disputeWindow", type: "uint256" },
-      { name: "truthKeeperWindow", type: "uint256" },
-      { name: "escalationWindow", type: "uint256" },
-      { name: "postResolutionWindow", type: "uint256" },
+      { name: "disputeWindow", type: "uint32" },
+      { name: "truthKeeperWindow", type: "uint32" },
+      { name: "escalationWindow", type: "uint32" },
+      { name: "postResolutionWindow", type: "uint32" },
       { name: "truthKeeper", type: "address" },
     ],
     outputs: [{ name: "tocId", type: "uint256" }],
@@ -290,6 +291,7 @@ export const TRUTH_ENGINE_ABI = [
         name: "",
         type: "tuple",
         components: [
+          { name: "creator", type: "address" },
           { name: "resolver", type: "address" },
           { name: "state", type: "uint8" },
           { name: "answerType", type: "uint8" },
