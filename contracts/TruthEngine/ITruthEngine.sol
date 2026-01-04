@@ -23,12 +23,17 @@ interface ITruthEngine {
     event TOCCreated(
         uint256 indexed tocId,
         address indexed resolver,
+        address indexed creator,
         ResolverTrust trust,
         uint32 templateId,
         AnswerType answerType,
         TOCState initialState,
-        address indexed truthKeeper,
-        AccountabilityTier tier
+        address truthKeeper,
+        AccountabilityTier tier,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow,
+        uint32 escalationWindow,
+        uint32 postResolutionWindow
     );
     event TOCApproved(uint256 indexed tocId);
     event TOCRejected(uint256 indexed tocId, string reason);
@@ -48,12 +53,15 @@ interface ITruthEngine {
     event TOCDisputed(
         uint256 indexed tocId,
         address indexed disputer,
-        string reason
+        string reason,
+        string evidenceURI
     );
     event PostResolutionDisputeFiled(
         uint256 indexed tocId,
         address indexed disputer,
-        string reason
+        string reason,
+        string evidenceURI,
+        bytes proposedResult
     );
     event DisputeResolved(
         uint256 indexed tocId,
@@ -75,7 +83,9 @@ interface ITruthEngine {
     event TruthKeeperDecisionChallenged(
         uint256 indexed tocId,
         address indexed challenger,
-        string reason
+        string reason,
+        string evidenceURI,
+        bytes proposedResult
     );
     event TruthKeeperTimedOut(
         uint256 indexed tocId,
@@ -92,7 +102,15 @@ interface ITruthEngine {
     event ResolutionBondReturned(uint256 indexed tocId, address indexed to, address token, uint256 amount);
     event DisputeBondDeposited(uint256 indexed tocId, address indexed disputer, address token, uint256 amount);
     event DisputeBondReturned(uint256 indexed tocId, address indexed to, address token, uint256 amount);
+    event EscalationBondDeposited(uint256 indexed tocId, address indexed challenger, address token, uint256 amount);
+    event EscalationBondReturned(uint256 indexed tocId, address indexed to, address token, uint256 amount);
     event BondSlashed(uint256 indexed tocId, address indexed from, address token, uint256 amount);
+
+    // Bond configuration
+    event AcceptableBondAdded(BondType indexed bondType, address indexed token, uint256 minAmount);
+
+    // Window configuration
+    event DefaultDisputeWindowChanged(uint256 oldDuration, uint256 newDuration);
 
     // Fee events
     event TreasurySet(address indexed treasury);
@@ -118,15 +136,11 @@ interface ITruthEngine {
 
     // ============ Admin Functions ============
 
-    /// @notice Add an acceptable bond token/amount for resolutions
+    /// @notice Add an acceptable bond token/amount
+    /// @param bondType Type of bond (RESOLUTION, DISPUTE, or ESCALATION)
     /// @param token Token address (address(0) for native)
     /// @param minAmount Minimum amount required
-    function addAcceptableResolutionBond(address token, uint256 minAmount) external;
-
-    /// @notice Add an acceptable bond token/amount for disputes
-    /// @param token Token address (address(0) for native)
-    /// @param minAmount Minimum amount required
-    function addAcceptableDisputeBond(address token, uint256 minAmount) external;
+    function addAcceptableBond(BondType bondType, address token, uint256 minAmount) external;
 
     /// @notice Set default dispute window for resolvers that don't specify one
     /// @param duration Duration in seconds
@@ -139,11 +153,6 @@ interface ITruthEngine {
     /// @notice Remove a TruthKeeper from the system whitelist
     /// @param tk Address of the TruthKeeper
     function removeWhitelistedTruthKeeper(address tk) external;
-
-    /// @notice Add an acceptable bond token/amount for escalations (Round 2)
-    /// @param token Token address (address(0) for native)
-    /// @param minAmount Minimum amount required (should be higher than dispute bonds)
-    function addAcceptableEscalationBond(address token, uint256 minAmount) external;
 
     /// @notice Set the treasury address for protocol fee withdrawals
     /// @param _treasury The treasury address
@@ -190,10 +199,10 @@ interface ITruthEngine {
         address resolver,
         uint32 templateId,
         bytes calldata payload,
-        uint256 disputeWindow,
-        uint256 truthKeeperWindow,
-        uint256 escalationWindow,
-        uint256 postResolutionWindow,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow,
+        uint32 escalationWindow,
+        uint32 postResolutionWindow,
         address truthKeeper
     ) external payable returns (uint256 tocId);
 
@@ -371,17 +380,12 @@ interface ITruthEngine {
     /// @return result The original ABI-encoded result
     function getOriginalResult(uint256 tocId) external view returns (bytes memory result);
 
-    /// @notice Check if bond is acceptable for resolution
+    /// @notice Check if bond is acceptable for given type
+    /// @param bondType Type of bond (RESOLUTION, DISPUTE, or ESCALATION)
     /// @param token Token address
     /// @param amount Amount
     /// @return True if acceptable
-    function isAcceptableResolutionBond(address token, uint256 amount) external view returns (bool);
-
-    /// @notice Check if bond is acceptable for dispute
-    /// @param token Token address
-    /// @param amount Amount
-    /// @return True if acceptable
-    function isAcceptableDisputeBond(address token, uint256 amount) external view returns (bool);
+    function isAcceptableBond(BondType bondType, address token, uint256 amount) external view returns (bool);
 
     /// @notice Get the next TOC ID that will be assigned
     /// @return The next TOC ID
@@ -455,12 +459,6 @@ interface ITruthEngine {
     /// @param tocId The TOC identifier
     /// @return info The escalation information
     function getEscalationInfo(uint256 tocId) external view returns (EscalationInfo memory info);
-
-    /// @notice Check if a bond is acceptable for escalation
-    /// @param token Token address
-    /// @param amount Amount
-    /// @return True if acceptable
-    function isAcceptableEscalationBond(address token, uint256 amount) external view returns (bool);
 
     // ============ Resolver Fee Functions ============
 

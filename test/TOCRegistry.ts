@@ -24,99 +24,8 @@ import {
   DisputePhase,
 } from "./expectations/tocRegistry/index.js";
 
-// ABI for TOCRegistry events (subset needed for testing)
-const REGISTRY_ABI = [
-  {
-    type: "event",
-    name: "TOCCreated",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "resolver", type: "address", indexed: true },
-      { name: "trust", type: "uint8", indexed: false },
-      { name: "templateId", type: "uint32", indexed: false },
-      { name: "answerType", type: "uint8", indexed: false },
-      { name: "initialState", type: "uint8", indexed: false },
-      { name: "truthKeeper", type: "address", indexed: true },
-      { name: "tier", type: "uint8", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "CreationFeesCollected",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "protocolFee", type: "uint256", indexed: false },
-      { name: "tkFee", type: "uint256", indexed: false },
-      { name: "resolverFee", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "TOCResolutionProposed",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "proposer", type: "address", indexed: true },
-      { name: "answerType", type: "uint8", indexed: false },
-      { name: "disputeDeadline", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "ResolutionBondDeposited",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "proposer", type: "address", indexed: true },
-      { name: "token", type: "address", indexed: false },
-      { name: "amount", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "TOCFinalized",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "answerType", type: "uint8", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "DisputeBondDeposited",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "disputer", type: "address", indexed: true },
-      { name: "token", type: "address", indexed: false },
-      { name: "amount", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "TOCDisputed",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "disputer", type: "address", indexed: true },
-      { name: "reason", type: "string", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "PostResolutionDisputeFiled",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "disputer", type: "address", indexed: true },
-      { name: "reason", type: "string", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "ResolutionBondReturned",
-    inputs: [
-      { name: "tocId", type: "uint256", indexed: true },
-      { name: "to", type: "address", indexed: true },
-      { name: "token", type: "address", indexed: false },
-      { name: "amount", type: "uint256", indexed: false },
-    ],
-  },
-] as const;
+// Import ABI from central source (compiled artifacts)
+import { TruthEngineABI } from "./abis.js";
 
 // Helper to encode boolean result
 function encodeBooleanResult(value: boolean): `0x${string}` {
@@ -192,8 +101,8 @@ describe("TOCRegistry with Expectations", async function () {
   let truthKeeper: Awaited<ReturnType<typeof viem.deployContract>>;
 
   before(async () => {
-    // Deploy TOCRegistry
-    registry = await viem.deployContract("TOCRegistry");
+    // Deploy TruthEngine
+    registry = await viem.deployContract("TruthEngine");
 
     // Deploy OptimisticResolver (real resolver)
     resolver = await viem.deployContract("OptimisticResolver", [registry.address]);
@@ -201,10 +110,10 @@ describe("TOCRegistry with Expectations", async function () {
     // Deploy MockTruthKeeper (TruthKeeper is an interface, needs mock implementation)
     truthKeeper = await viem.deployContract("MockTruthKeeper", [registry.address]);
 
-    // Configure registry
-    await registry.write.addAcceptableResolutionBond([zeroAddress, MIN_RESOLUTION_BOND]);
-    await registry.write.addAcceptableDisputeBond([zeroAddress, MIN_DISPUTE_BOND]);
-    await registry.write.addAcceptableEscalationBond([zeroAddress, MIN_ESCALATION_BOND]);
+    // Configure registry - BondType: 0=RESOLUTION, 1=DISPUTE, 2=ESCALATION
+    await registry.write.addAcceptableBond([0, zeroAddress, MIN_RESOLUTION_BOND]);
+    await registry.write.addAcceptableBond([1, zeroAddress, MIN_DISPUTE_BOND]);
+    await registry.write.addAcceptableBond([2, zeroAddress, MIN_ESCALATION_BOND]);
     await registry.write.addWhitelistedTruthKeeper([truthKeeper.address]);
     await registry.write.setProtocolFeeStandard([PROTOCOL_FEE]);
     await registry.write.setTKSharePercent([AccountabilityTier.TK_GUARANTEED, TK_SHARE_BASIS_POINTS]);
@@ -249,7 +158,7 @@ describe("TOCRegistry with Expectations", async function () {
       // Verify all effects using expectCreateTOC
       const result = await expectCreateTOC({
         registry: registry as unknown as Parameters<typeof expectCreateTOC>[0]["registry"],
-        abi: REGISTRY_ABI,
+        abi: TruthEngineABI,
         logs: receipt.logs,
         params: {
           resolver: resolver.address,
@@ -316,7 +225,7 @@ describe("TOCRegistry with Expectations", async function () {
       // Verify all effects
       const result = await expectResolveTOC({
         registry: registry as unknown as Parameters<typeof expectResolveTOC>[0]["registry"],
-        abi: REGISTRY_ABI,
+        abi: TruthEngineABI,
         logs: receipt.logs,
         params: {
           tocId,
@@ -373,7 +282,7 @@ describe("TOCRegistry with Expectations", async function () {
       // Verify undisputable path
       const result = await expectResolveTOC({
         registry: registry as unknown as Parameters<typeof expectResolveTOC>[0]["registry"],
-        abi: REGISTRY_ABI,
+        abi: TruthEngineABI,
         logs: receipt.logs,
         params: {
           tocId,
@@ -424,7 +333,7 @@ describe("TOCRegistry with Expectations", async function () {
 
       const createResult = await expectCreateTOC({
         registry: registry as unknown as Parameters<typeof expectCreateTOC>[0]["registry"],
-        abi: REGISTRY_ABI,
+        abi: TruthEngineABI,
         logs: createReceipt.logs,
         params: {
           resolver: resolver.address,
@@ -465,7 +374,7 @@ describe("TOCRegistry with Expectations", async function () {
 
       const resolveResult = await expectResolveTOC({
         registry: registry as unknown as Parameters<typeof expectResolveTOC>[0]["registry"],
-        abi: REGISTRY_ABI,
+        abi: TruthEngineABI,
         logs: resolveReceipt.logs,
         params: {
           tocId,
@@ -502,7 +411,7 @@ describe("TOCRegistry with Expectations", async function () {
 
       const finalizeResult = await expectFinalizeTOC({
         registry: registry as unknown as Parameters<typeof expectFinalizeTOC>[0]["registry"],
-        abi: REGISTRY_ABI,
+        abi: TruthEngineABI,
         logs: finalizeReceipt.logs,
         expected: {
           tocId,

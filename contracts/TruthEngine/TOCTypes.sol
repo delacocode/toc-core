@@ -49,6 +49,13 @@ enum AccountabilityTier {
     SYSTEM          // System takes full accountability
 }
 
+/// @notice Type of bond (for consolidated bond functions)
+enum BondType {
+    RESOLUTION,     // Bond for proposing resolution
+    DISPUTE,        // Bond for filing dispute
+    ESCALATION      // Bond for challenging TK decision
+}
+
 /// @notice Phase when a dispute was filed
 enum DisputePhase {
     NONE,           // No dispute filed

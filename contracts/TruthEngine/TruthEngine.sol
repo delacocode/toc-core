@@ -21,9 +21,6 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
 
     // ============ Constants ============
 
-    /// @notice Default dispute window if resolver doesn't specify one
-    uint256 public constant DEFAULT_DISPUTE_WINDOW_DURATION = 24 hours;
-
     /// @notice Maximum window duration for RESOLVER trust level
     uint256 public constant MAX_WINDOW_RESOLVER = 1 days;
 
@@ -46,10 +43,8 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     // Corrected results flag (for post-resolution disputes)
     mapping(uint256 => bool) private _hasCorrectedResult;
 
-    // Bond configuration
-    BondRequirement[] private _acceptableResolutionBonds;
-    BondRequirement[] private _acceptableDisputeBonds;
-    BondRequirement[] private _acceptableEscalationBonds;
+    // Bond configuration (indexed by BondType)
+    mapping(BondType => BondRequirement[]) private _acceptableBonds;
 
     // Settings
     uint256 private _defaultDisputeWindow;
@@ -82,90 +77,67 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     // Resolver fee configuration (per resolver, per template)
     mapping(address => mapping(uint32 => uint256)) public resolverTemplateFees;
 
-    // ============ Errors ============
+    // ============ Errors (consolidated for size optimization) ============
 
-    error ResolverNotRegistered(address resolver);
-    error ResolverAlreadyRegistered(address resolver);
-    error ResolverMustBeContract(address resolver);
-    error InvalidTemplateId(uint32 templateId);
-    error InvalidState(TOCState current, TOCState expected);
-    error InvalidBond(address token, uint256 amount);
-    error DisputeWindowNotPassed(uint256 deadline, uint256 current);
-    error DisputeWindowPassed(uint256 deadline, uint256 current);
-    error AlreadyDisputed(uint256 tocId);
-    error NotResolver(address caller, address expected);
-    error NotCreator(address caller, address expected);
-    error InvalidAddress(address addr);
+    // Authorization
+    error Unauthorized();
+
+    // Registration
+    error NotRegistered();
+    error AlreadyRegistered();
+    error NotContract();
+
+    // State/Timing
+    error InvalidState();
+    error WindowNotReady();
+    error WindowPassed();
+    error AlreadyExists();
+    error NotReady();
+
+    // Validation
+    error InvalidTemplateId();
+    error InvalidBond();
+    error InvalidAddress();
+    error WindowTooLong();
+
+    // Transfers/Fees
     error TransferFailed();
-    error InsufficientValue(uint256 sent, uint256 required);
-    error NoCorrectedAnswerProvided(uint256 tocId);
-    error DisputeAlreadyResolved(uint256 tocId);
-    error NoDisputeExists(uint256 tocId);
-    error CannotDisputeInCurrentState(TOCState currentState);
-    error NotTruthKeeper(address caller, address expected);
-    error TruthKeeperNotWhitelisted(address tk);
-    error TruthKeeperAlreadyWhitelisted(address tk);
-    error TruthKeeperWindowNotPassed(uint256 deadline, uint256 current);
-    error EscalationWindowNotPassed(uint256 deadline, uint256 current);
-    error EscalationWindowPassed(uint256 deadline, uint256 current);
-    error NotInDisputedRound1State(TOCState currentState);
-    error NotInDisputedRound2State(TOCState currentState);
-    error TruthKeeperAlreadyDecided(uint256 tocId);
-    error TruthKeeperNotYetDecided(uint256 tocId);
-    error AlreadyEscalated(uint256 tocId);
-    error InvalidTruthKeeper(address tk);
-    error NotFullyFinalized(uint256 tocId);
-    error TruthKeeperNotContract(address tk);
-    error TruthKeeperRejected(address tk, uint256 tocId);
-
-    // Fee errors
+    error Insufficient();
     error TreasuryNotSet();
-    error NotTreasury(address caller, address expected);
-    error InsufficientFee(uint256 sent, uint256 required);
     error NoFeesToWithdraw();
-    error NoResolverFee(uint256 tocId);
-    error NotResolverForToc(address caller, uint256 tocId);
 
-    // Window validation errors
-    error WindowTooLong(uint256 provided, uint256 maximum);
+    // Disputes
+    error NoCorrectedAnswer();
+    error NotFinalized();
+    error TruthKeeperRejected();
 
     // ============ Constructor ============
 
     constructor() Ownable(msg.sender) {
-        _defaultDisputeWindow = DEFAULT_DISPUTE_WINDOW_DURATION;
+        _defaultDisputeWindow = 24 hours;
         _nextTocId = 1; // Start from 1, 0 means invalid
     }
 
     // ============ Modifiers ============
 
     modifier onlyResolver(uint256 tocId) {
-        TOC storage toc = _tocs[tocId];
-        if (msg.sender != toc.resolver) {
-            revert NotResolver(msg.sender, toc.resolver);
-        }
+        if (msg.sender != _tocs[tocId].resolver) revert Unauthorized();
         _;
     }
 
-
     modifier inState(uint256 tocId, TOCState expected) {
-        TOCState current = _tocs[tocId].state;
-        if (current != expected) {
-            revert InvalidState(current, expected);
-        }
+        if (_tocs[tocId].state != expected) revert InvalidState();
         _;
     }
 
     modifier onlyTruthKeeper(uint256 tocId) {
-        TOC storage toc = _tocs[tocId];
-        if (msg.sender != toc.truthKeeper) {
-            revert NotTruthKeeper(msg.sender, toc.truthKeeper);
-        }
+        if (msg.sender != _tocs[tocId].truthKeeper) revert Unauthorized();
         _;
     }
 
     modifier onlyTreasury() {
         if (treasury == address(0)) revert TreasuryNotSet();
-        if (msg.sender != treasury) revert NotTreasury(msg.sender, treasury);
+        if (msg.sender != treasury) revert Unauthorized();
         _;
     }
 
@@ -173,12 +145,8 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
 
     /// @inheritdoc ITruthEngine
     function registerResolver(address resolver) external nonReentrant {
-        if (resolver.code.length == 0) {
-            revert ResolverMustBeContract(resolver);
-        }
-        if (_resolverConfigs[resolver].trust != ResolverTrust.NONE) {
-            revert ResolverAlreadyRegistered(resolver);
-        }
+        if (resolver.code.length == 0) revert NotContract();
+        if (_resolverConfigs[resolver].trust != ResolverTrust.NONE) revert AlreadyRegistered();
 
         _registeredResolvers.add(resolver);
         _resolverConfigs[resolver] = ResolverConfig({
@@ -192,9 +160,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
 
     /// @inheritdoc ITruthEngine
     function setResolverTrust(address resolver, ResolverTrust trust) external onlyOwner nonReentrant {
-        if (_resolverConfigs[resolver].trust == ResolverTrust.NONE) {
-            revert ResolverNotRegistered(resolver);
-        }
+        if (_resolverConfigs[resolver].trust == ResolverTrust.NONE) revert NotRegistered();
 
         ResolverTrust oldTrust = _resolverConfigs[resolver].trust;
         _resolverConfigs[resolver].trust = trust;
@@ -205,53 +171,38 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     // ============ Admin Functions ============
 
     /// @inheritdoc ITruthEngine
-    function addAcceptableResolutionBond(
+    function addAcceptableBond(
+        BondType bondType,
         address token,
         uint256 minAmount
     ) external onlyOwner nonReentrant {
-        _acceptableResolutionBonds.push(BondRequirement({
+        _acceptableBonds[bondType].push(BondRequirement({
             token: token,
             minAmount: minAmount
         }));
-    }
-
-    /// @inheritdoc ITruthEngine
-    function addAcceptableDisputeBond(
-        address token,
-        uint256 minAmount
-    ) external onlyOwner nonReentrant {
-        _acceptableDisputeBonds.push(BondRequirement({
-            token: token,
-            minAmount: minAmount
-        }));
+        emit AcceptableBondAdded(bondType, token, minAmount);
     }
 
     /// @inheritdoc ITruthEngine
     function setDefaultDisputeWindow(uint256 duration) external onlyOwner nonReentrant {
+        uint256 oldDuration = _defaultDisputeWindow;
         _defaultDisputeWindow = duration;
+        emit DefaultDisputeWindowChanged(oldDuration, duration);
     }
 
     /// @inheritdoc ITruthEngine
     function addWhitelistedTruthKeeper(address tk) external onlyOwner nonReentrant {
-        if (tk == address(0)) revert InvalidTruthKeeper(tk);
-        if (_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperAlreadyWhitelisted(tk);
+        if (tk == address(0)) revert InvalidAddress();
+        if (_whitelistedTruthKeepers.contains(tk)) revert AlreadyRegistered();
         _whitelistedTruthKeepers.add(tk);
         emit TruthKeeperWhitelisted(tk);
     }
 
     /// @inheritdoc ITruthEngine
     function removeWhitelistedTruthKeeper(address tk) external onlyOwner nonReentrant {
-        if (!_whitelistedTruthKeepers.contains(tk)) revert TruthKeeperNotWhitelisted(tk);
+        if (!_whitelistedTruthKeepers.contains(tk)) revert NotRegistered();
         _whitelistedTruthKeepers.remove(tk);
         emit TruthKeeperRemovedFromWhitelist(tk);
-    }
-
-    /// @inheritdoc ITruthEngine
-    function addAcceptableEscalationBond(address token, uint256 minAmount) external onlyOwner nonReentrant {
-        _acceptableEscalationBonds.push(BondRequirement({
-            token: token,
-            minAmount: minAmount
-        }));
     }
 
     /// @inheritdoc ITruthEngine
@@ -274,7 +225,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
 
     /// @inheritdoc ITruthEngine
     function setTKSharePercent(AccountabilityTier tier, uint256 basisPoints) external onlyOwner nonReentrant {
-        require(basisPoints <= 10000, "Basis points cannot exceed 100%");
+        if (basisPoints > 10000) revert InvalidBond(); // Reusing for general validation
         tkSharePercent[tier] = basisPoints;
         emit TKShareUpdated(tier, basisPoints);
     }
@@ -289,15 +240,11 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     ) external nonReentrant onlyTruthKeeper(tocId) {
         TOC storage toc = _tocs[tocId];
 
-        if (toc.state != TOCState.DISPUTED_ROUND_1) {
-            revert NotInDisputedRound1State(toc.state);
-        }
+        if (toc.state != TOCState.DISPUTED_ROUND_1) revert InvalidState();
 
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
-        if (disputeInfo.tkDecidedAt != 0) {
-            revert TruthKeeperAlreadyDecided(tocId);
-        }
+        if (disputeInfo.tkDecidedAt != 0) revert AlreadyExists();
 
         // Record TK decision
         disputeInfo.tkDecision = resolution;
@@ -322,36 +269,30 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         address resolver,
         uint32 templateId,
         bytes calldata payload,
-        uint256 disputeWindow,
-        uint256 truthKeeperWindow,
-        uint256 escalationWindow,
-        uint256 postResolutionWindow,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow,
+        uint32 escalationWindow,
+        uint32 postResolutionWindow,
         address truthKeeper
     ) external payable nonReentrant returns (uint256 tocId) {
         // Check resolver is registered
         ResolverTrust trust = _resolverConfigs[resolver].trust;
-        if (trust == ResolverTrust.NONE) {
-            revert ResolverNotRegistered(resolver);
-        }
+        if (trust == ResolverTrust.NONE) revert NotRegistered();
 
         // Validate time windows don't exceed maximum for trust level
         uint256 maxWindow = (trust == ResolverTrust.RESOLVER)
             ? MAX_WINDOW_RESOLVER
             : MAX_WINDOW_TRUSTED;
-        if (disputeWindow > maxWindow) revert WindowTooLong(disputeWindow, maxWindow);
-        if (truthKeeperWindow > maxWindow) revert WindowTooLong(truthKeeperWindow, maxWindow);
-        if (escalationWindow > maxWindow) revert WindowTooLong(escalationWindow, maxWindow);
-        if (postResolutionWindow > maxWindow) revert WindowTooLong(postResolutionWindow, maxWindow);
+        if (disputeWindow > maxWindow) revert WindowTooLong();
+        if (truthKeeperWindow > maxWindow) revert WindowTooLong();
+        if (escalationWindow > maxWindow) revert WindowTooLong();
+        if (postResolutionWindow > maxWindow) revert WindowTooLong();
 
         // Validate template exists on resolver
-        if (!ITOCResolver(resolver).isValidTemplate(templateId)) {
-            revert InvalidTemplateId(templateId);
-        }
+        if (!ITOCResolver(resolver).isValidTemplate(templateId)) revert InvalidTemplateId();
 
         // Verify TruthKeeper is a contract
-        if (truthKeeper.code.length == 0) {
-            revert TruthKeeperNotContract(truthKeeper);
-        }
+        if (truthKeeper.code.length == 0) revert NotContract();
 
         // Generate TOC ID
         tocId = _nextTocId++;
@@ -384,7 +325,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         // Handle TK response
         bool tkApproved;
         if (tkResponse == TKApprovalResponse.REJECT_HARD) {
-            revert TruthKeeperRejected(truthKeeper, tocId);
+            revert TruthKeeperRejected();
         } else if (tkResponse == TKApprovalResponse.APPROVE) {
             tkApproved = true;
             emit TruthKeeperApproved(tocId, truthKeeper);
@@ -403,7 +344,21 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         // Call resolver to create TOC (may set initial state)
         toc.state = ITOCResolver(resolver).onTocCreated(tocId, templateId, payload, msg.sender);
 
-        emit TOCCreated(tocId, resolver, trust, templateId, toc.answerType, toc.state, truthKeeper, toc.tierAtCreation);
+        emit TOCCreated(
+            tocId,
+            resolver,
+            msg.sender,
+            trust,
+            templateId,
+            toc.answerType,
+            toc.state,
+            truthKeeper,
+            toc.tierAtCreation,
+            disputeWindow,
+            truthKeeperWindow,
+            escalationWindow,
+            postResolutionWindow
+        );
     }
 
     /// @inheritdoc ITruthEngine
@@ -411,19 +366,13 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         TOC storage toc = _tocs[tocId];
 
         // Only current creator can transfer
-        if (msg.sender != toc.creator) {
-            revert NotCreator(msg.sender, toc.creator);
-        }
+        if (msg.sender != toc.creator) revert Unauthorized();
 
         // Can only transfer while ACTIVE (before resolution starts)
-        if (toc.state != TOCState.ACTIVE) {
-            revert InvalidState(toc.state, TOCState.ACTIVE);
-        }
+        if (toc.state != TOCState.ACTIVE) revert InvalidState();
 
         // New creator must be valid
-        if (newCreator == address(0)) {
-            revert InvalidAddress(newCreator);
-        }
+        if (newCreator == address(0)) revert InvalidAddress();
 
         address previousCreator = toc.creator;
         toc.creator = newCreator;
@@ -443,9 +392,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         // Bond is required only if any dispute window > 0
         bool requiresBond = toc.disputeWindow > 0 || toc.postResolutionWindow > 0;
         if (requiresBond) {
-            if (!_isAcceptableResolutionBond(bondToken, bondAmount)) {
-                revert InvalidBond(bondToken, bondAmount);
-            }
+            if (!_isAcceptableBond(BondType.RESOLUTION, bondToken, bondAmount)) revert InvalidBond();
             _transferBondIn(bondToken, bondAmount);
         }
 
@@ -527,14 +474,10 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         TOC storage toc = _tocs[tocId];
 
         // Check dispute window has passed
-        if (block.timestamp < toc.disputeDeadline) {
-            revert DisputeWindowNotPassed(toc.disputeDeadline, block.timestamp);
-        }
+        if (block.timestamp < toc.disputeDeadline) revert WindowNotReady();
 
         // Check not already disputed
-        if (_disputes[tocId].disputer != address(0)) {
-            revert AlreadyDisputed(tocId);
-        }
+        if (_disputes[tocId].disputer != address(0)) revert AlreadyExists();
 
         // Get resolution info
         ResolutionInfo storage resolution = _resolutions[tocId];
@@ -573,17 +516,13 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         TOC storage toc = _tocs[tocId];
 
         // Check not already disputed
-        if (_disputes[tocId].disputer != address(0)) {
-            revert AlreadyDisputed(tocId);
-        }
+        if (_disputes[tocId].disputer != address(0)) revert AlreadyExists();
 
         DisputePhase phase;
 
         if (toc.state == TOCState.RESOLVING) {
             // Pre-resolution dispute
-            if (block.timestamp >= toc.disputeDeadline) {
-                revert DisputeWindowPassed(toc.disputeDeadline, block.timestamp);
-            }
+            if (block.timestamp >= toc.disputeDeadline) revert WindowPassed();
             phase = DisputePhase.PRE_RESOLUTION;
             toc.state = TOCState.DISPUTED_ROUND_1;
             // Set TruthKeeper deadline
@@ -591,23 +530,17 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
 
         } else if (toc.state == TOCState.RESOLVED) {
             // Post-resolution dispute
-            if (toc.postDisputeDeadline == 0) {
-                revert DisputeWindowPassed(0, block.timestamp);
-            }
-            if (block.timestamp >= toc.postDisputeDeadline) {
-                revert DisputeWindowPassed(toc.postDisputeDeadline, block.timestamp);
-            }
+            if (toc.postDisputeDeadline == 0) revert WindowPassed();
+            if (block.timestamp >= toc.postDisputeDeadline) revert WindowPassed();
             phase = DisputePhase.POST_RESOLUTION;
             // State stays RESOLVED for post-resolution disputes
 
         } else {
-            revert CannotDisputeInCurrentState(toc.state);
+            revert InvalidState();
         }
 
         // Validate and transfer bond
-        if (!_isAcceptableDisputeBond(bondToken, bondAmount)) {
-            revert InvalidBond(bondToken, bondAmount);
-        }
+        if (!_isAcceptableBond(BondType.DISPUTE, bondToken, bondAmount)) revert InvalidBond();
         _transferBondIn(bondToken, bondAmount);
 
         // Store dispute info with proposed answer
@@ -629,9 +562,9 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         emit DisputeBondDeposited(tocId, msg.sender, bondToken, bondAmount);
 
         if (phase == DisputePhase.PRE_RESOLUTION) {
-            emit TOCDisputed(tocId, msg.sender, reason);
+            emit TOCDisputed(tocId, msg.sender, reason, evidenceURI);
         } else {
-            emit PostResolutionDisputeFiled(tocId, msg.sender, reason);
+            emit PostResolutionDisputeFiled(tocId, msg.sender, reason, evidenceURI, proposedResult);
         }
     }
 
@@ -648,28 +581,20 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
         // Must be in DISPUTED_ROUND_1 with TK decision made
-        if (toc.state != TOCState.DISPUTED_ROUND_1) {
-            revert NotInDisputedRound1State(toc.state);
-        }
-        if (disputeInfo.tkDecidedAt == 0) {
-            revert TruthKeeperNotYetDecided(tocId);
-        }
+        if (toc.state != TOCState.DISPUTED_ROUND_1) revert InvalidState();
+        if (disputeInfo.tkDecidedAt == 0) revert NotReady();
 
         // Check escalation window
-        if (block.timestamp >= toc.escalationDeadline) {
-            revert EscalationWindowPassed(toc.escalationDeadline, block.timestamp);
-        }
+        if (block.timestamp >= toc.escalationDeadline) revert WindowPassed();
 
         // Check not already escalated
-        if (_escalations[tocId].challenger != address(0)) {
-            revert AlreadyEscalated(tocId);
-        }
+        if (_escalations[tocId].challenger != address(0)) revert AlreadyExists();
 
         // Validate escalation bond (higher than dispute bond)
-        if (!_isAcceptableEscalationBond(bondToken, bondAmount)) {
-            revert InvalidBond(bondToken, bondAmount);
-        }
+        if (!_isAcceptableBond(BondType.ESCALATION, bondToken, bondAmount)) revert InvalidBond();
         _transferBondIn(bondToken, bondAmount);
+
+        emit EscalationBondDeposited(tocId, msg.sender, bondToken, bondAmount);
 
         // Store escalation info
         _escalations[tocId] = EscalationInfo({
@@ -686,7 +611,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         // Move to Round 2
         toc.state = TOCState.DISPUTED_ROUND_2;
 
-        emit TruthKeeperDecisionChallenged(tocId, msg.sender, reason);
+        emit TruthKeeperDecisionChallenged(tocId, msg.sender, reason, evidenceURI, proposedResult);
     }
 
     /// @inheritdoc ITruthEngine
@@ -694,24 +619,16 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         TOC storage toc = _tocs[tocId];
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
-        if (toc.state != TOCState.DISPUTED_ROUND_1) {
-            revert NotInDisputedRound1State(toc.state);
-        }
+        if (toc.state != TOCState.DISPUTED_ROUND_1) revert InvalidState();
 
         // TK must have decided
-        if (disputeInfo.tkDecidedAt == 0) {
-            revert TruthKeeperNotYetDecided(tocId);
-        }
+        if (disputeInfo.tkDecidedAt == 0) revert NotReady();
 
         // Escalation window must have passed
-        if (block.timestamp < toc.escalationDeadline) {
-            revert EscalationWindowNotPassed(toc.escalationDeadline, block.timestamp);
-        }
+        if (block.timestamp < toc.escalationDeadline) revert WindowNotReady();
 
         // Must not have been escalated
-        if (_escalations[tocId].challenger != address(0)) {
-            revert AlreadyEscalated(tocId);
-        }
+        if (_escalations[tocId].challenger != address(0)) revert AlreadyExists();
 
         // Apply TK's decision
         _applyTruthKeeperDecision(tocId, toc, disputeInfo);
@@ -722,19 +639,13 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         TOC storage toc = _tocs[tocId];
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
-        if (toc.state != TOCState.DISPUTED_ROUND_1) {
-            revert NotInDisputedRound1State(toc.state);
-        }
+        if (toc.state != TOCState.DISPUTED_ROUND_1) revert InvalidState();
 
         // TK must NOT have decided
-        if (disputeInfo.tkDecidedAt != 0) {
-            revert TruthKeeperAlreadyDecided(tocId);
-        }
+        if (disputeInfo.tkDecidedAt != 0) revert AlreadyExists();
 
         // TK window must have passed
-        if (block.timestamp < toc.truthKeeperDeadline) {
-            revert TruthKeeperWindowNotPassed(toc.truthKeeperDeadline, block.timestamp);
-        }
+        if (block.timestamp < toc.truthKeeperDeadline) revert WindowNotReady();
 
         // Auto-escalate to Round 2
         toc.state = TOCState.DISPUTED_ROUND_2;
@@ -750,9 +661,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     ) external onlyOwner nonReentrant {
         TOC storage toc = _tocs[tocId];
 
-        if (toc.state != TOCState.DISPUTED_ROUND_2) {
-            revert NotInDisputedRound2State(toc.state);
-        }
+        if (toc.state != TOCState.DISPUTED_ROUND_2) revert InvalidState();
 
         EscalationInfo storage escalationInfo = _escalations[tocId];
         DisputeInfo storage disputeInfo = _disputes[tocId];
@@ -766,8 +675,11 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         } else if (resolution == DisputeResolution.CANCEL_TOC) {
             // Return all bonds
             _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            emit ResolutionBondReturned(tocId, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
             _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+            emit DisputeBondReturned(tocId, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
             _transferBondOut(escalationInfo.challenger, escalationInfo.bondToken, escalationInfo.bondAmount);
+            emit EscalationBondReturned(tocId, escalationInfo.challenger, escalationInfo.bondToken, escalationInfo.bondAmount);
             toc.state = TOCState.CANCELLED;
             emit TOCCancelled(tocId, "Escalation cancelled");
         } else if (resolution == DisputeResolution.UPHOLD_DISPUTE) {
@@ -781,8 +693,10 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
             // Bond economics: challenger gets back + 50% of TK-side bond
             // Original disputer also gets rewarded
             _transferBondOut(escalationInfo.challenger, escalationInfo.bondToken, escalationInfo.bondAmount);
+            emit EscalationBondReturned(tocId, escalationInfo.challenger, escalationInfo.bondToken, escalationInfo.bondAmount);
             _slashBondWithReward(tocId, disputeInfo.disputer, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
             _transferBondOut(disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
+            emit DisputeBondReturned(tocId, disputeInfo.disputer, disputeInfo.bondToken, disputeInfo.bondAmount);
 
             toc.state = TOCState.RESOLVED;
             toc.resolutionTime = block.timestamp;
@@ -793,6 +707,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
             // REJECT_DISPUTE - TK was right
             // Return proposer bond, slash challenger, reward TK-side winner
             _transferBondOut(resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
+            emit ResolutionBondReturned(tocId, resolutionInfo.proposer, resolutionInfo.bondToken, resolutionInfo.bondAmount);
             _slashBondWithReward(tocId, escalationInfo.challenger, disputeInfo.disputer, escalationInfo.bondToken, escalationInfo.bondAmount);
             _slashBondWithReward(tocId, disputeInfo.disputer, resolutionInfo.proposer, disputeInfo.bondToken, disputeInfo.bondAmount);
 
@@ -815,22 +730,16 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
         // Validate dispute exists
-        if (disputeInfo.disputer == address(0)) {
-            revert NoDisputeExists(tocId);
-        }
+        if (disputeInfo.disputer == address(0)) revert NotReady();
         // Validate dispute not already resolved
-        if (disputeInfo.resolvedAt != 0) {
-            revert DisputeAlreadyResolved(tocId);
-        }
+        if (disputeInfo.resolvedAt != 0) revert AlreadyExists();
 
         TOC storage toc = _tocs[tocId];
         ResolutionInfo storage resolutionInfo = _resolutions[tocId];
 
         // For pre-resolution disputes, use resolveEscalation (Round 2) instead
         // This function now only handles post-resolution disputes
-        if (disputeInfo.phase == DisputePhase.PRE_RESOLUTION) {
-            revert NotInDisputedRound2State(toc.state);
-        }
+        if (disputeInfo.phase == DisputePhase.PRE_RESOLUTION) revert InvalidState();
 
         disputeInfo.resolvedAt = block.timestamp;
 
@@ -845,7 +754,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
             } else if (disputeInfo.proposedResult.length > 0) {
                 _results[tocId] = disputeInfo.proposedResult;
             } else {
-                revert NoCorrectedAnswerProvided(tocId);
+                revert NoCorrectedAnswer();
             }
             _hasCorrectedResult[tocId] = true;
 
@@ -1019,19 +928,12 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     }
 
     /// @inheritdoc ITruthEngine
-    function isAcceptableResolutionBond(
+    function isAcceptableBond(
+        BondType bondType,
         address token,
         uint256 amount
     ) external view returns (bool) {
-        return _isAcceptableResolutionBond(token, amount);
-    }
-
-    /// @inheritdoc ITruthEngine
-    function isAcceptableDisputeBond(
-        address token,
-        uint256 amount
-    ) external view returns (bool) {
-        return _isAcceptableDisputeBond(token, amount);
+        return _isAcceptableBond(bondType, token, amount);
     }
 
     /// @inheritdoc ITruthEngine
@@ -1127,18 +1029,11 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         return _escalations[tocId];
     }
 
-    /// @inheritdoc ITruthEngine
-    function isAcceptableEscalationBond(address token, uint256 amount) external view returns (bool) {
-        return _isAcceptableEscalationBond(token, amount);
-    }
-
     // ============ Resolver Fee Functions ============
 
     /// @inheritdoc ITruthEngine
     function setResolverFee(uint32 templateId, uint256 amount) external nonReentrant {
-        if (_resolverConfigs[msg.sender].trust == ResolverTrust.NONE) {
-            revert ResolverNotRegistered(msg.sender);
-        }
+        if (_resolverConfigs[msg.sender].trust == ResolverTrust.NONE) revert NotRegistered();
         resolverTemplateFees[msg.sender][templateId] = amount;
         emit ResolverFeeSet(msg.sender, templateId, amount);
     }
@@ -1200,12 +1095,10 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     /// @inheritdoc ITruthEngine
     function claimResolverFee(uint256 tocId) external nonReentrant {
         TOC storage toc = _tocs[tocId];
-        if (msg.sender != toc.resolver) {
-            revert NotResolverForToc(msg.sender, tocId);
-        }
+        if (msg.sender != toc.resolver) revert Unauthorized();
 
         uint256 amount = resolverFeeByToc[tocId];
-        if (amount == 0) revert NoResolverFee(tocId);
+        if (amount == 0) revert NoFeesToWithdraw();
 
         resolverFeeByToc[tocId] = 0;
 
@@ -1270,14 +1163,10 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         TOC storage toc = _tocs[tocId];
 
         // Must be fully finalized
-        if (toc.state != TOCState.RESOLVED) {
-            revert NotFullyFinalized(tocId);
-        }
+        if (toc.state != TOCState.RESOLVED) revert NotFinalized();
 
         // Post-resolution dispute window must have passed
-        if (toc.postDisputeDeadline > 0 && block.timestamp < toc.postDisputeDeadline) {
-            revert NotFullyFinalized(tocId);
-        }
+        if (toc.postDisputeDeadline > 0 && block.timestamp < toc.postDisputeDeadline) revert NotFinalized();
 
         DisputeInfo storage disputeInfo = _disputes[tocId];
 
@@ -1308,9 +1197,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         uint256 totalFee = protocolFee + resolverFee;
 
         // Check sufficient payment
-        if (msg.value < totalFee) {
-            revert InsufficientFee(msg.value, totalFee);
-        }
+        if (msg.value < totalFee) revert Insufficient();
 
         // Calculate TK share from protocol fee
         uint256 tkShare = (protocolFee * tkSharePercent[tier]) / 10000;
@@ -1334,32 +1221,15 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         emit CreationFeesCollected(tocId, protocolKeeps, tkShare, resolverFee);
     }
 
-    /// @notice Check if a bond is acceptable for resolution
-    function _isAcceptableResolutionBond(
+    /// @notice Check if a bond is acceptable for given type
+    function _isAcceptableBond(
+        BondType bondType,
         address token,
         uint256 amount
     ) internal view returns (bool) {
-        for (uint256 i = 0; i < _acceptableResolutionBonds.length; i++) {
-            if (
-                _acceptableResolutionBonds[i].token == token &&
-                amount >= _acceptableResolutionBonds[i].minAmount
-            ) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /// @notice Check if a bond is acceptable for dispute
-    function _isAcceptableDisputeBond(
-        address token,
-        uint256 amount
-    ) internal view returns (bool) {
-        for (uint256 i = 0; i < _acceptableDisputeBonds.length; i++) {
-            if (
-                _acceptableDisputeBonds[i].token == token &&
-                amount >= _acceptableDisputeBonds[i].minAmount
-            ) {
+        BondRequirement[] storage bonds = _acceptableBonds[bondType];
+        for (uint256 i = 0; i < bonds.length; i++) {
+            if (bonds[i].token == token && amount >= bonds[i].minAmount) {
                 return true;
             }
         }
@@ -1370,9 +1240,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     function _transferBondIn(address token, uint256 amount) internal {
         if (token == address(0)) {
             // Native token
-            if (msg.value < amount) {
-                revert InsufficientValue(msg.value, amount);
-            }
+            if (msg.value < amount) revert Insufficient();
         } else {
             // ERC20 token
             IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
@@ -1384,9 +1252,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
         if (token == address(0)) {
             // Native token
             (bool success, ) = to.call{value: amount}("");
-            if (!success) {
-                revert TransferFailed();
-            }
+            if (!success) revert TransferFailed();
         } else {
             // ERC20 token
             IERC20(token).safeTransfer(to, amount);
@@ -1425,17 +1291,6 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
 
         emit SlashingFeesCollected(tocId, protocolKeeps, tkShare);
         emit BondSlashed(tocId, loser, token, contractShare);
-    }
-
-    /// @notice Check if bond is acceptable for escalation
-    function _isAcceptableEscalationBond(address token, uint256 amount) internal view returns (bool) {
-        for (uint256 i = 0; i < _acceptableEscalationBonds.length; i++) {
-            if (_acceptableEscalationBonds[i].token == token &&
-                amount >= _acceptableEscalationBonds[i].minAmount) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /// @notice Calculate accountability tier for resolver + TK combination
