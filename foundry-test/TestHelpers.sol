@@ -15,12 +15,17 @@ abstract contract TestHelpers is Test {
     event TOCCreated(
         uint256 indexed tocId,
         address indexed resolver,
+        address indexed creator,
         ResolverTrust trust,
         uint32 templateId,
         AnswerType answerType,
         TOCState initialState,
-        address indexed truthKeeper,
-        AccountabilityTier tier
+        address truthKeeper,
+        AccountabilityTier tier,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow,
+        uint32 escalationWindow,
+        uint32 postResolutionWindow
     );
 
     event CreationFeesCollected(
@@ -47,13 +52,16 @@ abstract contract TestHelpers is Test {
     event TOCDisputed(
         uint256 indexed tocId,
         address indexed disputer,
-        string reason
+        string reason,
+        string evidenceURI
     );
 
     event PostResolutionDisputeFiled(
         uint256 indexed tocId,
         address indexed disputer,
-        string reason
+        string reason,
+        string evidenceURI,
+        bytes proposedResult
     );
 
     event DisputeBondDeposited(
@@ -198,12 +206,17 @@ abstract contract TestHelpers is Test {
         emit TOCCreated(
             nextIdBefore,
             params.resolver,
+            expected.expectedCreator,
             resolverTrust,
             params.templateId,
             expected.expectedAnswerType,
             expected.expectedState,
             params.truthKeeper,
-            expected.expectedTier
+            expected.expectedTier,
+            params.disputeWindow,
+            params.tkWindow,
+            params.escalationWindow,
+            params.postResolutionWindow
         );
 
         // Execute
@@ -357,10 +370,10 @@ abstract contract TestHelpers is Test {
         // Expect correct dispute event based on phase
         if (expected.expectedPhase == DisputePhase.POST_RESOLUTION) {
             vm.expectEmit(true, true, true, true);
-            emit PostResolutionDisputeFiled(params.tocId, expected.expectedDisputer, params.reason);
+            emit PostResolutionDisputeFiled(params.tocId, expected.expectedDisputer, params.reason, params.evidenceURI, params.proposedResult);
         } else {
             vm.expectEmit(true, true, true, true);
-            emit TOCDisputed(params.tocId, expected.expectedDisputer, params.reason);
+            emit TOCDisputed(params.tocId, expected.expectedDisputer, params.reason, params.evidenceURI);
         }
 
         // Execute

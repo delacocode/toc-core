@@ -48,8 +48,8 @@ contract PythPriceResolverV2Test is Test {
         truthKeeper = address(truthKeeperContract);
 
         // Configure registry
-        registry.addAcceptableResolutionBond(address(0), MIN_RESOLUTION_BOND);
-        registry.addAcceptableDisputeBond(address(0), MIN_DISPUTE_BOND);
+        registry.addAcceptableBond(BondType.RESOLUTION, address(0), MIN_RESOLUTION_BOND);
+        registry.addAcceptableBond(BondType.DISPUTE, address(0), MIN_DISPUTE_BOND);
         registry.addWhitelistedTruthKeeper(truthKeeper);
         registry.setProtocolFeeStandard(0.001 ether);
         registry.setTKSharePercent(AccountabilityTier.TK_GUARANTEED, 4000);

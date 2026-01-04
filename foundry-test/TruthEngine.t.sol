@@ -25,10 +25,10 @@ contract TruthEngineTest is Test {
     uint256 constant MIN_RESOLUTION_BOND = 0.1 ether;
     uint256 constant MIN_DISPUTE_BOND = 0.05 ether;
     uint256 constant MIN_ESCALATION_BOND = 0.15 ether;
-    uint256 constant DEFAULT_DISPUTE_WINDOW = 24 hours;
-    uint256 constant DEFAULT_TK_WINDOW = 24 hours;
-    uint256 constant DEFAULT_ESCALATION_WINDOW = 24 hours; // Max for RESOLVER trust level is 1 day
-    uint256 constant DEFAULT_POST_RESOLUTION_WINDOW = 24 hours;
+    uint32 constant DEFAULT_DISPUTE_WINDOW = 24 hours;
+    uint32 constant DEFAULT_TK_WINDOW = 24 hours;
+    uint32 constant DEFAULT_ESCALATION_WINDOW = 24 hours; // Max for RESOLVER trust level is 1 day
+    uint32 constant DEFAULT_POST_RESOLUTION_WINDOW = 24 hours;
 
     address truthKeeper;
 
@@ -54,11 +54,11 @@ contract TruthEngineTest is Test {
         bondToken = new MockERC20("Test Token", "TEST", 18);
 
         // Configure acceptable bonds
-        registry.addAcceptableResolutionBond(address(0), MIN_RESOLUTION_BOND); // ETH
-        registry.addAcceptableDisputeBond(address(0), MIN_DISPUTE_BOND); // ETH
-        registry.addAcceptableEscalationBond(address(0), MIN_ESCALATION_BOND); // ETH
-        registry.addAcceptableResolutionBond(address(bondToken), MIN_RESOLUTION_BOND);
-        registry.addAcceptableDisputeBond(address(bondToken), MIN_DISPUTE_BOND);
+        registry.addAcceptableBond(BondType.RESOLUTION, address(0), MIN_RESOLUTION_BOND); // ETH
+        registry.addAcceptableBond(BondType.DISPUTE, address(0), MIN_DISPUTE_BOND); // ETH
+        registry.addAcceptableBond(BondType.ESCALATION, address(0), MIN_ESCALATION_BOND); // ETH
+        registry.addAcceptableBond(BondType.RESOLUTION, address(bondToken), MIN_RESOLUTION_BOND);
+        registry.addAcceptableBond(BondType.DISPUTE, address(bondToken), MIN_DISPUTE_BOND);
 
         // Whitelist TruthKeeper
         registry.addWhitelistedTruthKeeper(truthKeeper);
@@ -674,19 +674,19 @@ contract TruthEngineTest is Test {
 
     function test_BondValidation() public {
         // ETH bond should be acceptable
-        bool ethAcceptable = registry.isAcceptableResolutionBond(address(0), MIN_RESOLUTION_BOND);
+        bool ethAcceptable = registry.isAcceptableBond(BondType.RESOLUTION, address(0), MIN_RESOLUTION_BOND);
         require(ethAcceptable, "ETH bond should be acceptable");
 
         // Below minimum should not be acceptable
-        bool belowMin = registry.isAcceptableResolutionBond(address(0), 0.01 ether);
+        bool belowMin = registry.isAcceptableBond(BondType.RESOLUTION, address(0), 0.01 ether);
         require(!belowMin, "Below minimum should not be acceptable");
 
         // Token bond should be acceptable
-        bool tokenAcceptable = registry.isAcceptableResolutionBond(address(bondToken), MIN_RESOLUTION_BOND);
+        bool tokenAcceptable = registry.isAcceptableBond(BondType.RESOLUTION, address(bondToken), MIN_RESOLUTION_BOND);
         require(tokenAcceptable, "Token bond should be acceptable");
 
         // Unknown token should not be acceptable
-        bool unknownToken = registry.isAcceptableResolutionBond(address(0x123), MIN_RESOLUTION_BOND);
+        bool unknownToken = registry.isAcceptableBond(BondType.RESOLUTION, address(0x123), MIN_RESOLUTION_BOND);
         require(!unknownToken, "Unknown token should not be acceptable");
     }
 
@@ -719,8 +719,8 @@ contract TruthEngineTest is Test {
     function test_CreateTOCWithCustomDisputeWindows() public {
         registry.registerResolver(address(resolver));
 
-        uint256 customDisputeWindow = 12 hours;
-        uint256 customPostResolutionWindow = 18 hours; // Max for RESOLVER trust level is 1 day
+        uint32 customDisputeWindow = 12 hours;
+        uint32 customPostResolutionWindow = 18 hours; // Max for RESOLVER trust level is 1 day
 
         uint256 tocId = registry.createTOC{value: 0.001 ether}(
             address(resolver),

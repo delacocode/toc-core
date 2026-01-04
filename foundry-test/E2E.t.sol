@@ -39,10 +39,10 @@ contract E2ETest is Test {
     uint256 constant PYTH_FEE = 1 wei;
 
     // Note: RESOLVER trust level has MAX_WINDOW_RESOLVER = 1 day
-    uint256 constant DEFAULT_DISPUTE_WINDOW = 12 hours;
-    uint256 constant DEFAULT_TK_WINDOW = 12 hours;
-    uint256 constant DEFAULT_ESCALATION_WINDOW = 12 hours;
-    uint256 constant DEFAULT_POST_RESOLUTION_WINDOW = 12 hours;
+    uint32 constant DEFAULT_DISPUTE_WINDOW = 12 hours;
+    uint32 constant DEFAULT_TK_WINDOW = 12 hours;
+    uint32 constant DEFAULT_ESCALATION_WINDOW = 12 hours;
+    uint32 constant DEFAULT_POST_RESOLUTION_WINDOW = 12 hours;
 
     // Pyth price feed IDs
     bytes32 constant BTC_USD = bytes32(uint256(1));
@@ -81,8 +81,8 @@ contract E2ETest is Test {
         truthKeeper = address(truthKeeperContract);
 
         // 6. Configure registry bonds and fees
-        registry.addAcceptableResolutionBond(address(0), MIN_RESOLUTION_BOND);
-        registry.addAcceptableDisputeBond(address(0), MIN_DISPUTE_BOND);
+        registry.addAcceptableBond(BondType.RESOLUTION, address(0), MIN_RESOLUTION_BOND);
+        registry.addAcceptableBond(BondType.DISPUTE, address(0), MIN_DISPUTE_BOND);
         registry.setProtocolFeeStandard(PROTOCOL_FEE);
         registry.setTKSharePercent(AccountabilityTier.TK_GUARANTEED, 4000); // 40%
         registry.setTKSharePercent(AccountabilityTier.SYSTEM, 6000); // 60%
