@@ -1,0 +1,11 @@
+{
+  "chainId": 11155111,
+  "network": "sepolia",
+  "contracts": {
+    "TruthEngine": "0x742f649b5c9c14F8E4af122980F752a612B91e39",
+    "OptimisticResolver": "0xC4C85FFD481E8D716c80a4FE2959CDC8C66aBbA5",
+    "PythPriceResolver": "0xA3d5165c83d501a829502CDc5A05f67Ed0A48B54",
+    "SimpleTruthKeeper": "0x3df4eAADCED2EebC68d2F219002a9e6e7C5Cec89"
+  },
+  "deployedAt": "2025-01-04"
+}

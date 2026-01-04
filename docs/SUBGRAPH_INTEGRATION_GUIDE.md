@@ -297,7 +297,7 @@ event BondSlashed(
 ```graphql
 # Acceptable bond added to the system
 event AcceptableBondAdded(
-    string bondType,             # "RESOLUTION" | "DISPUTE" | "ESCALATION"
+    BondType indexed bondType,   # RESOLUTION(0) | DISPUTE(1) | ESCALATION(2)
     address indexed token,
     uint256 minAmount
 )
@@ -1017,7 +1017,7 @@ dataSources:
           handler: handleTruthKeeperSoftRejected
 
         # TOC lifecycle events
-        - event: TOCCreated(indexed uint256,indexed address,uint8,uint32,uint8,uint8,indexed address,uint8)
+        - event: TOCCreated(indexed uint256,indexed address,indexed address,uint8,uint32,uint8,uint8,address,uint8,uint32,uint32,uint32,uint32)
           handler: handleTOCCreated
         - event: TOCApproved(indexed uint256)
           handler: handleTOCApproved
@@ -1073,7 +1073,7 @@ dataSources:
           handler: handleBondSlashed
 
         # Configuration events
-        - event: AcceptableBondAdded(string,indexed address,uint256)
+        - event: AcceptableBondAdded(indexed uint8,indexed address,uint256)
           handler: handleAcceptableBondAdded
         - event: DefaultDisputeWindowChanged(uint256,uint256)
           handler: handleDefaultDisputeWindowChanged
@@ -1238,12 +1238,12 @@ export function handleTOCCreated(event: TOCCreated): void {
   toc.createdAt = event.block.timestamp
   toc.hasCorrectedResult = false
 
-  // Will be populated from contract call or other events
-  toc.creator = Address.zero()
-  toc.disputeWindow = BigInt.zero()
-  toc.truthKeeperWindow = BigInt.zero()
-  toc.escalationWindow = BigInt.zero()
-  toc.postResolutionWindow = BigInt.zero()
+  // Now available directly from event (no contract call needed)
+  toc.creator = event.params.creator
+  toc.disputeWindow = BigInt.fromI32(event.params.disputeWindow)
+  toc.truthKeeperWindow = BigInt.fromI32(event.params.truthKeeperWindow)
+  toc.escalationWindow = BigInt.fromI32(event.params.escalationWindow)
+  toc.postResolutionWindow = BigInt.fromI32(event.params.postResolutionWindow)
 
   toc.save()
 
@@ -1542,8 +1542,8 @@ The following events have been implemented to complete the coverage:
    - Emitted in `resolveEscalation()` when returning bonds
 
 3. **AcceptableBondAdded** ✅ - Now emitted when bond configurations are updated
-   - Emitted in `addAcceptableResolutionBond()`, `addAcceptableDisputeBond()`, `addAcceptableEscalationBond()`
-   - Includes bondType field ("RESOLUTION", "DISPUTE", or "ESCALATION")
+   - Emitted in `addAcceptableBond(BondType, token, amount)`
+   - BondType enum: RESOLUTION(0), DISPUTE(1), ESCALATION(2)
 
 4. **DefaultDisputeWindowChanged** ✅ - Now emitted when default dispute window is updated
    - Emitted in `setDefaultDisputeWindow()` with old and new values
