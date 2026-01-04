@@ -26,6 +26,9 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
     /// @notice Maximum question/description length (8KB, matching UMA)
     uint256 public constant MAX_TEXT_LENGTH = 8192;
 
+    /// @notice Maximum number of clarifications per TOC
+    uint256 public constant MAX_CLARIFICATIONS = 10;
+
     // ============ Immutables ============
 
     ITruthEngine public immutable registry;
@@ -130,6 +133,7 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
     error EmptyQuestion();
     error ClarificationNotPending(uint256 tocId, uint256 clarificationId);
     error NotOwner(address caller);
+    error MaxClarificationsReached(uint256 tocId);
 
     // ============ Modifiers ============
 
@@ -281,6 +285,11 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
             revert CannotClarifyAfterResolution(toc.state);
         }
 
+        // Check max clarifications
+        if (_clarifications[tocId].length >= MAX_CLARIFICATIONS) {
+            revert MaxClarificationsReached(tocId);
+        }
+
         // Assign clarification ID
         clarificationId = _nextClarificationId[tocId]++;
 
@@ -306,6 +315,11 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
     function approveClarification(uint256 tocId, uint256 clarificationId) external onlyOwner {
         if (!_isPending[tocId][clarificationId]) {
             revert ClarificationNotPending(tocId, clarificationId);
+        }
+
+        // Check max clarifications
+        if (_clarifications[tocId].length >= MAX_CLARIFICATIONS) {
+            revert MaxClarificationsReached(tocId);
         }
 
         string memory text = _pendingClarifications[tocId][clarificationId];
@@ -393,6 +407,11 @@ contract OptimisticResolver is ITOCResolver, IClarifiable {
         }
         if (toc.state != TOCState.ACTIVE && toc.state != TOCState.PENDING) {
             revert CannotClarifyAfterResolution(toc.state);
+        }
+
+        // Check max clarifications
+        if (_clarifications[tocId].length >= MAX_CLARIFICATIONS) {
+            revert MaxClarificationsReached(tocId);
         }
 
         uint256 clarificationId = _nextClarificationId[tocId]++;

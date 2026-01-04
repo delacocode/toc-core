@@ -936,6 +936,7 @@ contract PythPriceResolverV2 is ITOCResolver {
         TouchedBothPayload memory p = abi.decode(payload, (TouchedBothPayload));
 
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
+        if (p.targetA == p.targetB) revert InvalidBounds();
 
         emit TouchedBothTOCCreated(tocId, p.priceId, p.targetA, p.targetB, p.deadline);
     }
@@ -1848,6 +1849,7 @@ contract PythPriceResolverV2 is ITOCResolver {
         FirstToTargetPayload memory p = abi.decode(payload, (FirstToTargetPayload));
 
         if (p.deadline <= block.timestamp) revert DeadlineInPast();
+        if (p.targetA == p.targetB) revert InvalidBounds();
 
         emit FirstToTargetTOCCreated(tocId, p.priceId, p.targetA, p.targetB, p.deadline);
     }

@@ -718,7 +718,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
             }
         }
 
-        emit EscalationResolved(tocId, resolution, msg.sender);
+        emit EscalationResolved(tocId, resolution, msg.sender, correctedResult);
     }
 
     /// @inheritdoc ITruthEngine
@@ -1022,6 +1022,20 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     /// @inheritdoc ITruthEngine
     function isWhitelistedTruthKeeper(address tk) external view returns (bool) {
         return _whitelistedTruthKeepers.contains(tk);
+    }
+
+    /// @inheritdoc ITruthEngine
+    function canDispute(uint256 tocId) external view returns (bool) {
+        TOC storage toc = _tocs[tocId];
+        if (toc.state == TOCState.RESOLVING && block.timestamp < toc.disputeDeadline) return true;
+        if (toc.state == TOCState.RESOLVED && toc.postDisputeDeadline > 0 && block.timestamp < toc.postDisputeDeadline) return true;
+        return false;
+    }
+
+    /// @inheritdoc ITruthEngine
+    function canFinalize(uint256 tocId) external view returns (bool) {
+        TOC storage toc = _tocs[tocId];
+        return toc.state == TOCState.RESOLVING && block.timestamp >= toc.disputeDeadline && _disputes[tocId].disputer == address(0);
     }
 
     /// @inheritdoc ITruthEngine

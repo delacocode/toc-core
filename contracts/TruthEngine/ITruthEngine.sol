@@ -94,7 +94,8 @@ interface ITruthEngine {
     event EscalationResolved(
         uint256 indexed tocId,
         DisputeResolution resolution,
-        address indexed admin
+        address indexed admin,
+        bytes correctedResult
     );
 
     // Bonds
@@ -454,6 +455,16 @@ interface ITruthEngine {
     /// @param tk Address to check
     /// @return True if whitelisted
     function isWhitelistedTruthKeeper(address tk) external view returns (bool);
+
+    /// @notice Check if a TOC can currently be disputed
+    /// @param tocId The TOC identifier
+    /// @return True if dispute is possible
+    function canDispute(uint256 tocId) external view returns (bool);
+
+    /// @notice Check if a TOC can currently be finalized
+    /// @param tocId The TOC identifier
+    /// @return True if finalization is possible
+    function canFinalize(uint256 tocId) external view returns (bool);
 
     /// @notice Get escalation info for a TOC
     /// @param tocId The TOC identifier
