@@ -182,13 +182,15 @@ async function main() {
     process.exit(1);
   }
 
-  // Fetch Pyth price update data
+  // Fetch Pyth price update data at the deadline timestamp
   console.log("\n📡 Fetching Pyth price data from Hermes...");
+  const targetTimestamp = Number(deadline);
+  console.log(`   Target timestamp: ${new Date(targetTimestamp * 1000).toLocaleString()}`);
+
   let updateDataBase64: string[];
   try {
-    // Try fetching latest price first (more reliable)
-    // The resolver will validate if it's within acceptable time range
-    updateDataBase64 = await fetchPythUpdateData(priceId);
+    // Fetch price at the deadline timestamp (resolver requires price within 5 seconds of deadline)
+    updateDataBase64 = await fetchPythUpdateData(priceId, targetTimestamp);
     console.log(`   Received ${updateDataBase64.length} price update(s)`);
   } catch (error: any) {
     console.error("Failed to fetch Pyth data:", error.message);
