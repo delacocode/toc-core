@@ -207,6 +207,7 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
 
     /// @inheritdoc ITruthEngine
     function setTreasury(address _treasury) external onlyOwner nonReentrant {
+        if (_treasury == address(0)) revert InvalidAddress();
         treasury = _treasury;
         emit TreasurySet(_treasury);
     }
@@ -1027,6 +1028,8 @@ contract TruthEngine is ITruthEngine, ReentrancyGuard, Ownable {
     /// @inheritdoc ITruthEngine
     function canDispute(uint256 tocId) external view returns (bool) {
         TOC storage toc = _tocs[tocId];
+        // Already has an active dispute
+        if (_disputes[tocId].disputer != address(0)) return false;
         if (toc.state == TOCState.RESOLVING && block.timestamp < toc.disputeDeadline) return true;
         if (toc.state == TOCState.RESOLVED && toc.postDisputeDeadline > 0 && block.timestamp < toc.postDisputeDeadline) return true;
         return false;

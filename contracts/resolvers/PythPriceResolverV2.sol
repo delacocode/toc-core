@@ -347,6 +347,7 @@ contract PythPriceResolverV2 is ITOCResolver {
     error InvalidReferenceTimestamp(uint256 expected, uint256 actual);
     error InvalidTimeRange();
     error ReferencePriceNotSet(uint256 tocId);
+    error OnlyCreator();
 
     // ============ Modifiers ============
 
@@ -566,6 +567,12 @@ contract PythPriceResolverV2 is ITOCResolver {
             revert TocNotManaged(tocId);
         }
 
+        // Only TOC creator can set reference price
+        TOC memory toc = registry.getTOC(tocId);
+        if (msg.sender != toc.creator) {
+            revert OnlyCreator();
+        }
+
         // Check if reference price is already set
         if (_referencePrice[tocId].isSet) {
             revert ReferencePriceAlreadySet(tocId);
@@ -660,6 +667,12 @@ contract PythPriceResolverV2 is ITOCResolver {
         uint32 templateId = _tocTemplates[tocId];
         if (templateId == TEMPLATE_NONE) {
             revert TocNotManaged(tocId);
+        }
+
+        // Only TOC creator can set reference prices
+        TOC memory toc = registry.getTOC(tocId);
+        if (msg.sender != toc.creator) {
+            revert OnlyCreator();
         }
 
         // Check if reference prices are already set
