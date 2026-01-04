@@ -6,19 +6,19 @@
     "bonds": {
       "resolution": {
         "token": "0x0000000000000000000000000000000000000000",
-        "minAmount": "10000000000000000"
+        "minAmount": "1000000000000000"
       },
       "dispute": {
         "token": "0x0000000000000000000000000000000000000000",
-        "minAmount": "5000000000000000"
+        "minAmount": "500000000000000"
       },
       "escalation": {
         "token": "0x0000000000000000000000000000000000000000",
-        "minAmount": "15000000000000000"
+        "minAmount": "1500000000000000"
       }
     },
     "fees": {
-      "protocolFeeStandard": "100000000000000",
+      "protocolFeeStandard": "10000000000000",
       "tkSharePercent": {
         "TK_GUARANTEED": 4000,
         "SYSTEM": 6000
