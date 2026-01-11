@@ -51,20 +51,21 @@ enum AccountabilityTier {
 
 /// @notice Core TOC data
 struct TOC {
-    address resolver;
-    TOCState state;
-    AnswerType answerType;
-    uint256 resolutionTime;
-    uint256 disputeWindow;
-    uint256 truthKeeperWindow;
-    uint256 escalationWindow;
-    uint256 postResolutionWindow;
-    uint256 disputeDeadline;
-    uint256 truthKeeperDeadline;
-    uint256 escalationDeadline;
-    uint256 postDisputeDeadline;
-    address truthKeeper;
-    AccountabilityTier tierAtCreation;
+    address creator;                // Who created this TOC
+    address resolver;               // Which resolver manages this TOC
+    TOCState state;                 // Current state
+    AnswerType answerType;          // Type of answer this TOC will return
+    uint256 resolutionTime;         // Timestamp when resolved
+    uint256 disputeWindow;          // Time to dispute initial proposal
+    uint256 truthKeeperWindow;      // Time for TruthKeeper to decide
+    uint256 escalationWindow;       // Time to challenge TruthKeeper decision
+    uint256 postResolutionWindow;   // Time to dispute after RESOLVED
+    uint256 disputeDeadline;        // End of pre-resolution dispute window
+    uint256 truthKeeperDeadline;    // End of TruthKeeper decision window
+    uint256 escalationDeadline;     // End of escalation window
+    uint256 postDisputeDeadline;    // End of post-resolution dispute window
+    address truthKeeper;            // Assigned TruthKeeper for this TOC
+    AccountabilityTier tierAtCreation; // Immutable snapshot of tier
 }
 
 /// @notice Result with full resolution context for consumers
@@ -123,10 +124,10 @@ interface ITruthEngine {
         address resolver,
         uint32 templateId,
         bytes calldata payload,
-        uint256 disputeWindow,
-        uint256 truthKeeperWindow,
-        uint256 escalationWindow,
-        uint256 postResolutionWindow,
+        uint32 disputeWindow,
+        uint32 truthKeeperWindow,
+        uint32 escalationWindow,
+        uint32 postResolutionWindow,
         address truthKeeper
     ) external payable returns (uint256 tocId);
 
@@ -156,6 +157,12 @@ interface ITruthEngine {
     /// @param tocId The TOC identifier
     /// @return question The formatted question
     function getTocQuestion(uint256 tocId) external view returns (string memory question);
+
+    /// @notice Get template ID and creation payload (proxied to resolver)
+    /// @param tocId The TOC identifier
+    /// @return templateId The template ID used to create this TOC
+    /// @return creationPayload The original ABI-encoded payload
+    function getTocDetails(uint256 tocId) external view returns (uint32 templateId, bytes memory creationPayload);
 
     /// @notice Check if a TOC is fully finalized (resolved + all windows closed)
     /// @param tocId The TOC identifier
