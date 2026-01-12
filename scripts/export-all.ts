@@ -156,7 +156,7 @@ function generatePythPriceIdsCode(): string {
     "Major Cryptocurrencies": ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "DOGE/USD", "LTC/USD", "BCH/USD", "ZEC/USD"],
     "L1 & L2 Tokens": ["AVAX/USD", "NEAR/USD", "ATOM/USD", "SUI/USD", "APT/USD", "SEI/USD", "TIA/USD", "INJ/USD", "ARB/USD", "OP/USD"],
     "DeFi Tokens": ["LINK/USD", "UNI/USD", "AAVE/USD", "JUP/USD", "PYTH/USD"],
-    "Meme Coins": ["PEPE/USD", "WIF/USD", "BONK/USD", "DEGEN/USD", "WLD/USD"],
+    "Meme Coins": ["PEPE/USD", "WIF/USD", "BONK/USD", "DEGEN/USD", "WLD/USD", "TOSHI/USD"],
     "Stablecoins": ["USDC/USD", "USDT/USD"],
     "US Equities": ["AAPL/USD", "TSLA/USD", "NVDA/USD", "AMZN/USD", "GOOGL/USD", "MSFT/USD", "META/USD", "AMD/USD", "COIN/USD", "MSTR/USD", "GME/USD", "AMC/USD", "SPY/USD", "QQQ/USD"],
     "Forex": ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD", "USD/CHF"],
