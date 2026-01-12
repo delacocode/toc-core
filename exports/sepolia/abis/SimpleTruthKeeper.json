@@ -1,528 +1,539 @@
-{
-  "_format": "hh3-artifact-1",
-  "contractName": "SimpleTruthKeeper",
-  "sourceName": "contracts/SimpleTruthKeeper.sol",
-  "abi": [
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "_registry",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "_owner",
-          "type": "address"
-        },
-        {
-          "internalType": "uint32",
-          "name": "_defaultMinDisputeWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "_defaultMinTruthKeeperWindow",
-          "type": "uint32"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "constructor"
-    },
-    {
-      "inputs": [],
-      "name": "OnlyOwner",
-      "type": "error"
-    },
-    {
-      "inputs": [],
-      "name": "OnlyRegistry",
-      "type": "error"
-    },
-    {
-      "inputs": [],
-      "name": "ZeroAddress",
-      "type": "error"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "tkWindow",
-          "type": "uint32"
-        }
-      ],
-      "name": "DefaultMinWindowsChanged",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "oldOwner",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "newOwner",
-          "type": "address"
-        }
-      ],
-      "name": "OwnershipTransferred",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "oldRegistry",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "newRegistry",
-          "type": "address"
-        }
-      ],
-      "name": "RegistryUpdated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "bool",
-          "name": "allowed",
-          "type": "bool"
-        }
-      ],
-      "name": "ResolverAllowedChanged",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "tkWindow",
-          "type": "uint32"
-        }
-      ],
-      "name": "ResolverMinWindowsChanged",
-      "type": "event"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "allowedResolvers",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        },
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        },
-        {
-          "internalType": "bytes",
-          "name": "",
-          "type": "bytes"
-        },
-        {
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "truthKeeperWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        }
-      ],
-      "name": "canAcceptToc",
-      "outputs": [
-        {
-          "internalType": "enum TKApprovalResponse",
-          "name": "",
-          "type": "uint8"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "defaultMinDisputeWindow",
-      "outputs": [
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "defaultMinTruthKeeperWindow",
-      "outputs": [
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        }
-      ],
-      "name": "getEffectiveMinWindows",
-      "outputs": [
-        {
-          "internalType": "uint32",
-          "name": "minDisputeWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "minTkWindow",
-          "type": "uint32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        }
-      ],
-      "name": "isResolverAllowed",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "allowed",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        },
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        },
-        {
-          "internalType": "bytes",
-          "name": "",
-          "type": "bytes"
-        },
-        {
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "truthKeeperWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        }
-      ],
-      "name": "onTocAssigned",
-      "outputs": [
-        {
-          "internalType": "enum TKApprovalResponse",
-          "name": "",
-          "type": "uint8"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "owner",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "registry",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "resolverMinDisputeWindow",
-      "outputs": [
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "resolverMinTruthKeeperWindow",
-      "outputs": [
-        {
-          "internalType": "uint32",
-          "name": "",
-          "type": "uint32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "tkWindow",
-          "type": "uint32"
-        }
-      ],
-      "name": "setDefaultMinWindows",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "newRegistry",
-          "type": "address"
-        }
-      ],
-      "name": "setRegistry",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "bool",
-          "name": "allowed",
-          "type": "bool"
-        }
-      ],
-      "name": "setResolverAllowed",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "tkWindow",
-          "type": "uint32"
-        }
-      ],
-      "name": "setResolverMinWindows",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address[]",
-          "name": "resolvers",
-          "type": "address[]"
-        },
-        {
-          "internalType": "bool",
-          "name": "allowed",
-          "type": "bool"
-        }
-      ],
-      "name": "setResolversAllowed",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "newOwner",
-          "type": "address"
-        }
-      ],
-      "name": "transferOwnership",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "stateMutability": "payable",
-      "type": "receive"
-    }
-  ],
-  "bytecode": "0x6080346100e857601f610b3038819003918201601f19168301916001600160401b038311848410176100ec578084926080946040528339810103126100e85761004781610100565b9061005460208201610100565b61006c606061006560408501610114565b9301610114565b926001600160a01b03169081156100d9576001600160a01b03169283156100d9576001549360018060a01b03195f5416175f5563ffffffff60c01b9060c01b169263ffffffff60e01b16179063ffffffff60a01b9060a01b161717600155604051610a0a90816101268239f35b63d92e233d60e01b5f5260045ffd5b5f80fd5b634e487b7160e01b5f52604160045260245ffd5b51906001600160a01b03821682036100e857565b519063ffffffff821682036100e85756fe6080604052600436101561001a575b3615610018575f80fd5b005b5f3560e01c8063218acf8f1461078857806329b683d1146106de57806331069f551461064857806336d932b41461060a5780634a63c481146105cc578063527fb11c1461053f578063546766ba146103ad57806378ad1dcf146104395780637b103999146104115780638da5cb5b146103ea5780638fa17260146103ad578063a3842c09146102e0578063a91ee0dc14610264578063b8eece1f1461023e578063f2fde38b146101ba578063f69acb64146101945763f7eaf0060361000e57346101905760403660031901126101905760043563ffffffff8116810361019057610102610864565b5f546001600160a01b03163303610181576001805467ffffffffffffffff60a01b191660a084901b63ffffffff60a01b161760c083901b63ffffffff60c01b161790556040805163ffffffff93841681529290911660208301527ff15e6cbb0525cdf3e6b489fdc3e9fff0d2d887c5dcbfd03e7a7c1c499f88fd1b91a1005b635fc483c560e01b5f5260045ffd5b5f80fd5b34610190575f36600319011261019057602063ffffffff60015460a01c16604051908152f35b34610190576020366003190112610190576101d36107c2565b5f54906001600160a01b0382169033829003610181576001600160a01b031691821561022f576001600160a01b03191682175f9081557f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09080a3005b63d92e233d60e01b5f5260045ffd5b34610190575f36600319011261019057602063ffffffff60015460c01c16604051908152f35b346101905760203660031901126101905761027d6107c2565b5f546001600160a01b03163303610181576001600160a01b0316801561022f57600180546001600160a01b0319811683179091556001600160a01b03167f482b97c53e48ffa324a976e2738053e9aff6eee04d8aac63b10e19411d869b825f80a3005b34610190576060366003190112610190576102f96107c2565b610301610864565b9061030a610804565b5f546001600160a01b03163303610181577f0c61da6ebb8fe2171a9418ce935cef83cc89675788ba4d5a49eba0f879488e5d9160018060a01b031692835f52600360205260405f2063ffffffff821663ffffffff19825416179055835f52600460205260405f2063ffffffff831663ffffffff198254161790556103a86040519283928390929163ffffffff60209181604085019616845216910152565b0390a2005b34610190576020366003190112610190576001600160a01b036103ce6107c2565b165f526002602052602060ff60405f2054166040519015158152f35b34610190575f366003190112610190575f546040516001600160a01b039091168152602090f35b34610190575f366003190112610190576001546040516001600160a01b039091168152602090f35b346101905760403660031901126101905760043567ffffffffffffffff8111610190573660238201121561019057806004013567ffffffffffffffff8111610190576024820191602436918360051b010111610190576104976108cc565b5f549091906001600160a01b031633036101815790801515905f5b8381106104bb57005b6001906001600160a01b036104d96104d483888a61093f565b610963565b165f5260026020526104fa8360405f209060ff801983541691151516179055565b818060a01b0361050e6104d483888a61093f565b167f859fc002fe287933e1df87080f7a468fdf93b68ce9ea1ca1011afce0fe208bce6020604051878152a2016104b2565b34610190576040366003190112610190576105586107c2565b6105606108cc565b5f549091906001600160a01b031633036101815760207f859fc002fe287933e1df87080f7a468fdf93b68ce9ea1ca1011afce0fe208bce9160018060a01b031692835f52600282526105c18160405f209060ff801983541691151516179055565b6040519015158152a2005b34610190576020366003190112610190576001600160a01b036105ed6107c2565b165f526004602052602063ffffffff60405f205416604051908152f35b34610190576020366003190112610190576001600160a01b0361062b6107c2565b165f526003602052602063ffffffff60405f205416604051908152f35b3461019057610100366003190112610190576106626107c2565b61066a610864565b506106736107ee565b5060643567ffffffffffffffff811161019057610694903690600401610877565b505060843563ffffffff81168103610190576106da916106ce916106b6610817565b916106bf61082a565b506106c861083d565b50610977565b604051918291826108a5565b0390f35b3461019057610120366003190112610190576024356001600160a01b03811681036101905761070b610804565b506107146107d8565b5060843567ffffffffffffffff811161019057610735903690600401610877565b505061073f610817565b9061074861082a565b61075061083d565b50610759610850565b506001546001600160a01b03163303610779576106da926106ce92610977565b6310f5403960e31b5f5260045ffd5b34610190576020366003190112610190576107a96107a46107c2565b6108db565b6040805163ffffffff9384168152919092166020820152f35b600435906001600160a01b038216820361019057565b606435906001600160a01b038216820361019057565b604435906001600160a01b038216820361019057565b6044359063ffffffff8216820361019057565b60a4359063ffffffff8216820361019057565b60c4359063ffffffff8216820361019057565b60e4359063ffffffff8216820361019057565b610104359063ffffffff8216820361019057565b6024359063ffffffff8216820361019057565b9181601f840112156101905782359167ffffffffffffffff8311610190576020838186019501011161019057565b9190602083019260038210156108b85752565b634e487b7160e01b5f52602160045260245ffd5b60243590811515820361019057565b6001600160a01b03165f8181526003602052604090205463ffffffff169190821561092c575b5f52600460205263ffffffff60405f20541690811561091c57565b60015460c01c63ffffffff169150565b60015460a01c63ffffffff169250610901565b919081101561094f5760051b0190565b634e487b7160e01b5f52603260045260245ffd5b356001600160a01b03811681036101905790565b9060018060a01b0382165f52600260205260ff60405f205416156109cc5763ffffffff6109a481936108db565b93169116106109c55763ffffffff8091169116106109c0575f90565b600190565b5050600190565b50505060019056fea264697066735822122087f67d05b60a4a27871e5de3219e9e23f6783051422aa0287b2a39d6617eee0964736f6c634300081d0033",
-  "deployedBytecode": "0x6080604052600436101561001a575b3615610018575f80fd5b005b5f3560e01c8063218acf8f1461078857806329b683d1146106de57806331069f551461064857806336d932b41461060a5780634a63c481146105cc578063527fb11c1461053f578063546766ba146103ad57806378ad1dcf146104395780637b103999146104115780638da5cb5b146103ea5780638fa17260146103ad578063a3842c09146102e0578063a91ee0dc14610264578063b8eece1f1461023e578063f2fde38b146101ba578063f69acb64146101945763f7eaf0060361000e57346101905760403660031901126101905760043563ffffffff8116810361019057610102610864565b5f546001600160a01b03163303610181576001805467ffffffffffffffff60a01b191660a084901b63ffffffff60a01b161760c083901b63ffffffff60c01b161790556040805163ffffffff93841681529290911660208301527ff15e6cbb0525cdf3e6b489fdc3e9fff0d2d887c5dcbfd03e7a7c1c499f88fd1b91a1005b635fc483c560e01b5f5260045ffd5b5f80fd5b34610190575f36600319011261019057602063ffffffff60015460a01c16604051908152f35b34610190576020366003190112610190576101d36107c2565b5f54906001600160a01b0382169033829003610181576001600160a01b031691821561022f576001600160a01b03191682175f9081557f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09080a3005b63d92e233d60e01b5f5260045ffd5b34610190575f36600319011261019057602063ffffffff60015460c01c16604051908152f35b346101905760203660031901126101905761027d6107c2565b5f546001600160a01b03163303610181576001600160a01b0316801561022f57600180546001600160a01b0319811683179091556001600160a01b03167f482b97c53e48ffa324a976e2738053e9aff6eee04d8aac63b10e19411d869b825f80a3005b34610190576060366003190112610190576102f96107c2565b610301610864565b9061030a610804565b5f546001600160a01b03163303610181577f0c61da6ebb8fe2171a9418ce935cef83cc89675788ba4d5a49eba0f879488e5d9160018060a01b031692835f52600360205260405f2063ffffffff821663ffffffff19825416179055835f52600460205260405f2063ffffffff831663ffffffff198254161790556103a86040519283928390929163ffffffff60209181604085019616845216910152565b0390a2005b34610190576020366003190112610190576001600160a01b036103ce6107c2565b165f526002602052602060ff60405f2054166040519015158152f35b34610190575f366003190112610190575f546040516001600160a01b039091168152602090f35b34610190575f366003190112610190576001546040516001600160a01b039091168152602090f35b346101905760403660031901126101905760043567ffffffffffffffff8111610190573660238201121561019057806004013567ffffffffffffffff8111610190576024820191602436918360051b010111610190576104976108cc565b5f549091906001600160a01b031633036101815790801515905f5b8381106104bb57005b6001906001600160a01b036104d96104d483888a61093f565b610963565b165f5260026020526104fa8360405f209060ff801983541691151516179055565b818060a01b0361050e6104d483888a61093f565b167f859fc002fe287933e1df87080f7a468fdf93b68ce9ea1ca1011afce0fe208bce6020604051878152a2016104b2565b34610190576040366003190112610190576105586107c2565b6105606108cc565b5f549091906001600160a01b031633036101815760207f859fc002fe287933e1df87080f7a468fdf93b68ce9ea1ca1011afce0fe208bce9160018060a01b031692835f52600282526105c18160405f209060ff801983541691151516179055565b6040519015158152a2005b34610190576020366003190112610190576001600160a01b036105ed6107c2565b165f526004602052602063ffffffff60405f205416604051908152f35b34610190576020366003190112610190576001600160a01b0361062b6107c2565b165f526003602052602063ffffffff60405f205416604051908152f35b3461019057610100366003190112610190576106626107c2565b61066a610864565b506106736107ee565b5060643567ffffffffffffffff811161019057610694903690600401610877565b505060843563ffffffff81168103610190576106da916106ce916106b6610817565b916106bf61082a565b506106c861083d565b50610977565b604051918291826108a5565b0390f35b3461019057610120366003190112610190576024356001600160a01b03811681036101905761070b610804565b506107146107d8565b5060843567ffffffffffffffff811161019057610735903690600401610877565b505061073f610817565b9061074861082a565b61075061083d565b50610759610850565b506001546001600160a01b03163303610779576106da926106ce92610977565b6310f5403960e31b5f5260045ffd5b34610190576020366003190112610190576107a96107a46107c2565b6108db565b6040805163ffffffff9384168152919092166020820152f35b600435906001600160a01b038216820361019057565b606435906001600160a01b038216820361019057565b604435906001600160a01b038216820361019057565b6044359063ffffffff8216820361019057565b60a4359063ffffffff8216820361019057565b60c4359063ffffffff8216820361019057565b60e4359063ffffffff8216820361019057565b610104359063ffffffff8216820361019057565b6024359063ffffffff8216820361019057565b9181601f840112156101905782359167ffffffffffffffff8311610190576020838186019501011161019057565b9190602083019260038210156108b85752565b634e487b7160e01b5f52602160045260245ffd5b60243590811515820361019057565b6001600160a01b03165f8181526003602052604090205463ffffffff169190821561092c575b5f52600460205263ffffffff60405f20541690811561091c57565b60015460c01c63ffffffff169150565b60015460a01c63ffffffff169250610901565b919081101561094f5760051b0190565b634e487b7160e01b5f52603260045260245ffd5b356001600160a01b03811681036101905790565b9060018060a01b0382165f52600260205260ff60405f205416156109cc5763ffffffff6109a481936108db565b93169116106109c55763ffffffff8091169116106109c0575f90565b600190565b5050600190565b50505060019056fea264697066735822122087f67d05b60a4a27871e5de3219e9e23f6783051422aa0287b2a39d6617eee0964736f6c634300081d0033",
-  "linkReferences": {},
-  "deployedLinkReferences": {},
-  "immutableReferences": {},
-  "inputSourceName": "project/contracts/SimpleTruthKeeper.sol",
-  "buildInfoId": "solc-0_8_29-d52a32f795c814f269e8229cee8d3b684800d7d9"
-}
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_registry",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_owner",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_defaultMinDisputeWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_defaultMinTruthKeeperWindow",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyRegistry",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "tkWindow",
+        "type": "uint32"
+      }
+    ],
+    "name": "DefaultMinWindowsChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "oldOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "oldRegistry",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "RegistryUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      }
+    ],
+    "name": "ResolverAllowedChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "tkWindow",
+        "type": "uint32"
+      }
+    ],
+    "name": "ResolverMinWindowsChanged",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "allowedResolvers",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "truthKeeperWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "name": "canAcceptToc",
+    "outputs": [
+      {
+        "internalType": "enum TKApprovalResponse",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "defaultMinDisputeWindow",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "defaultMinTruthKeeperWindow",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      }
+    ],
+    "name": "getEffectiveMinWindows",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "minDisputeWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "minTkWindow",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      }
+    ],
+    "name": "isResolverAllowed",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "truthKeeperWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "name": "onTocAssigned",
+    "outputs": [
+      {
+        "internalType": "enum TKApprovalResponse",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "registry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "resolution",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes",
+        "name": "correctedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "resolveDispute",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "resolverMinDisputeWindow",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "resolverMinTruthKeeperWindow",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "tkWindow",
+        "type": "uint32"
+      }
+    ],
+    "name": "setDefaultMinWindows",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "setRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      }
+    ],
+    "name": "setResolverAllowed",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "tkWindow",
+        "type": "uint32"
+      }
+    ],
+    "name": "setResolverMinWindows",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "resolvers",
+        "type": "address[]"
+      },
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      }
+    ],
+    "name": "setResolversAllowed",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
+  }
+]

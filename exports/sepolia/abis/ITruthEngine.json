@@ -1,2652 +1,2640 @@
-{
-  "_format": "hh3-artifact-1",
-  "contractName": "ITruthEngine",
-  "sourceName": "contracts/TruthEngine/ITruthEngine.sol",
-  "abi": [
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "enum BondType",
-          "name": "bondType",
-          "type": "uint8"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "minAmount",
-          "type": "uint256"
-        }
-      ],
-      "name": "AcceptableBondAdded",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "from",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "BondSlashed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "protocolFee",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "tkFee",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "resolverFee",
-          "type": "uint256"
-        }
-      ],
-      "name": "CreationFeesCollected",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "previousCreator",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "newCreator",
-          "type": "address"
-        }
-      ],
-      "name": "CreatorTransferred",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "oldDuration",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "newDuration",
-          "type": "uint256"
-        }
-      ],
-      "name": "DefaultDisputeWindowChanged",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "disputer",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "DisputeBondDeposited",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "to",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "DisputeBondReturned",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum DisputeResolution",
-          "name": "resolution",
-          "type": "uint8"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "admin",
-          "type": "address"
-        }
-      ],
-      "name": "DisputeResolved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "challenger",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "EscalationBondDeposited",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "to",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "EscalationBondReturned",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum DisputeResolution",
-          "name": "resolution",
-          "type": "uint8"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "admin",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "bytes",
-          "name": "correctedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "EscalationResolved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "disputer",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "evidenceURI",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "bytes",
-          "name": "proposedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "PostResolutionDisputeFiled",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "bool",
-          "name": "resultCorrected",
-          "type": "bool"
-        }
-      ],
-      "name": "PostResolutionDisputeResolved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "minimum",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "standard",
-          "type": "uint256"
-        }
-      ],
-      "name": "ProtocolFeeUpdated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "treasury",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "creationFees",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "slashingFees",
-          "type": "uint256"
-        }
-      ],
-      "name": "ProtocolFeesWithdrawn",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "proposer",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "ResolutionBondDeposited",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "to",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "ResolutionBondReturned",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "ResolverFeeClaimed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "uint32",
-          "name": "templateId",
-          "type": "uint32"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "ResolverFeeSet",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum ResolverTrust",
-          "name": "trust",
-          "type": "uint8"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "registeredBy",
-          "type": "address"
-        }
-      ],
-      "name": "ResolverRegistered",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum ResolverTrust",
-          "name": "oldTrust",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum ResolverTrust",
-          "name": "newTrust",
-          "type": "uint8"
-        }
-      ],
-      "name": "ResolverTrustChanged",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "protocolFee",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "tkFee",
-          "type": "uint256"
-        }
-      ],
-      "name": "SlashingFeesCollected",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "TKFeesWithdrawn",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "enum AccountabilityTier",
-          "name": "tier",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "basisPoints",
-          "type": "uint256"
-        }
-      ],
-      "name": "TKShareUpdated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "TOCApproved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        }
-      ],
-      "name": "TOCCancelled",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "creator",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum ResolverTrust",
-          "name": "trust",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "templateId",
-          "type": "uint32"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum AnswerType",
-          "name": "answerType",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum TOCState",
-          "name": "initialState",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "truthKeeper",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum AccountabilityTier",
-          "name": "tier",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "truthKeeperWindow",
-          "type": "uint32"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "escalationWindow",
-          "type": "uint32"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint32",
-          "name": "postResolutionWindow",
-          "type": "uint32"
-        }
-      ],
-      "name": "TOCCreated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "disputer",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "evidenceURI",
-          "type": "string"
-        }
-      ],
-      "name": "TOCDisputed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum AnswerType",
-          "name": "answerType",
-          "type": "uint8"
-        }
-      ],
-      "name": "TOCFinalized",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        }
-      ],
-      "name": "TOCRejected",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "proposer",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum AnswerType",
-          "name": "answerType",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "disputeDeadline",
-          "type": "uint256"
-        }
-      ],
-      "name": "TOCResolutionProposed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum AnswerType",
-          "name": "answerType",
-          "type": "uint8"
-        }
-      ],
-      "name": "TOCResolved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "treasury",
-          "type": "address"
-        }
-      ],
-      "name": "TreasurySet",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "TruthKeeperApproved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "challenger",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "evidenceURI",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "bytes",
-          "name": "proposedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "TruthKeeperDecisionChallenged",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum DisputeResolution",
-          "name": "resolution",
-          "type": "uint8"
-        }
-      ],
-      "name": "TruthKeeperDisputeResolved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "TruthKeeperRemovedFromWhitelist",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "TruthKeeperSoftRejected",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "TruthKeeperTimedOut",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "TruthKeeperWhitelisted",
-      "type": "event"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "enum BondType",
-          "name": "bondType",
-          "type": "uint8"
-        },
-        {
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "minAmount",
-          "type": "uint256"
-        }
-      ],
-      "name": "addAcceptableBond",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "addWhitelistedTruthKeeper",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "approveTOC",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "canDispute",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "canFinalize",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "bondToken",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "bondAmount",
-          "type": "uint256"
-        },
-        {
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "evidenceURI",
-          "type": "string"
-        },
-        {
-          "internalType": "bytes",
-          "name": "proposedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "challengeTruthKeeperDecision",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "claimResolverFee",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256[]",
-          "name": "tocIds",
-          "type": "uint256[]"
-        }
-      ],
-      "name": "claimResolverFees",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "uint32",
-          "name": "templateId",
-          "type": "uint32"
-        },
-        {
-          "internalType": "bytes",
-          "name": "payload",
-          "type": "bytes"
-        },
-        {
-          "internalType": "uint32",
-          "name": "disputeWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "truthKeeperWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "escalationWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint32",
-          "name": "postResolutionWindow",
-          "type": "uint32"
-        },
-        {
-          "internalType": "address",
-          "name": "truthKeeper",
-          "type": "address"
-        }
-      ],
-      "name": "createTOC",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "defaultDisputeWindow",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "bondToken",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "bondAmount",
-          "type": "uint256"
-        },
-        {
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "evidenceURI",
-          "type": "string"
-        },
-        {
-          "internalType": "bytes",
-          "name": "proposedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "dispute",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "escalateTruthKeeperTimeout",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "finalizeAfterTruthKeeper",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "finalizeTOC",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "uint32",
-          "name": "templateId",
-          "type": "uint32"
-        }
-      ],
-      "name": "getCreationFee",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "protocolFee",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "resolverFee",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "total",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getDisputeInfo",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "enum DisputePhase",
-              "name": "phase",
-              "type": "uint8"
-            },
-            {
-              "internalType": "address",
-              "name": "disputer",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "bondToken",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "bondAmount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "string",
-              "name": "reason",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "evidenceURI",
-              "type": "string"
-            },
-            {
-              "internalType": "uint256",
-              "name": "filedAt",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "resolvedAt",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bool",
-              "name": "resultCorrected",
-              "type": "bool"
-            },
-            {
-              "internalType": "bytes",
-              "name": "proposedResult",
-              "type": "bytes"
-            },
-            {
-              "internalType": "enum DisputeResolution",
-              "name": "tkDecision",
-              "type": "uint8"
-            },
-            {
-              "internalType": "uint256",
-              "name": "tkDecidedAt",
-              "type": "uint256"
-            }
-          ],
-          "internalType": "struct DisputeInfo",
-          "name": "info",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getEscalationInfo",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "address",
-              "name": "challenger",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "bondToken",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "bondAmount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "string",
-              "name": "reason",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "evidenceURI",
-              "type": "string"
-            },
-            {
-              "internalType": "uint256",
-              "name": "filedAt",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "resolvedAt",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes",
-              "name": "proposedResult",
-              "type": "bytes"
-            }
-          ],
-          "internalType": "struct EscalationInfo",
-          "name": "info",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getExtensiveResult",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "enum AnswerType",
-              "name": "answerType",
-              "type": "uint8"
-            },
-            {
-              "internalType": "bytes",
-              "name": "result",
-              "type": "bytes"
-            },
-            {
-              "internalType": "bool",
-              "name": "isFinalized",
-              "type": "bool"
-            },
-            {
-              "internalType": "bool",
-              "name": "wasDisputed",
-              "type": "bool"
-            },
-            {
-              "internalType": "bool",
-              "name": "wasCorrected",
-              "type": "bool"
-            },
-            {
-              "internalType": "uint256",
-              "name": "resolvedAt",
-              "type": "uint256"
-            },
-            {
-              "internalType": "enum AccountabilityTier",
-              "name": "tier",
-              "type": "uint8"
-            },
-            {
-              "internalType": "enum ResolverTrust",
-              "name": "resolverTrust",
-              "type": "uint8"
-            }
-          ],
-          "internalType": "struct ExtensiveResult",
-          "name": "result",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getExtensiveResultStrict",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "enum AnswerType",
-              "name": "answerType",
-              "type": "uint8"
-            },
-            {
-              "internalType": "bytes",
-              "name": "result",
-              "type": "bytes"
-            },
-            {
-              "internalType": "bool",
-              "name": "isFinalized",
-              "type": "bool"
-            },
-            {
-              "internalType": "bool",
-              "name": "wasDisputed",
-              "type": "bool"
-            },
-            {
-              "internalType": "bool",
-              "name": "wasCorrected",
-              "type": "bool"
-            },
-            {
-              "internalType": "uint256",
-              "name": "resolvedAt",
-              "type": "uint256"
-            },
-            {
-              "internalType": "enum AccountabilityTier",
-              "name": "tier",
-              "type": "uint8"
-            },
-            {
-              "internalType": "enum ResolverTrust",
-              "name": "resolverTrust",
-              "type": "uint8"
-            }
-          ],
-          "internalType": "struct ExtensiveResult",
-          "name": "result",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getOriginalResult",
-      "outputs": [
-        {
-          "internalType": "bytes",
-          "name": "result",
-          "type": "bytes"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "enum FeeCategory",
-          "name": "category",
-          "type": "uint8"
-        }
-      ],
-      "name": "getProtocolBalance",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "balance",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getProtocolFees",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "minimum",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "standard",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getRegisteredResolvers",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "",
-          "type": "address[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getResolutionInfo",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "address",
-              "name": "proposer",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "bondToken",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "bondAmount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes",
-              "name": "proposedResult",
-              "type": "bytes"
-            }
-          ],
-          "internalType": "struct ResolutionInfo",
-          "name": "info",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        }
-      ],
-      "name": "getResolverConfig",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "enum ResolverTrust",
-              "name": "trust",
-              "type": "uint8"
-            },
-            {
-              "internalType": "uint256",
-              "name": "registeredAt",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address",
-              "name": "registeredBy",
-              "type": "address"
-            }
-          ],
-          "internalType": "struct ResolverConfig",
-          "name": "config",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getResolverCount",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "count",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "uint32",
-          "name": "templateId",
-          "type": "uint32"
-        }
-      ],
-      "name": "getResolverFee",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getResolverFeeByToc",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        }
-      ],
-      "name": "getResolverTrust",
-      "outputs": [
-        {
-          "internalType": "enum ResolverTrust",
-          "name": "trust",
-          "type": "uint8"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getResult",
-      "outputs": [
-        {
-          "internalType": "bytes",
-          "name": "result",
-          "type": "bytes"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "getTKBalance",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "balance",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "enum AccountabilityTier",
-          "name": "tier",
-          "type": "uint8"
-        }
-      ],
-      "name": "getTKSharePercent",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "basisPoints",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getTOC",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "address",
-              "name": "creator",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "resolver",
-              "type": "address"
-            },
-            {
-              "internalType": "enum TOCState",
-              "name": "state",
-              "type": "uint8"
-            },
-            {
-              "internalType": "enum AnswerType",
-              "name": "answerType",
-              "type": "uint8"
-            },
-            {
-              "internalType": "uint256",
-              "name": "resolutionTime",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "disputeWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "truthKeeperWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "escalationWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "postResolutionWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "disputeDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "truthKeeperDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "escalationDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "postDisputeDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address",
-              "name": "truthKeeper",
-              "type": "address"
-            },
-            {
-              "internalType": "enum AccountabilityTier",
-              "name": "tierAtCreation",
-              "type": "uint8"
-            }
-          ],
-          "internalType": "struct TOC",
-          "name": "",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getTOCInfo",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "address",
-              "name": "creator",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "resolver",
-              "type": "address"
-            },
-            {
-              "internalType": "enum TOCState",
-              "name": "state",
-              "type": "uint8"
-            },
-            {
-              "internalType": "enum AnswerType",
-              "name": "answerType",
-              "type": "uint8"
-            },
-            {
-              "internalType": "uint256",
-              "name": "resolutionTime",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "disputeWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "truthKeeperWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "escalationWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "postResolutionWindow",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "disputeDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "truthKeeperDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "escalationDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "postDisputeDeadline",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address",
-              "name": "truthKeeper",
-              "type": "address"
-            },
-            {
-              "internalType": "enum AccountabilityTier",
-              "name": "tierAtCreation",
-              "type": "uint8"
-            },
-            {
-              "internalType": "bool",
-              "name": "isResolved",
-              "type": "bool"
-            },
-            {
-              "internalType": "bytes",
-              "name": "result",
-              "type": "bytes"
-            },
-            {
-              "internalType": "bool",
-              "name": "hasCorrectedResult",
-              "type": "bool"
-            },
-            {
-              "internalType": "enum ResolverTrust",
-              "name": "resolverTrust",
-              "type": "uint8"
-            }
-          ],
-          "internalType": "struct TOCInfo",
-          "name": "info",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getTOCResult",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "enum AnswerType",
-              "name": "answerType",
-              "type": "uint8"
-            },
-            {
-              "internalType": "bool",
-              "name": "isResolved",
-              "type": "bool"
-            },
-            {
-              "internalType": "bytes",
-              "name": "result",
-              "type": "bytes"
-            }
-          ],
-          "internalType": "struct TOCResult",
-          "name": "result",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getTocDetails",
-      "outputs": [
-        {
-          "internalType": "uint32",
-          "name": "templateId",
-          "type": "uint32"
-        },
-        {
-          "internalType": "bytes",
-          "name": "creationPayload",
-          "type": "bytes"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getTocQuestion",
-      "outputs": [
-        {
-          "internalType": "string",
-          "name": "question",
-          "type": "string"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "hasCorrectedResult",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "enum BondType",
-          "name": "bondType",
-          "type": "uint8"
-        },
-        {
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "isAcceptableBond",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "isContested",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        }
-      ],
-      "name": "isFullyFinalized",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        }
-      ],
-      "name": "isRegisteredResolver",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "isWhitelistedTruthKeeper",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "nextTocId",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        }
-      ],
-      "name": "registerResolver",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "string",
-          "name": "reason",
-          "type": "string"
-        }
-      ],
-      "name": "rejectTOC",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "tk",
-          "type": "address"
-        }
-      ],
-      "name": "removeWhitelistedTruthKeeper",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "enum DisputeResolution",
-          "name": "resolution",
-          "type": "uint8"
-        },
-        {
-          "internalType": "bytes",
-          "name": "correctedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "resolveDispute",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "enum DisputeResolution",
-          "name": "resolution",
-          "type": "uint8"
-        },
-        {
-          "internalType": "bytes",
-          "name": "correctedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "resolveEscalation",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "bondToken",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "bondAmount",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bytes",
-          "name": "payload",
-          "type": "bytes"
-        }
-      ],
-      "name": "resolveTOC",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "enum DisputeResolution",
-          "name": "resolution",
-          "type": "uint8"
-        },
-        {
-          "internalType": "bytes",
-          "name": "correctedResult",
-          "type": "bytes"
-        }
-      ],
-      "name": "resolveTruthKeeperDispute",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "duration",
-          "type": "uint256"
-        }
-      ],
-      "name": "setDefaultDisputeWindow",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "setProtocolFeeMinimum",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "setProtocolFeeStandard",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint32",
-          "name": "templateId",
-          "type": "uint32"
-        },
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "setResolverFee",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "resolver",
-          "type": "address"
-        },
-        {
-          "internalType": "enum ResolverTrust",
-          "name": "trust",
-          "type": "uint8"
-        }
-      ],
-      "name": "setResolverTrust",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "enum AccountabilityTier",
-          "name": "tier",
-          "type": "uint8"
-        },
-        {
-          "internalType": "uint256",
-          "name": "basisPoints",
-          "type": "uint256"
-        }
-      ],
-      "name": "setTKSharePercent",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "_treasury",
-          "type": "address"
-        }
-      ],
-      "name": "setTreasury",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "tocId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "newCreator",
-          "type": "address"
-        }
-      ],
-      "name": "transferCreator",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "withdrawProtocolFees",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "creationFees",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "slashingFees",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "enum FeeCategory",
-          "name": "category",
-          "type": "uint8"
-        }
-      ],
-      "name": "withdrawProtocolFeesByCategory",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "withdrawTKFees",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    }
-  ],
-  "bytecode": "0x",
-  "deployedBytecode": "0x",
-  "linkReferences": {},
-  "deployedLinkReferences": {},
-  "immutableReferences": {},
-  "inputSourceName": "project/contracts/TruthEngine/ITruthEngine.sol",
-  "buildInfoId": "solc-0_8_29-d52a32f795c814f269e8229cee8d3b684800d7d9"
-}
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "enum BondType",
+        "name": "bondType",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "AcceptableBondAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "BondSlashed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "protocolFee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tkFee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "resolverFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "CreationFeesCollected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousCreator",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newCreator",
+        "type": "address"
+      }
+    ],
+    "name": "CreatorTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "oldDuration",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newDuration",
+        "type": "uint256"
+      }
+    ],
+    "name": "DefaultDisputeWindowChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "disputer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "DisputeBondDeposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "DisputeBondReturned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum DisputeResolution",
+        "name": "resolution",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "admin",
+        "type": "address"
+      }
+    ],
+    "name": "DisputeResolved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "challenger",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "EscalationBondDeposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "EscalationBondReturned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum DisputeResolution",
+        "name": "resolution",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "admin",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes",
+        "name": "correctedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "EscalationResolved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "disputer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "evidenceURI",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes",
+        "name": "proposedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "PostResolutionDisputeFiled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "resultCorrected",
+        "type": "bool"
+      }
+    ],
+    "name": "PostResolutionDisputeResolved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minimum",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "standard",
+        "type": "uint256"
+      }
+    ],
+    "name": "ProtocolFeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "treasury",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "creationFees",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "slashingFees",
+        "type": "uint256"
+      }
+    ],
+    "name": "ProtocolFeesWithdrawn",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "proposer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "ResolutionBondDeposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "ResolutionBondReturned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "ResolverFeeClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "templateId",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "ResolverFeeSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum ResolverTrust",
+        "name": "trust",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "registeredBy",
+        "type": "address"
+      }
+    ],
+    "name": "ResolverRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum ResolverTrust",
+        "name": "oldTrust",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum ResolverTrust",
+        "name": "newTrust",
+        "type": "uint8"
+      }
+    ],
+    "name": "ResolverTrustChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "protocolFee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tkFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "SlashingFeesCollected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "TKFeesWithdrawn",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "enum AccountabilityTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "basisPoints",
+        "type": "uint256"
+      }
+    ],
+    "name": "TKShareUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "TOCApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      }
+    ],
+    "name": "TOCCancelled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "creator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum ResolverTrust",
+        "name": "trust",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "templateId",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum AnswerType",
+        "name": "answerType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum TOCState",
+        "name": "initialState",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "truthKeeper",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum AccountabilityTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "truthKeeperWindow",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "escalationWindow",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "postResolutionWindow",
+        "type": "uint32"
+      }
+    ],
+    "name": "TOCCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "disputer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "evidenceURI",
+        "type": "string"
+      }
+    ],
+    "name": "TOCDisputed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum AnswerType",
+        "name": "answerType",
+        "type": "uint8"
+      }
+    ],
+    "name": "TOCFinalized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      }
+    ],
+    "name": "TOCRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "proposer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum AnswerType",
+        "name": "answerType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "disputeDeadline",
+        "type": "uint256"
+      }
+    ],
+    "name": "TOCResolutionProposed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum AnswerType",
+        "name": "answerType",
+        "type": "uint8"
+      }
+    ],
+    "name": "TOCResolved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "treasury",
+        "type": "address"
+      }
+    ],
+    "name": "TreasurySet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "TruthKeeperApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "challenger",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "evidenceURI",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes",
+        "name": "proposedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "TruthKeeperDecisionChallenged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum DisputeResolution",
+        "name": "resolution",
+        "type": "uint8"
+      }
+    ],
+    "name": "TruthKeeperDisputeResolved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "TruthKeeperRemovedFromWhitelist",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "TruthKeeperSoftRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "TruthKeeperTimedOut",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "TruthKeeperWhitelisted",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum BondType",
+        "name": "bondType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "addAcceptableBond",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "addWhitelistedTruthKeeper",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "approveTOC",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "canDispute",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "canFinalize",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "bondToken",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bondAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "evidenceURI",
+        "type": "string"
+      },
+      {
+        "internalType": "bytes",
+        "name": "proposedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "challengeTruthKeeperDecision",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "claimResolverFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "tocIds",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "claimResolverFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "templateId",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "payload",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint32",
+        "name": "disputeWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "truthKeeperWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "escalationWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "postResolutionWindow",
+        "type": "uint32"
+      },
+      {
+        "internalType": "address",
+        "name": "truthKeeper",
+        "type": "address"
+      }
+    ],
+    "name": "createTOC",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "defaultDisputeWindow",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "bondToken",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bondAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "evidenceURI",
+        "type": "string"
+      },
+      {
+        "internalType": "bytes",
+        "name": "proposedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "dispute",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "escalateTruthKeeperTimeout",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "finalizeAfterTruthKeeper",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "finalizeTOC",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "templateId",
+        "type": "uint32"
+      }
+    ],
+    "name": "getCreationFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "protocolFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "resolverFee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "total",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getDisputeInfo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum DisputePhase",
+            "name": "phase",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "disputer",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "bondToken",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "bondAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "reason",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "evidenceURI",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "filedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "resolvedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "resultCorrected",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes",
+            "name": "proposedResult",
+            "type": "bytes"
+          },
+          {
+            "internalType": "enum DisputeResolution",
+            "name": "tkDecision",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "tkDecidedAt",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct DisputeInfo",
+        "name": "info",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getEscalationInfo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "challenger",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "bondToken",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "bondAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "reason",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "evidenceURI",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "filedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "resolvedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes",
+            "name": "proposedResult",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct EscalationInfo",
+        "name": "info",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getExtensiveResult",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum AnswerType",
+            "name": "answerType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "result",
+            "type": "bytes"
+          },
+          {
+            "internalType": "bool",
+            "name": "isFinalized",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "wasDisputed",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "wasCorrected",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "resolvedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum AccountabilityTier",
+            "name": "tier",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum ResolverTrust",
+            "name": "resolverTrust",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct ExtensiveResult",
+        "name": "result",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getExtensiveResultStrict",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum AnswerType",
+            "name": "answerType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "result",
+            "type": "bytes"
+          },
+          {
+            "internalType": "bool",
+            "name": "isFinalized",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "wasDisputed",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "wasCorrected",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "resolvedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum AccountabilityTier",
+            "name": "tier",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum ResolverTrust",
+            "name": "resolverTrust",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct ExtensiveResult",
+        "name": "result",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getOriginalResult",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "result",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum FeeCategory",
+        "name": "category",
+        "type": "uint8"
+      }
+    ],
+    "name": "getProtocolBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "balance",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getProtocolFees",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "minimum",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "standard",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getRegisteredResolvers",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getResolutionInfo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "proposer",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "bondToken",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "bondAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes",
+            "name": "proposedResult",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct ResolutionInfo",
+        "name": "info",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      }
+    ],
+    "name": "getResolverConfig",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum ResolverTrust",
+            "name": "trust",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "registeredAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "registeredBy",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct ResolverConfig",
+        "name": "config",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getResolverCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "templateId",
+        "type": "uint32"
+      }
+    ],
+    "name": "getResolverFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getResolverFeeByToc",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      }
+    ],
+    "name": "getResolverTrust",
+    "outputs": [
+      {
+        "internalType": "enum ResolverTrust",
+        "name": "trust",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getResult",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "result",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "getTKBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "balance",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum AccountabilityTier",
+        "name": "tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "getTKSharePercent",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "basisPoints",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getTOC",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "creator",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "resolver",
+            "type": "address"
+          },
+          {
+            "internalType": "enum TOCState",
+            "name": "state",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum AnswerType",
+            "name": "answerType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "resolutionTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "disputeWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "truthKeeperWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "escalationWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "postResolutionWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "disputeDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "truthKeeperDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "escalationDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "postDisputeDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "truthKeeper",
+            "type": "address"
+          },
+          {
+            "internalType": "enum AccountabilityTier",
+            "name": "tierAtCreation",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct TOC",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getTOCInfo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "creator",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "resolver",
+            "type": "address"
+          },
+          {
+            "internalType": "enum TOCState",
+            "name": "state",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum AnswerType",
+            "name": "answerType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "resolutionTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "disputeWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "truthKeeperWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "escalationWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "postResolutionWindow",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "disputeDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "truthKeeperDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "escalationDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "postDisputeDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "truthKeeper",
+            "type": "address"
+          },
+          {
+            "internalType": "enum AccountabilityTier",
+            "name": "tierAtCreation",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "isResolved",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes",
+            "name": "result",
+            "type": "bytes"
+          },
+          {
+            "internalType": "bool",
+            "name": "hasCorrectedResult",
+            "type": "bool"
+          },
+          {
+            "internalType": "enum ResolverTrust",
+            "name": "resolverTrust",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct TOCInfo",
+        "name": "info",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getTOCResult",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum AnswerType",
+            "name": "answerType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "isResolved",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes",
+            "name": "result",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct TOCResult",
+        "name": "result",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getTocDetails",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "templateId",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "creationPayload",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getTocQuestion",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "question",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "hasCorrectedResult",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum BondType",
+        "name": "bondType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "isAcceptableBond",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "isContested",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      }
+    ],
+    "name": "isFullyFinalized",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      }
+    ],
+    "name": "isRegisteredResolver",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "isWhitelistedTruthKeeper",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "nextTocId",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      }
+    ],
+    "name": "registerResolver",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      }
+    ],
+    "name": "rejectTOC",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "tk",
+        "type": "address"
+      }
+    ],
+    "name": "removeWhitelistedTruthKeeper",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum DisputeResolution",
+        "name": "resolution",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes",
+        "name": "correctedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "resolveDispute",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum DisputeResolution",
+        "name": "resolution",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes",
+        "name": "correctedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "resolveEscalation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "bondToken",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bondAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "payload",
+        "type": "bytes"
+      }
+    ],
+    "name": "resolveTOC",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum DisputeResolution",
+        "name": "resolution",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes",
+        "name": "correctedResult",
+        "type": "bytes"
+      }
+    ],
+    "name": "resolveTruthKeeperDispute",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "duration",
+        "type": "uint256"
+      }
+    ],
+    "name": "setDefaultDisputeWindow",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "setProtocolFeeMinimum",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "setProtocolFeeStandard",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "templateId",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "setResolverFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "resolver",
+        "type": "address"
+      },
+      {
+        "internalType": "enum ResolverTrust",
+        "name": "trust",
+        "type": "uint8"
+      }
+    ],
+    "name": "setResolverTrust",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum AccountabilityTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "basisPoints",
+        "type": "uint256"
+      }
+    ],
+    "name": "setTKSharePercent",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_treasury",
+        "type": "address"
+      }
+    ],
+    "name": "setTreasury",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tocId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "newCreator",
+        "type": "address"
+      }
+    ],
+    "name": "transferCreator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawProtocolFees",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "creationFees",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "slashingFees",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum FeeCategory",
+        "name": "category",
+        "type": "uint8"
+      }
+    ],
+    "name": "withdrawProtocolFeesByCategory",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawTKFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
