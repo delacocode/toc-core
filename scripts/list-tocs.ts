@@ -3,7 +3,7 @@
  * Usage: npx hardhat run scripts/list-tocs.ts --network sepolia
  */
 
-import { decodeAbiParameters } from "viem";
+import { decodeAbiParameters, MulticallReturnType } from "viem";
 import {
   getNetwork,
   loadDeployedAddresses,
@@ -58,81 +58,229 @@ async function main() {
     return;
   }
 
-  let openCount = 0;
+  // Build multicall for all TOC info
+  const tocIds = Array.from({ length: total }, (_, i) => BigInt(i + 1));
 
-  for (let i = 1n; i < nextId; i++) {
-    try {
-      const toc = await publicClient.readContract({
-        address: addresses.registry,
-        abi: registryAbi,
-        functionName: "getTOCInfo",
-        args: [i],
-      }) as any;
+  const tocInfoCalls = tocIds.map(id => ({
+    address: addresses.registry as `0x${string}`,
+    abi: registryAbi,
+    functionName: "getTOCInfo",
+    args: [id],
+  }));
 
-      const stateName = STATE_NAMES[toc.state] || `UNKNOWN(${toc.state})`;
-      const isOpen = toc.state === 3 || toc.state === 4;
-      if (isOpen) openCount++;
+  // Batch fetch all TOC info
+  const tocResults = await publicClient.multicall({
+    contracts: tocInfoCalls,
+    allowFailure: true,
+  });
 
-      const marker = isOpen ? "🟢" : toc.state === 7 ? "✅" : toc.state === 8 ? "❌" : "⚪";
-      const isPyth = toc.resolver.toLowerCase() === addresses.pythResolver.toLowerCase();
-      const isOptimistic = toc.resolver.toLowerCase() === addresses.optimisticResolver.toLowerCase();
+  // Collect Pyth and Optimistic TOC IDs for second batch
+  const pythTocIds: bigint[] = [];
+  const optimisticTocIds: bigint[] = [];
 
-      let question = "";
-      let asset = "";
-
-      if (isPyth) {
-        try {
-          // Get TOC details to extract asset
-          const [, creationPayload] = await publicClient.readContract({
-            address: addresses.pythResolver,
-            abi: pythAbi,
-            functionName: "getTocDetails",
-            args: [i],
-          }) as [number, `0x${string}`];
-
-          const decoded = decodeAbiParameters(
-            [
-              { name: "priceId", type: "bytes32" },
-              { name: "threshold", type: "int64" },
-              { name: "isAbove", type: "bool" },
-              { name: "deadline", type: "uint256" },
-            ],
-            creationPayload
-          );
-
-          asset = PYTH_PRICE_IDS[decoded[0].toLowerCase()] || "Unknown";
-          const price = formatPythPrice(decoded[1]);
-          const direction = decoded[2] ? "above" : "below";
-          const deadline = formatTime(Number(decoded[3]));
-          question = `${asset} ${direction} ${price} by ${deadline}`;
-        } catch {
-          question = "Pyth TOC";
-        }
-      } else if (isOptimistic) {
-        try {
-          const rawQuestion = await publicClient.readContract({
-            address: addresses.optimisticResolver,
-            abi: optimisticAbi,
-            functionName: "getTocQuestion",
-            args: [i],
-          }) as string;
-          // Extract just the question part
-          const match = rawQuestion.match(/Q:\s*(.+?)(?:\n|$)/);
-          question = match ? match[1].slice(0, 50) + (match[1].length > 50 ? "..." : "") : "Optimistic TOC";
-        } catch {
-          question = "Optimistic TOC";
-        }
-      } else {
-        question = `Resolver: ${toc.resolver.slice(0, 10)}...`;
+  for (let i = 0; i < tocResults.length; i++) {
+    const result = tocResults[i];
+    if (result.status === "success") {
+      const toc = result.result as any;
+      if (toc.resolver.toLowerCase() === addresses.pythResolver.toLowerCase()) {
+        pythTocIds.push(tocIds[i]);
+      } else if (toc.resolver.toLowerCase() === addresses.optimisticResolver.toLowerCase()) {
+        optimisticTocIds.push(tocIds[i]);
       }
-
-      console.log(`${marker} #${i} [${stateName}] ${question}`);
-    } catch (e: any) {
-      console.log(`❌ #${i} ERROR: ${e.shortMessage || e.message}`);
     }
   }
 
-  console.log(`\n🟢 Open TOCs (ACTIVE/RESOLVING): ${openCount}`);
+  // Batch fetch Pyth details
+  const pythDetailsCalls = pythTocIds.map(id => ({
+    address: addresses.pythResolver as `0x${string}`,
+    abi: pythAbi,
+    functionName: "getTocDetails",
+    args: [id],
+  }));
+
+  // Batch fetch Optimistic questions
+  const optimisticQuestionCalls = optimisticTocIds.map(id => ({
+    address: addresses.optimisticResolver as `0x${string}`,
+    abi: optimisticAbi,
+    functionName: "getTocQuestion",
+    args: [id],
+  }));
+
+  const [pythResults, optimisticResults] = await Promise.all([
+    pythDetailsCalls.length > 0
+      ? publicClient.multicall({ contracts: pythDetailsCalls, allowFailure: true })
+      : Promise.resolve([]),
+    optimisticQuestionCalls.length > 0
+      ? publicClient.multicall({ contracts: optimisticQuestionCalls, allowFailure: true })
+      : Promise.resolve([]),
+  ]);
+
+  // Build lookup maps
+  const pythDetailsMap = new Map<string, any>();
+  pythTocIds.forEach((id, i) => {
+    const result = pythResults[i];
+    if (result?.status === "success") {
+      pythDetailsMap.set(id.toString(), result.result);
+    }
+  });
+
+  const optimisticQuestionsMap = new Map<string, string>();
+  optimisticTocIds.forEach((id, i) => {
+    const result = optimisticResults[i];
+    if (result?.status === "success") {
+      optimisticQuestionsMap.set(id.toString(), result.result as string);
+    }
+  });
+
+  // Fetch optimistic deadlines for sorting
+  const optimisticDeadlineCalls = optimisticTocIds.map(id => ({
+    address: addresses.optimisticResolver as `0x${string}`,
+    abi: optimisticAbi,
+    functionName: "getTocDeadline",
+    args: [id],
+  }));
+
+  const optimisticDeadlineResults = optimisticDeadlineCalls.length > 0
+    ? await publicClient.multicall({ contracts: optimisticDeadlineCalls, allowFailure: true })
+    : [];
+
+  const optimisticDeadlinesMap = new Map<string, number>();
+  optimisticTocIds.forEach((id, i) => {
+    const result = optimisticDeadlineResults[i];
+    if (result?.status === "success") {
+      optimisticDeadlinesMap.set(id.toString(), Number(result.result as bigint));
+    }
+  });
+
+  // Build display data with deadlines for sorting
+  interface TocDisplay {
+    id: bigint;
+    state: number;
+    stateName: string;
+    marker: string;
+    question: string;
+    deadline: number;
+    isOpen: boolean;
+  }
+
+  const tocDisplays: TocDisplay[] = [];
+
+  for (let i = 0; i < tocResults.length; i++) {
+    const tocId = tocIds[i];
+    const result = tocResults[i];
+
+    if (result.status !== "success") {
+      console.log(`❌ #${tocId} ERROR: ${(result.error as any)?.shortMessage || "Failed to fetch"}`);
+      continue;
+    }
+
+    const toc = result.result as any;
+    const stateName = STATE_NAMES[toc.state] || `UNKNOWN(${toc.state})`;
+    const isOpen = toc.state === 3 || toc.state === 4;
+
+    const marker = isOpen ? "🟢" : toc.state === 7 ? "✅" : toc.state === 8 ? "❌" : "⚪";
+    const isPyth = toc.resolver.toLowerCase() === addresses.pythResolver.toLowerCase();
+    const isOptimistic = toc.resolver.toLowerCase() === addresses.optimisticResolver.toLowerCase();
+
+    let question = "";
+    let deadline = 0;
+
+    if (isPyth) {
+      const details = pythDetailsMap.get(tocId.toString());
+      if (details) {
+        try {
+          const [templateId, creationPayload] = details as [number, `0x${string}`];
+
+          if (templateId === 0) { // SNAPSHOT
+            const decoded = decodeAbiParameters(
+              [
+                { name: "priceId", type: "bytes32" },
+                { name: "threshold", type: "int64" },
+                { name: "isAbove", type: "bool" },
+                { name: "deadline", type: "uint256" },
+              ],
+              creationPayload
+            );
+            const asset = PYTH_PRICE_IDS[decoded[0].toLowerCase()] || "Unknown";
+            const price = formatPythPrice(decoded[1]);
+            const direction = decoded[2] ? "above" : "below";
+            deadline = Number(decoded[3]);
+            question = `${asset} ${direction} ${price} by ${formatTime(deadline)}`;
+          } else if (templateId === 1) { // RANGE
+            const decoded = decodeAbiParameters(
+              [
+                { name: "priceId", type: "bytes32" },
+                { name: "lowerBound", type: "int64" },
+                { name: "upperBound", type: "int64" },
+                { name: "deadline", type: "uint256" },
+              ],
+              creationPayload
+            );
+            const asset = PYTH_PRICE_IDS[decoded[0].toLowerCase()] || "Unknown";
+            deadline = Number(decoded[3]);
+            question = `${asset} between ${formatPythPrice(decoded[1])}-${formatPythPrice(decoded[2])} by ${formatTime(deadline)}`;
+          } else { // REACHED_BY
+            const decoded = decodeAbiParameters(
+              [
+                { name: "priceId", type: "bytes32" },
+                { name: "targetPrice", type: "int64" },
+                { name: "isAbove", type: "bool" },
+                { name: "deadline", type: "uint256" },
+              ],
+              creationPayload
+            );
+            const asset = PYTH_PRICE_IDS[decoded[0].toLowerCase()] || "Unknown";
+            const price = formatPythPrice(decoded[1]);
+            const direction = decoded[2] ? "above" : "below";
+            deadline = Number(decoded[3]);
+            question = `${asset} reaches ${direction} ${price} by ${formatTime(deadline)}`;
+          }
+        } catch {
+          question = "Pyth TOC";
+        }
+      } else {
+        question = "Pyth TOC";
+      }
+    } else if (isOptimistic) {
+      const rawQuestion = optimisticQuestionsMap.get(tocId.toString());
+      deadline = optimisticDeadlinesMap.get(tocId.toString()) || 0;
+      if (rawQuestion) {
+        const match = rawQuestion.match(/Q:\s*(.+?)(?:\n|$)/);
+        question = match ? match[1].slice(0, 50) + (match[1].length > 50 ? "..." : "") : "Optimistic TOC";
+      } else {
+        question = "Optimistic TOC";
+      }
+    } else {
+      question = `Resolver: ${toc.resolver.slice(0, 10)}...`;
+    }
+
+    tocDisplays.push({ id: tocId, state: toc.state, stateName, marker, question, deadline, isOpen });
+  }
+
+  // Sort: active TOCs by deadline (soonest first), then resolved/other by ID
+  const activeTocs = tocDisplays.filter(t => t.isOpen).sort((a, b) => a.deadline - b.deadline);
+  const otherTocs = tocDisplays.filter(t => !t.isOpen);
+
+  // Display active TOCs first (sorted by deadline)
+  const now = Math.floor(Date.now() / 1000);
+
+  for (const t of activeTocs) {
+    const ready = t.deadline > 0 && t.deadline <= now ? " 🔔 READY" : "";
+    console.log(`${t.marker} #${t.id} [${t.stateName}]${ready} ${t.question}`);
+  }
+
+  // Then other TOCs
+  for (const t of otherTocs) {
+    console.log(`${t.marker} #${t.id} [${t.stateName}] ${t.question}`);
+  }
+
+  console.log(`\n🟢 Open TOCs (ACTIVE/RESOLVING): ${activeTocs.length}`);
+
+  const readyToResolve = activeTocs.filter(t => t.deadline > 0 && t.deadline <= now);
+  if (readyToResolve.length > 0) {
+    console.log(`🔔 Ready to resolve: ${readyToResolve.map(t => `#${t.id}`).join(", ")}`);
+  }
+
   console.log(`\n💡 Details: TOC_ID=<id> npx hardhat run scripts/query-toc.ts --network ${network}`);
 }
 

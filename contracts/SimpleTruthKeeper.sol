@@ -217,6 +217,35 @@ contract SimpleTruthKeeper is ITruthKeeper {
         emit RegistryUpdated(oldRegistry, newRegistry);
     }
 
+    /// @notice Resolve a Round 1 dispute (TruthKeeper decision)
+    /// @param tocId The disputed TOC
+    /// @param resolution The resolution decision (0=UPHOLD, 1=REJECT, 2=CANCEL, 3=TOO_EARLY)
+    /// @param correctedResult ABI-encoded correct result (used if upholding dispute)
+    function resolveDispute(
+        uint256 tocId,
+        uint8 resolution,
+        bytes calldata correctedResult
+    ) external onlyOwner {
+        // Call registry to resolve the dispute
+        (bool success, bytes memory data) = registry.call(
+            abi.encodeWithSignature(
+                "resolveTruthKeeperDispute(uint256,uint8,bytes)",
+                tocId,
+                resolution,
+                correctedResult
+            )
+        );
+        if (!success) {
+            // Bubble up the revert reason
+            if (data.length > 0) {
+                assembly {
+                    revert(add(data, 32), mload(data))
+                }
+            }
+            revert("TK: dispute resolution failed");
+        }
+    }
+
     receive() external payable {}
 }
 

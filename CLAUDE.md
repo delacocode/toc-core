@@ -1,0 +1,23 @@
+# TOC-Core Project Notes
+
+## Network Configuration
+
+**Primary network: Base (mainnet)**
+
+We no longer use Sepolia testnet. All TOC operations should be performed on Base mainnet.
+
+When running scripts, always use `--network base`:
+```bash
+npx hardhat run scripts/list-tocs.ts --network base
+npx hardhat run scripts/query-toc.ts --network base
+npx hardhat run scripts/finalize-toc.ts --network base
+```
+
+## Base Deployment Addresses
+
+| Contract | Address |
+|----------|---------|
+| TruthEngine | `0x50C0A2A8E748b8744f0E4a4F458779328A597dF6` |
+| OptimisticResolver | `0x9BEA77Ec8E10Df6b60df7EBBf4AF686261feC5C2` |
+| PythPriceResolver | `0x0B5C9BFe9F4A2a1bF0644D8266b7570B508d0A11` |
+| SimpleTruthKeeper | `0xF2c31D9435666eEfEB8c1edAc1659e91daaCE01a` |

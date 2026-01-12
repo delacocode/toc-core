@@ -253,6 +253,37 @@ async function main() {
         if (asset) {
           console.log(`📈 Asset: ${asset}`);
         }
+
+        // Show deadline info for Pyth TOCs
+        try {
+          const [, creationPayload] = await publicClient.readContract({
+            address: addresses.pythResolver,
+            abi: pythResolverAbi,
+            functionName: "getTocDetails",
+            args: [BigInt(tocId)],
+          }) as [number, `0x${string}`];
+
+          const decoded = decodeAbiParameters(
+            [
+              { name: "priceId", type: "bytes32" },
+              { name: "threshold", type: "int64" },
+              { name: "isAbove", type: "bool" },
+              { name: "deadline", type: "uint256" },
+            ],
+            creationPayload
+          );
+          const deadline = Number(decoded[3]);
+          const remaining = deadline - now;
+
+          console.log(`⏰ Settlement deadline: ${formatTime(deadline)} (unix: ${deadline})`);
+          if (remaining > 0) {
+            console.log(`   ⏳ Can settle in: ${formatDuration(remaining)}`);
+          } else {
+            console.log(`   ✅ Ready to settle now!`);
+          }
+        } catch {
+          // Could not decode deadline
+        }
         console.log();
       } catch {
         // Question not available

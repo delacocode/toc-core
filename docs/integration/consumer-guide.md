@@ -139,10 +139,10 @@ function createTOC(
     address resolver,           // OptimisticResolver address
     uint32 templateId,          // 1=Arbitrary, 2=Sports, 3=Event (0 is reserved)
     bytes calldata payload,     // Template-specific data (see below)
-    uint256 disputeWindow,      // Time to dispute after resolution proposed
-    uint256 truthKeeperWindow,  // Time for TK to decide disputes
-    uint256 escalationWindow,   // Time to challenge TK decision
-    uint256 postResolutionWindow, // Time to dispute after RESOLVED (0 to disable)
+    uint32 disputeWindow,       // Time to dispute after resolution proposed (seconds)
+    uint32 truthKeeperWindow,   // Time for TK to decide disputes (seconds)
+    uint32 escalationWindow,    // Time to challenge TK decision (seconds)
+    uint32 postResolutionWindow, // Time to dispute after RESOLVED (0 to disable)
     address truthKeeper         // TruthKeeper address for this TOC
 ) external payable returns (uint256 tocId);
 ```
