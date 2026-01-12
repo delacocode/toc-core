@@ -70,19 +70,17 @@ const decoded = decodeAbiParameters(
   payload
 );
 
-const PRICE_IDS = {
-  "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43": "BTC/USD",
-  "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace": "ETH/USD",
-  "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d": "SOL/USD",
-};
+// Import from toc-core exports (54+ supported assets)
+import { PYTH_PRICE_NAMES } from "toc-core/exports/toc-types";
 
-const asset = PRICE_IDS[decoded[0].toLowerCase()]; // "ETH/USD"
+const asset = PYTH_PRICE_NAMES[decoded[0].toLowerCase()]; // "ETH/USD"
 ```
 
 ## Complete Example
 
 ```typescript
 import { decodeAbiParameters } from "viem";
+import { PYTH_PRICE_NAMES } from "toc-core/exports/toc-types";
 
 async function formatPythToc(tocId: bigint, resolver: any) {
   // Get question and details
@@ -106,7 +104,7 @@ async function formatPythToc(tocId: bigint, resolver: any) {
     payload
   );
 
-  const asset = PRICE_IDS[decoded[0].toLowerCase()] || "Unknown";
+  const asset = PYTH_PRICE_NAMES[decoded[0].toLowerCase()] || "Unknown";
   const price = (Number(rawPrice) / 1e8).toLocaleString("en-US", {
     style: "currency", currency: "USD", maximumFractionDigits: 0
   });
